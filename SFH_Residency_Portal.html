@@ -707,7 +707,11 @@ function visRes(){
   if(!u)return[];
   if(u.role==="pd"||u.role==="chief")return RESIDENTS;
   if(u.role==="consultant"){const ids=getAccess(u.cid);return RESIDENTS.filter(r=>ids.includes(r.id));}
-  if(u.role==="resident")return RESIDENTS.filter(r=>r.id===u.rid);
+  if(u.role==="resident"){
+    // Residents with attendance privilege can see all residents (to mark their attendance)
+    if(hasPriv(u.profileId,"edit_mm_attendance")||hasPriv(u.profileId,"edit_teach_attendance"))return RESIDENTS;
+    return RESIDENTS.filter(r=>r.id===u.rid);
+  }
   return[];
 }
 function canEdit(){const r=STATE.user?.role;return r==="pd"||r==="chief";}
