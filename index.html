@@ -5477,7 +5477,10 @@ function renderKPIExecutive(){
 ".kpix-yr-active:hover{box-shadow:0 8px 40px rgba(180,140,20,.22)!important}"+
 "@keyframes kpix-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(7px)}}"+
 "@keyframes kpix-gold-pulse{0%,100%{box-shadow:0 4px 20px rgba(180,140,20,.15),0 2px 12px rgba(0,0,0,.06)}50%{box-shadow:0 4px 40px rgba(180,140,20,.4),0 2px 12px rgba(0,0,0,.06)}}"+
-"@media(max-width:768px){.kpix-section{padding:28px 18px;min-height:auto;padding-top:48px;padding-bottom:48px}}";
+"@media(max-width:768px){.kpix-section{padding:28px 18px;min-height:auto;padding-top:48px;padding-bottom:48px}}"+
+"@media(max-width:640px){#kpix-s1{height:auto!important;min-height:100vh!important;padding:16px 14px 14px!important;gap:10px!important;}"+
+".kpix-s1-pods{gap:6px!important;}.kpix-s1-pod-card{padding:10px 10px!important;gap:8px!important;}"+
+".kpix-s1-pod-score{font-size:1.1rem!important;}.kpix-s1-ach{grid-template-columns:repeat(3,1fr)!important;}}";
   document.head.appendChild(s);
   function ring(score,sz,w,track,fill){
     const r=(sz-w)/2,circ=2*Math.PI*r,pct=Math.min(Math.max(score,0),100)/100;
@@ -5632,19 +5635,19 @@ function renderKPIExecutive(){
           el("div",{st:{fontSize:".58rem",color:"#9ca3af",fontWeight:"600",letterSpacing:".08em",textTransform:"uppercase"}},"Overall KPI")
         )
       ):null,
-      el("div",{st:{display:"flex",gap:"8px"}},
+      el("div",{cls:"kpix-s1-pods",st:{display:"flex",gap:"8px"}},
         ...[{res:r2,medal:"🥈 2nd Place",color:"#C0C0C0"},{res:r3,medal:"🥉 3rd Place",color:"#CD7F32"}].map(({res,medal,color})=>
-          res?el("div",{st:{flex:"1",borderRadius:"14px",padding:"12px 16px",cursor:"pointer",
-            background:"rgba(255,255,255,.55)",border:"1px solid rgba(0,0,0,.08)",
+          res?el("div",{cls:"kpix-s1-pod-card",st:{flex:"1",minWidth:"0",borderRadius:"14px",padding:"12px 16px",cursor:"pointer",
+            background:"rgba(255,255,255,.55)",border:"1px solid rgba(0,0,0,.08)",overflow:"hidden",
             boxShadow:"0 2px 10px rgba(0,0,0,.05)",display:"flex",alignItems:"center",gap:"12px"},
             onClick:podClickNav(res)},
             podAvatarSm(res,color),
-            el("div",{st:{flex:"1"}},
-              el("div",{st:{fontSize:".62rem",fontWeight:"700",letterSpacing:".06em",textTransform:"uppercase",color:color,marginBottom:"1px"}},medal),
-              el("div",{st:{fontSize:".85rem",fontWeight:"800",color:"#111827"}},dname(res.name)),
+            el("div",{st:{flex:"1",minWidth:"0"}},
+              el("div",{st:{fontSize:".62rem",fontWeight:"700",letterSpacing:".06em",textTransform:"uppercase",color:color,marginBottom:"1px",whiteSpace:"nowrap"}},medal),
+              el("div",{st:{fontSize:".85rem",fontWeight:"800",color:"#111827",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},dname(res.name)),
               el("div",{st:{fontSize:".62rem",color:"#9ca3af",fontWeight:"600"}},res.level)
             ),
-            el("div",{st:{fontSize:"1.3rem",fontWeight:"900",color:color,lineHeight:"1"}},res.k.overall+"%")
+            el("div",{cls:"kpix-s1-pod-score",st:{fontSize:"1.3rem",fontWeight:"900",color:color,lineHeight:"1",flexShrink:"0"}},res.k.overall+"%")
           ):el("div",{st:{flex:"1"}})
         )
       )
@@ -5652,7 +5655,7 @@ function renderKPIExecutive(){
     // Academic Achievements grid
     el("div",{st:{width:"100%",maxWidth:"680px"}},
       el("div",{st:{fontSize:".6rem",color:"#D4AF37",letterSpacing:".18em",fontWeight:"700",textTransform:"uppercase",textAlign:"center",marginBottom:"8px"}},"Academic Achievements"),
-      el("div",{st:{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:"8px"}},
+      el("div",{cls:"kpix-s1-ach",st:{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:"8px"}},
         ...[
           {icon:"📄",label:"Research",val:achCount("publication"),clr:"#60A5FA"},
           {icon:"🔬",label:"QI Projects",val:achCount("qi"),clr:"#34D399"},
