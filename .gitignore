@@ -1,3 +1,4 @@
 .DS_Store
 *.jsx
-supabase/
+supabase/new_passwords.csv
+supabase/*.csv

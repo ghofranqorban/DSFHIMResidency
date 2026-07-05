@@ -6,103 +6,98 @@
 <title>DSFH Internal Medicine Residency Portal</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Inter','Segoe UI',system-ui,sans-serif;}
-body{background:#f0f2f8;color:#111827;min-height:100vh;}
-/* ── App layout (sidebar + main) ── */
+body{background:#f5ede0;color:#1c1410;min-height:100vh;}
+/* ── App layout ── */
 .app-layout{display:flex;min-height:100vh;}
-.sidebar{width:250px;background:#16213e;flex-shrink:0;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;}
-.sidebar-brand{padding:22px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08);}
-.sidebar-brand h1{font-size:.95rem;font-weight:800;color:#fff;letter-spacing:-.01em;line-height:1.4;}
-.sidebar-brand p{font-size:.7rem;color:rgba(255,255,255,.38);margin-top:2px;}
-.sidebar-user{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:10px;}
+.sidebar{width:250px;background:#ede5d8;flex-shrink:0;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;border-right:1px solid #d8cdc0;}
+.sidebar-brand{padding:22px 18px 16px;border-bottom:1px solid rgba(61,32,16,.1);}
+.sidebar-brand h1{font-size:.95rem;font-weight:800;color:#3d2010;letter-spacing:-.01em;line-height:1.4;}
+.sidebar-brand p{font-size:.7rem;color:rgba(61,32,16,.45);margin-top:2px;}
+.sidebar-user{padding:12px 14px;border-bottom:1px solid rgba(61,32,16,.08);display:flex;align-items:center;gap:10px;}
 .sidebar-user-info{min-width:0;}
-.sidebar-user-name{font-size:.82rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.sidebar-user-role{font-size:.68rem;color:rgba(255,255,255,.42);margin-top:1px;text-transform:uppercase;letter-spacing:.06em;}
+.sidebar-user-name{font-size:.82rem;font-weight:700;color:#3d2010;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sidebar-user-role{font-size:.68rem;color:rgba(61,32,16,.5);margin-top:1px;text-transform:uppercase;letter-spacing:.06em;}
 .sidebar-nav{flex:1;padding:8px 0;}
-.snav{display:flex;align-items:center;gap:10px;padding:9px 14px;font-size:.84rem;font-weight:500;color:rgba(255,255,255,.6);cursor:pointer;border-left:3px solid transparent;transition:all .12s;margin:1px 8px;border-radius:8px;}
-.snav:hover{background:rgba(255,255,255,.07);color:#fff;}
-.snav.active{background:rgba(99,102,241,.2);color:#c7d2fe;border-left-color:#6366f1;}
+.snav{display:flex;align-items:center;gap:10px;padding:9px 14px;font-size:.84rem;font-weight:500;color:rgba(61,32,16,.55);cursor:pointer;border-left:3px solid transparent;transition:all .12s;margin:1px 8px;border-radius:8px;}
+.snav:hover{background:rgba(201,106,74,.1);color:#c96a4a;}
+.snav.active{background:rgba(201,106,74,.15);color:#c96a4a;border-left-color:#c96a4a;font-weight:700;}
 .snav .sni{font-size:1rem;width:22px;text-align:center;flex-shrink:0;}
-.sidebar-footer{padding:12px 12px 16px;border-top:1px solid rgba(255,255,255,.07);}
-.sidebar-acct{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.8);padding:7px 12px;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:600;width:100%;margin-bottom:6px;transition:all .12s;}
-.sidebar-acct:hover{background:rgba(255,255,255,.14);color:#fff;}
-.sidebar-logout{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.28);color:#fca5a5;padding:7px 12px;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:600;width:100%;transition:all .12s;}
-.sidebar-logout:hover{background:rgba(239,68,68,.28);color:#fff;}
-.main-area{flex:1;overflow-y:auto;background:#f0f2f8;min-width:0;}
-/* ── Legacy nav (kept for reference, hidden when sidebar used) ── */
+.sidebar-footer{padding:12px 12px 16px;border-top:1px solid rgba(61,32,16,.08);}
+.sidebar-acct{background:rgba(201,106,74,.1);border:1px solid rgba(201,106,74,.25);color:#a0502a;padding:7px 12px;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:600;width:100%;margin-bottom:6px;transition:all .12s;}
+.sidebar-acct:hover{background:rgba(201,106,74,.18);color:#c96a4a;}
+.sidebar-logout{background:rgba(185,32,64,.06);border:1px solid rgba(185,32,64,.18);color:#b52040;padding:7px 12px;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:600;width:100%;transition:all .12s;}
+.sidebar-logout:hover{background:rgba(185,32,64,.14);color:#8a1830;}
+.main-area{flex:1;overflow-y:auto;background:#f5ede0;min-width:0;}
 .nav{display:none;}
 /* ── Cards & content ── */
-.content{max-width:1040px;margin:0 auto;padding:24px 22px;}
-.card{background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.05),0 4px 14px rgba(0,0,0,.04);padding:20px;margin-bottom:16px;border:1px solid rgba(0,0,0,.04);}
-.card-title{font-weight:800;font-size:1rem;color:#111827;margin-bottom:14px;letter-spacing:-.01em;}
+.content{max-width:1040px;margin:0 auto;padding:28px 24px;}
+.card{background:#fff;border-radius:16px;box-shadow:0 2px 8px rgba(26,20,16,.05),0 1px 2px rgba(26,20,16,.04);padding:22px;margin-bottom:18px;border:1px solid #ede5d8;}
+.card-title{font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:1.05rem;color:#1c1410;margin-bottom:14px;}
 /* ── Stat boxes ── */
-.statbox{background:#f9fafb;border:1px solid #f3f4f6;border-radius:12px;padding:16px;text-align:center;}
-.statval{font-size:1.8rem;font-weight:800;color:#111827;letter-spacing:-.03em;line-height:1.1;}
-.statlbl{font-size:.72rem;color:#9ca3af;margin-top:3px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;}
+.statbox{background:#faf6f1;border:1px solid #ede5d8;border-radius:12px;padding:16px;text-align:center;}
+.statval{font-size:1.8rem;font-weight:800;color:#1c1410;letter-spacing:-.03em;line-height:1.1;}
+.statlbl{font-size:.72rem;color:#9c8070;margin-top:3px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;}
 /* ── Pills & tabs ── */
-.pill{display:inline-block;padding:4px 12px;border-radius:20px;font-size:.78rem;font-weight:600;cursor:pointer;border:1.5px solid #e5e7eb;background:#f9fafb;color:#6b7280;transition:all .12s;}
-.pill.on{background:#4f46e5;color:#fff;border-color:#4f46e5;}
-.pill.cur{background:#f59e0b;color:#fff;border-color:#f59e0b;}
-.tab{display:inline-block;padding:8px 18px;border-radius:8px 8px 0 0;font-size:.85rem;font-weight:600;cursor:pointer;color:#9ca3af;border:1px solid transparent;margin-right:2px;transition:all .12s;}
-.tab.on{background:#fff;color:#4f46e5;border-color:#e5e7eb;border-bottom-color:#fff;}
-.tab-bar{border-bottom:1px solid #e5e7eb;margin-bottom:16px;}
-/* ── Module grid (home screen) ── */
-.modbtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:20px 12px;background:#fff;border:2px solid #f3f4f6;border-radius:14px;cursor:pointer;transition:all .18s;min-width:100px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.04);}
-.modbtn:hover{border-color:#4f46e5;background:#f5f3ff;transform:translateY(-2px);box-shadow:0 6px 18px rgba(79,70,229,.13);}
-.modbtn .ico{font-size:1.7rem;}
-.modbtn .lbl2{font-size:.76rem;font-weight:700;color:#374151;}
-.modbtn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:12px;margin-bottom:20px;}
+.pill{display:inline-block;padding:4px 12px;border-radius:20px;font-size:.78rem;font-weight:600;cursor:pointer;border:1.5px solid #ede5d8;background:#faf6f1;color:#7a6555;transition:all .12s;}
+.pill.on{background:#c96a4a;color:#fff;border-color:#c96a4a;}
+.pill.cur{background:#c9913a;color:#fff;border-color:#c9913a;}
+.tab{display:inline-block;padding:8px 18px;border-radius:8px 8px 0 0;font-size:.85rem;font-weight:600;cursor:pointer;color:#9c8070;border:1px solid transparent;margin-right:2px;transition:all .12s;}
+.tab.on{background:#fff;color:#c96a4a;border-color:#ede5d8;border-bottom-color:#fff;}
+.tab-bar{border-bottom:1px solid #ede5d8;margin-bottom:16px;}
 /* ── Avatar ── */
 .av{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.72rem;color:#fff;flex-shrink:0;}
 /* ── Badges ── */
 .bdg{display:inline-block;padding:2px 8px;border-radius:6px;font-size:.72rem;font-weight:700;}
 .level-badge{padding:3px 10px;border-radius:8px;font-size:.72rem;font-weight:700;color:#fff;}
 /* ── Progress ── */
-.pbar-bg{background:#f3f4f6;border-radius:999px;height:7px;overflow:hidden;flex:1;}
+.pbar-bg{background:#ede5d8;border-radius:999px;height:7px;overflow:hidden;flex:1;}
 .pbar{height:100%;border-radius:999px;transition:width .4s;}
 /* ── Typography ── */
-.name{font-weight:700;font-size:.9rem;color:#111827;}
-.sub{font-size:.78rem;color:#6b7280;}
-.lbl{font-size:.8rem;font-weight:600;color:#374151;margin-bottom:4px;}
-.sh{color:#9ca3af;font-size:.82rem;}
-.group-header{font-weight:700;font-size:.72rem;color:#9ca3af;letter-spacing:.07em;padding:10px 0 4px;text-transform:uppercase;}
+.name{font-weight:700;font-size:.9rem;color:#1c1410;}
+.sub{font-size:.78rem;color:#7a6555;}
+.lbl{font-size:.8rem;font-weight:600;color:#4a3828;margin-bottom:4px;}
+.sh{color:#9c8070;font-size:.82rem;}
+.group-header{font-weight:700;font-size:.72rem;color:#9c8070;letter-spacing:.07em;padding:10px 0 4px;text-transform:uppercase;}
 /* ── Buttons ── */
 .sbtn{padding:8px 18px;border-radius:9px;border:none;cursor:pointer;font-weight:700;font-size:.84rem;transition:all .12s;display:inline-flex;align-items:center;gap:6px;}
-.sbtn.primary{background:#4f46e5;color:#fff;}
-.sbtn.primary:hover{background:#4338ca;}
-.sbtn.danger{background:#dc2626;color:#fff;}
-.sbtn.danger:hover{background:#b91c1c;}
-.sbtn.success{background:#059669;color:#fff;}
-.sbtn.success:hover{background:#047857;}
-.sbtn.ghost{background:#f9fafb;color:#374151;border:1.5px solid #e5e7eb;}
-.sbtn.ghost:hover{background:#f3f4f6;}
-.sbtn.warn{background:#d97706;color:#fff;}
-.sbtn.warn:hover{background:#b45309;}
-.back-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:9px;cursor:pointer;font-weight:600;font-size:.84rem;color:#374151;margin-bottom:16px;}
-.back-btn:hover{background:#f3f4f6;}
+.sbtn.primary{background:#c96a4a;color:#fff;}
+.sbtn.primary:hover{background:#b5593a;}
+.sbtn.danger{background:#b52040;color:#fff;}
+.sbtn.danger:hover{background:#9a1835;}
+.sbtn.success{background:#2a7a5a;color:#fff;}
+.sbtn.success:hover{background:#226648;}
+.sbtn.ghost{background:#faf6f1;color:#4a3828;border:1.5px solid #ede5d8;}
+.sbtn.ghost:hover{background:#f2ece2;}
+.sbtn.warn{background:#c9913a;color:#fff;}
+.sbtn.warn:hover{background:#b07a2e;}
+.back-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#faf6f1;border:1.5px solid #ede5d8;border-radius:9px;cursor:pointer;font-weight:600;font-size:.84rem;color:#4a3828;margin-bottom:16px;}
+.back-btn:hover{background:#f2ece2;}
 /* ── Alerts ── */
-.alert-red{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:12px 16px;border-radius:10px;margin-bottom:12px;font-size:.88rem;}
-.alert-yellow{background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:12px 16px;border-radius:10px;margin-bottom:12px;font-size:.88rem;}
-.alert-green{background:#f0fdf4;border:1px solid #86efac;color:#166534;padding:12px 16px;border-radius:10px;margin-bottom:12px;font-size:.88rem;}
+.alert-red{background:#fdf0f2;border:1px solid #f5c0c8;color:#8a1028;padding:12px 16px;border-radius:10px;margin-bottom:12px;font-size:.88rem;}
+.alert-yellow{background:#fdf8ed;border:1px solid #f0d898;color:#7a4c10;padding:12px 16px;border-radius:10px;margin-bottom:12px;font-size:.88rem;}
+.alert-green{background:#eef7f2;border:1px solid #a8d8bc;color:#1a5a36;padding:12px 16px;border-radius:10px;margin-bottom:12px;font-size:.88rem;}
 /* ── Drop zone ── */
-.drop-zone{border:2px dashed #d1d5db;border-radius:12px;padding:24px;text-align:center;color:#9ca3af;background:#fafafa;}
+.drop-zone{border:2px dashed #ede5d8;border-radius:12px;padding:24px;text-align:center;color:#9c8070;background:#faf6f1;}
 /* ── Tables ── */
-.tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid #f3f4f6;}
+.tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid #ede5d8;}
 table{border-collapse:collapse;width:100%;font-size:.84rem;}
-th{background:#f9fafb;color:#6b7280;font-weight:700;padding:10px 12px;text-align:left;border-bottom:2px solid #f3f4f6;white-space:nowrap;font-size:.76rem;letter-spacing:.04em;text-transform:uppercase;}
-td{padding:9px 12px;border-bottom:1px solid #f9fafb;vertical-align:middle;}
-tr:hover td{background:#fafafa;}
-.sticky-col{position:sticky;left:0;background:#fff;z-index:2;border-right:2px solid #f3f4f6;}
-tr:hover .sticky-col{background:#fafafa;}
-.sched-tbl td,.sched-tbl th{border-right:1px solid #f9fafb;}
-.sched-tbl .wk-cell{background:#f9fafb;font-weight:700;color:#111827;text-align:center;vertical-align:middle;border-right:2px solid #f3f4f6;white-space:nowrap;}
+th{background:#faf6f1;color:#7a6555;font-weight:700;padding:10px 12px;text-align:left;border-bottom:2px solid #ede5d8;white-space:nowrap;font-size:.76rem;letter-spacing:.04em;text-transform:uppercase;}
+td{padding:9px 12px;border-bottom:1px solid #faf6f1;vertical-align:middle;}
+tr:hover td{background:#fdf9f5;}
+.sticky-col{position:sticky;left:0;background:#fff;z-index:2;border-right:2px solid #ede5d8;}
+tr:hover .sticky-col{background:#fdf9f5;}
+.sched-tbl td,.sched-tbl th{border-right:1px solid #ede5d8;}
+.sched-tbl .wk-cell{background:#faf6f1;font-weight:700;color:#1c1410;text-align:center;vertical-align:middle;border-right:2px solid #ede5d8;white-space:nowrap;}
 .sched-tbl tr td{white-space:normal;}
 /* ── Inputs ── */
-.input-sm{padding:5px 8px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:.82rem;width:100%;background:#fff;}
-input,select,textarea{padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:.88rem;width:100%;outline:none;transition:border .12s;background:#fff;}
-input:focus,select:focus,textarea:focus{border-color:#4f46e5;box-shadow:0 0 0 3px rgba(79,70,229,.1);}
-label{display:block;font-size:.8rem;font-weight:600;color:#374151;margin-bottom:4px;}
+.input-sm{padding:5px 8px;border:1.5px solid #ede5d8;border-radius:7px;font-size:.82rem;width:100%;background:#fff;}
+input,select,textarea{padding:9px 12px;border:1.5px solid #ede5d8;border-radius:9px;font-size:.88rem;width:100%;outline:none;transition:border .12s;background:#fff;color:#1c1410;}
+input:focus,select:focus,textarea:focus{border-color:#c96a4a;box-shadow:0 0 0 3px rgba(201,106,74,.12);}
+label{display:block;font-size:.8rem;font-weight:600;color:#4a3828;margin-bottom:4px;}
 /* ── Layout helpers ── */
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
 .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
@@ -111,41 +106,82 @@ label{display:block;font-size:.8rem;font-weight:600;color:#374151;margin-bottom:
 .flex-gap{display:flex;align-items:center;gap:8px;}
 .flex-wrap{display:flex;flex-wrap:wrap;gap:6px;}
 .mt-8{margin-top:8px;}.mt-12{margin-top:12px;}.mt-16{margin-top:16px;}.mb-8{margin-bottom:8px;}.mb-12{margin-bottom:12px;}
-.sep{height:1px;background:#f3f4f6;margin:14px 0;}
+.sep{height:1px;background:#ede5d8;margin:14px 0;}
 .rot-badge{display:inline-block;padding:3px 9px;border-radius:7px;font-size:.74rem;font-weight:700;white-space:nowrap;}
 /* ── Login ── */
-.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#16213e 0%,#1a237e 50%,#4f46e5 100%);}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#e0d4c4 0%,#ede5d8 55%,#d8cbb8 100%);}
 .login-card{background:#fff;border-radius:20px;padding:40px 36px;width:380px;box-shadow:0 24px 64px rgba(0,0,0,.22);}
 .login-logo{text-align:center;margin-bottom:28px;}
-.login-logo h1{font-size:1.4rem;font-weight:800;color:#111827;margin-top:10px;letter-spacing:-.02em;}
-.login-logo p{font-size:.82rem;color:#9ca3af;margin-top:4px;}
-.err{color:#dc2626;font-size:.82rem;margin-top:6px;}
+.login-logo h1{font-family:'Playfair Display',Georgia,serif;font-size:1.5rem;font-weight:700;color:#1c1410;margin-top:10px;letter-spacing:-.02em;}
+.login-logo p{font-size:.82rem;color:#9c8070;margin-top:4px;}
+.err{color:#b52040;font-size:.82rem;margin-top:6px;}
 /* ── Resident card ── */
-.res-card{display:flex;align-items:center;gap:10px;padding:12px;border-radius:12px;border:1.5px solid #f3f4f6;cursor:pointer;transition:all .12s;margin-bottom:6px;background:#fff;}
-.res-card:hover,.res-card.on{border-color:#4f46e5;background:#f5f3ff;}
+.res-card{display:flex;align-items:center;gap:10px;padding:12px;border-radius:12px;border:1.5px solid #ede5d8;cursor:pointer;transition:all .12s;margin-bottom:6px;background:#fff;}
+.res-card:hover,.res-card.on{border-color:#c96a4a;background:#fdf5f1;}
 /* ── Forms & modal ── */
-.inline-form{background:#f9fafb;border:1.5px solid #f3f4f6;border-radius:12px;padding:18px;margin-top:12px;}
-.modal-overlay{position:fixed;inset:0;background:rgba(17,24,39,.52);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px;}
-.modal-card{background:#fff;border-radius:16px;padding:28px;width:400px;max-width:100%;box-shadow:0 24px 60px rgba(0,0,0,.2);}
-.modal-card h3{margin:0 0 4px;color:#111827;font-size:1.1rem;font-weight:800;}
-.nav-btn2{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:#fff;padding:5px 12px;border-radius:7px;cursor:pointer;font-size:.8rem;}
+.inline-form{background:#faf6f1;border:1.5px solid #ede5d8;border-radius:12px;padding:18px;margin-top:12px;}
+.modal-overlay{position:fixed;inset:0;background:rgba(26,20,16,.55);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px;overflow-y:auto;}
+.modal-card{background:#fff;border-radius:16px;padding:28px;width:400px;max-width:100%;box-shadow:0 24px 60px rgba(0,0,0,.18);max-height:90vh;overflow-y:auto;}
+.modal-card h3{margin:0 0 4px;color:#1c1410;font-family:'Playfair Display',Georgia,serif;font-size:1.15rem;font-weight:700;}
+.nav-btn2{background:rgba(201,106,74,.12);border:1px solid rgba(201,106,74,.25);color:#a0502a;padding:5px 12px;border-radius:7px;cursor:pointer;font-size:.8rem;}
 /* ── Attendance ── */
 .att-p{background:#d1fae5;color:#065f46;}
 .att-l{background:#fef3c7;color:#92400e;}
 .att-a{background:#fee2e2;color:#991b1b;}
 .att-o{background:#f3f4f6;color:#6b7280;}
 .att-e{background:#ede9fe;color:#5b21b6;}
-.att-btn{padding:4px 9px;border-radius:7px;border:1.5px solid #e5e7eb;cursor:pointer;font-size:.75rem;font-weight:700;transition:all .1s;}
-.att-btn.sel-P{background:#059669;color:#fff;border-color:#059669;}
-.att-btn.sel-L{background:#d97706;color:#fff;border-color:#d97706;}
-.att-btn.sel-A{background:#dc2626;color:#fff;border-color:#dc2626;}
+.att-btn{padding:4px 9px;border-radius:7px;border:1.5px solid #ede5d8;cursor:pointer;font-size:.75rem;font-weight:700;transition:all .1s;}
+.att-btn.sel-P{background:#2a7a5a;color:#fff;border-color:#2a7a5a;}
+.att-btn.sel-L{background:#c9913a;color:#fff;border-color:#c9913a;}
+.att-btn.sel-A{background:#b52040;color:#fff;border-color:#b52040;}
 .att-btn.sel-O{background:#9ca3af;color:#fff;border-color:#9ca3af;}
 .att-btn.sel-E{background:#7c3aed;color:#fff;border-color:#7c3aed;}
-/* ── Responsive ── */
+/* ── Home page: hero ── */
+.home-hero{position:relative;background:linear-gradient(135deg,#e0d4c4 0%,#ede5d8 55%,#d8cbb8 100%);padding:52px 48px 56px;overflow:hidden;flex-shrink:0;}
+.home-hero-shapes{position:absolute;inset:0;pointer-events:none;overflow:hidden;}
+.home-shape{position:absolute;border-radius:4px;opacity:.3;}
+.home-hero-inner{position:relative;display:flex;align-items:center;justify-content:space-between;gap:32px;}
+.home-eyebrow{font-size:.68rem;letter-spacing:.15em;text-transform:uppercase;color:rgba(61,32,16,.45);font-weight:600;margin-bottom:14px;}
+.home-title{font-family:'Playfair Display',Georgia,serif;font-size:clamp(2.2rem,4vw,3.4rem);font-weight:700;color:#3d2010;line-height:1.1;letter-spacing:-.02em;margin-bottom:8px;}
+.home-subtitle{font-family:'Playfair Display',Georgia,serif;font-size:clamp(.9rem,1.8vw,1.2rem);font-style:italic;color:#9c6a4a;font-weight:400;}
+.home-infocard{background:rgba(255,255,255,.55);border:1px solid rgba(201,106,74,.2);border-radius:20px;padding:26px 24px;backdrop-filter:blur(16px);min-width:196px;max-width:230px;flex-shrink:0;}
+.home-infocard-tag{font-size:.6rem;letter-spacing:.13em;text-transform:uppercase;color:rgba(61,32,16,.4);margin-bottom:18px;font-weight:600;}
+.home-infocard-block{font-size:1.5rem;font-weight:800;color:#3d2010;margin-bottom:2px;}
+.home-infocard-sub{font-size:.75rem;color:rgba(61,32,16,.45);margin-bottom:18px;}
+.home-infocard-divider{height:1px;background:rgba(61,32,16,.1);margin-bottom:18px;}
+.home-infocard-label{font-size:.65rem;color:rgba(61,32,16,.38);margin-bottom:5px;}
+.home-infocard-name{font-weight:700;color:#3d2010;font-size:.85rem;}
+.home-infocard-role{font-size:.68rem;color:rgba(61,32,16,.45);margin-top:2px;text-transform:capitalize;}
+/* ── Home: module section ── */
+.home-modules{padding:36px 48px 52px;background:#f5ede0;}
+.home-section-tag{font-size:.65rem;letter-spacing:.13em;text-transform:uppercase;color:#c96a4a;font-weight:700;margin-bottom:6px;}
+.home-section-title{font-family:'Playfair Display',Georgia,serif;font-size:1.55rem;font-weight:700;color:#1c1410;margin-bottom:28px;letter-spacing:-.01em;}
+.home-mod-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+/* Premium module card */
+.home-modbtn{background:#fff;border:1px solid #ede5d8;border-radius:18px;padding:24px 20px 20px;display:flex;flex-direction:column;align-items:flex-start;cursor:pointer;transition:all .22s cubic-bezier(.34,1.56,.64,1);text-align:left;box-shadow:0 2px 6px rgba(26,20,16,.04);}
+.home-modbtn:hover{transform:translateY(-4px);box-shadow:0 16px 36px rgba(26,20,16,.1);border-color:#c96a4a;}
+.home-modbtn:active{transform:translateY(-2px);}
+.home-mod-ico-wrap{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;flex-shrink:0;}
+.home-mod-ico{font-size:1.5rem;line-height:1;}
+.home-mod-lbl{font-size:.92rem;font-weight:700;color:#1c1410;line-height:1.3;letter-spacing:-.01em;margin-bottom:5px;}
+.home-mod-desc{font-size:.76rem;color:#9c8070;line-height:1.45;flex:1;}
+.home-mod-arrow{font-size:.78rem;color:#c96a4a;font-weight:700;margin-top:14px;letter-spacing:.02em;}
+/* ── Home alerts strip ── */
+.home-alerts{padding:0 48px;}
+/* ── Tablet overrides ── */
 @media(max-width:900px){
+  .home-hero{padding:36px 28px 40px;}
+  .home-modules{padding:24px 22px 32px;}
+  .home-alerts{padding:0 22px;}
+  .home-mod-grid{grid-template-columns:repeat(2,1fr);}
+}
+/* ── Tablet: narrow sidebar (icons only) ── */
+@media(max-width:900px) and (min-width:601px){
   .sidebar{width:58px;}
   .snav span:not(.sni){display:none;}
-  .sidebar-brand p,.sidebar-user-info,.sidebar-footer .sidebar-acct{display:none;}
+  .sidebar-brand p,.sidebar-user-info{display:none;}
+  .sidebar-footer .sidebar-acct{font-size:0;padding:8px;}
+  .sidebar-footer .sidebar-acct::before{content:"⚙";font-size:1rem;}
   .sidebar-brand h1{font-size:0;visibility:hidden;}
   .sidebar-brand{padding:14px 8px;}
   .sidebar-user{justify-content:center;padding:10px 8px;}
@@ -154,7 +190,33 @@ label{display:block;font-size:.8rem;font-weight:600;color:#374151;margin-bottom:
   .sidebar-logout::before{content:"⏻";font-size:1rem;}
   .snav{justify-content:center;margin:2px 4px;padding:10px 0;}
 }
-@media(max-width:600px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr;}.modbtn-grid{grid-template-columns:repeat(3,1fr);}}
+/* Mobile top bar — hidden by default, shown on phones */
+.mob-topbar{display:none;background:#ede5d8;border-bottom:1px solid #d8cdc0;padding:10px 14px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;}
+.mob-topbar-brand{font-size:.9rem;font-weight:800;color:#3d2010;}
+.mob-topbar-right{display:flex;gap:8px;}
+/* ── Mobile ── */
+@media(max-width:600px){
+  .sidebar{display:none;}
+  .mob-topbar{display:flex;}
+  .app-layout{flex-direction:column;}
+  .main-area{width:100%;}
+  .content{padding:14px 12px;}
+  .grid-2,.grid-3,.grid-4{grid-template-columns:1fr;}
+  .home-hero{padding:28px 18px 32px!important;}
+  .home-hero-inner{flex-direction:column!important;gap:16px!important;}
+  .home-infocard{display:none!important;}
+  .home-title{font-size:2rem!important;}
+  .home-subtitle{font-size:.92rem!important;}
+  .home-modules{padding:20px 14px 28px!important;}
+  .home-alerts{padding:0 14px!important;}
+  .home-mod-grid{grid-template-columns:repeat(2,1fr)!important;gap:10px!important;}
+  .home-modbtn{padding:16px 14px 14px!important;}
+  .home-mod-ico-wrap{width:40px!important;height:40px!important;border-radius:11px!important;margin-bottom:12px!important;}
+  .home-mod-desc{display:none;}
+  .modal-overlay{align-items:flex-start;padding:0;overflow-y:auto;}
+  .modal-card{width:100%;border-radius:0;max-height:none;height:auto;padding:18px 16px;box-shadow:none;}
+  .inline-form{padding:12px;}
+}
 </style>
 </head>
 <body>
@@ -245,9 +307,10 @@ let ROTA_LEAVE_META={};
 let CHIEF_RES_ID=null;
 let CO_CHIEF_RES_ID=null;
 const MANDATORY=["GIM/CTU","Cardiology","Pulmonology","Nephrology","Gastroenterology","Endocrinology","Hematology","Rheumatology","Neurology","Infectious Disease","ICU","Emergency Medicine","Oncology"];
-// MM att 20% + Teaching att 20% = 40% | Quiz 35% | Pres 15% + Committee 10% = 25%
-const KPI_W={quiz:35,mm:20,teach:20,pres:15,comm:10};
-const LC={R1:"#6366f1",R2:"#0ea5e9",R3:"#10b981",R4:"#f59e0b"};
+// Quiz 30% | MM att 15% + Teaching att 15% = 30% | Pres 10% + Committee 10% = 20% | Research 10% + QI 10% = 20%
+// Bonus on top: Published +3, Oral presentation +3, Poster +2 (overall can exceed 100)
+const KPI_W={quiz:30,mm:15,teach:15,pres:10,comm:10,research:10,qi:10};
+const LC={R1:"#4a6a8a",R2:"#5a8a6a",R3:"#c9913a",R4:"#8a4a2a"};
 const ROT_COLORS={"GIM/CTU":{bg:"#ede9fe",tx:"#5b21b6"},"Night Duty":{bg:"#fef2f2",tx:"#991b1b"},"ICU":{bg:"#dbeafe",tx:"#1e40af"},"Cardiology":{bg:"#fce7f3",tx:"#9d174d"},"Pulmonology":{bg:"#e0f2fe",tx:"#0c4a6e"},"Nephrology":{bg:"#d1fae5",tx:"#065f46"},"Gastroenterology":{bg:"#fef3c7",tx:"#92400e"},"Endocrinology":{bg:"#f0fdf4",tx:"#166534"},"Hematology":{bg:"#ffe4e6",tx:"#9f1239"},"Rheumatology":{bg:"#f5f3ff",tx:"#4c1d95"},"Neurology":{bg:"#fdf4ff",tx:"#7e22ce"},"Infectious Disease":{bg:"#fff7ed",tx:"#c2410c"},"Emergency Medicine":{bg:"#fee2e2",tx:"#7f1d1d"},"Oncology":{bg:"#f0f9ff",tx:"#0369a1"},"Outpatient Clinic":{bg:"#f8fafc",tx:"#475569"},"Elective":{bg:"#f0fdf4",tx:"#166534"},"Annual Leave":{bg:"#fefce8",tx:"#854d0e"},"Maternity Leave":{bg:"#fdf4ff",tx:"#701a75"},"Medical Consult":{bg:"#eff6ff",tx:"#1e40af"}};
 const ROT_ABBR={"GIM/CTU":"CTU","Night Duty":"Night","ICU":"ICU","Cardiology":"Cardio","Pulmonology":"Pulmo","Nephrology":"Nephro","Gastroenterology":"Gastro","Endocrinology":"Endo","Hematology":"Hema","Rheumatology":"Rheuma","Neurology":"Neuro","Infectious Disease":"ID","Emergency Medicine":"ER","Oncology":"Onco","Outpatient Clinic":"Clinic","Elective":"Elect","Annual Leave":"Leave","Maternity Leave":"Matern","Medical Consult":"M.Cons"};
 const ALL_ROTATIONS=["GIM/CTU","Night Duty","ICU","Cardiology","Pulmonology","Nephrology","Gastroenterology","Endocrinology","Hematology","Rheumatology","Neurology","Infectious Disease","Emergency Medicine","Oncology","Outpatient Clinic","Elective","Annual Leave","Maternity Leave","Medical Consult"];
@@ -387,9 +450,11 @@ function matchResidentByName(excelName,pool){
 let MM_SESSIONS=[];
 let MM_SESSION_BY_ID={};
 let MM_ATT={};
+let MM_ATT_CMT={};
 let TEACH_SESSIONS=[];
 let TEACH_SESSION_BY_ID={};
 let TEACH_ATT={};
+let TEACH_ATT_CMT={};
 async function loadSchedules(){
   const[{data:mm,error:mmErr},{data:mmA,error:mmAErr},{data:te,error:teErr},{data:teA,error:teAErr}]=await Promise.all([
     sb.from("mm_sessions").select("*").order("session_date"),
@@ -401,19 +466,29 @@ async function loadSchedules(){
   TEACH_SESSIONS=teErr?[]:(te||[]);
   MM_SESSION_BY_ID={};MM_SESSIONS.forEach(s=>{MM_SESSION_BY_ID[s.id]=s;});
   TEACH_SESSION_BY_ID={};TEACH_SESSIONS.forEach(s=>{TEACH_SESSION_BY_ID[s.id]=s;});
-  MM_ATT={};
+  MM_ATT={};MM_ATT_CMT={};
   (mmAErr?[]:(mmA||[])).forEach(a=>{
     const s=MM_SESSION_BY_ID[a.session_id];if(!s)return;
     if(!MM_ATT[s.block_number])MM_ATT[s.block_number]={};
     if(!MM_ATT[s.block_number][s.session_date])MM_ATT[s.block_number][s.session_date]={};
     MM_ATT[s.block_number][s.session_date][a.resident_id]=a.status;
+    if(a.comment){
+      if(!MM_ATT_CMT[s.block_number])MM_ATT_CMT[s.block_number]={};
+      if(!MM_ATT_CMT[s.block_number][s.session_date])MM_ATT_CMT[s.block_number][s.session_date]={};
+      MM_ATT_CMT[s.block_number][s.session_date][a.resident_id]=a.comment;
+    }
   });
-  TEACH_ATT={};
+  TEACH_ATT={};TEACH_ATT_CMT={};
   (teAErr?[]:(teA||[])).forEach(a=>{
     const s=TEACH_SESSION_BY_ID[a.session_id];if(!s)return;
     if(!TEACH_ATT[s.block_number])TEACH_ATT[s.block_number]={};
     if(!TEACH_ATT[s.block_number][s.session_date])TEACH_ATT[s.block_number][s.session_date]={};
     TEACH_ATT[s.block_number][s.session_date][a.resident_id]=a.status;
+    if(a.comment){
+      if(!TEACH_ATT_CMT[s.block_number])TEACH_ATT_CMT[s.block_number]={};
+      if(!TEACH_ATT_CMT[s.block_number][s.session_date])TEACH_ATT_CMT[s.block_number][s.session_date]={};
+      TEACH_ATT_CMT[s.block_number][s.session_date][a.resident_id]=a.comment;
+    }
   });
   render();
 }
@@ -497,6 +572,25 @@ buildLeaveData();
 let COMM_MEM={};
 let COMM_SC={};
 RESIDENTS.forEach(r=>{COMM_MEM[r.id]=[];COMM_SC[r.id]=0;});
+// KPI manual scores (DB-backed via kpi_scores table, keyed by resident_id)
+// commScore:0-10 | researchDone | qiDone | bonusPublished | bonusOral | bonusPoster
+let KPI_SCORES={};
+const KPI_BONUS={published:3,oral:3,poster:2};
+async function saveKpiScore(resId,patch){
+  const cur=KPI_SCORES[resId]||{};
+  KPI_SCORES[resId]={...cur,...patch};
+  const ks=KPI_SCORES[resId];
+  COMM_SC[resId]=ks.commScore||0; // keep COMM_SC in sync
+  const{error}=await sb.from("kpi_scores").upsert({
+    resident_id:resId,academic_year:CURRENT_ACADEMIC_YEAR,
+    committee_score:ks.commScore||0,
+    research_participated:!!ks.researchDone,qi_participated:!!ks.qiDone,
+    bonus_published:!!ks.bonusPublished,bonus_oral:!!ks.bonusOral,bonus_poster:!!ks.bonusPoster,
+    updated_by:STATE.user?.profileId||null,updated_at:new Date().toISOString()
+  },{onConflict:"resident_id,academic_year"});
+  if(error)console.error("saveKpiScore error",error);
+  render();
+}
 let nextQuizId=4;
 // ─── LEAVE RECORDS (DB-backed: table `leave_records` — manual approved leave +
 // unapproved absences; rota-derived leave lives in the `rotations` table above
@@ -627,16 +721,18 @@ function initialsFromName(name){
   return (name||"").replace(/^Dr\.?\s*/i,"").trim().split(/\s+/).map(w=>w[0]).join("").toUpperCase().slice(0,2)||"??";
 }
 async function loadCoreData(){
-  const[{data:cons,error:cerr},{data:res,error:rerr},{data:profs,error:perr},{data:privs,error:pverr}]=await Promise.all([
+  const[{data:cons,error:cerr},{data:res,error:rerr},{data:profs,error:perr},{data:privs,error:pverr},{data:kpisc,error:kpierr}]=await Promise.all([
     sb.from("consultants").select("*").eq("active",true).order("created_at"),
     sb.from("residents").select("*").eq("active",true).order("created_at"),
     sb.from("profiles").select("*"),
-    sb.from("account_privileges").select("*")
+    sb.from("account_privileges").select("*"),
+    sb.from("kpi_scores").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR)
   ]);
   if(cerr||rerr||perr||pverr){
     console.error("loadCoreData error",cerr||rerr||perr||pverr);
     return false;
   }
+  if(kpierr)console.warn("kpi_scores load error (table may not exist yet)",kpierr.message);
   CONSULTANTS=(cons||[]).map(c=>({id:c.id,name:c.name,user:c.username}));
   RESIDENTS=(res||[]).map(r=>({id:r.id,name:r.name,user:r.username,level:r.level,ph:r.photo_initials||initialsFromName(r.name),yearStarted:r.year_started,chiefRole:r.chief_role||null}));
   CHIEF_RES_ID=RESIDENTS.find(r=>r.chiefRole==="chief")?.id||null;
@@ -654,6 +750,11 @@ async function loadCoreData(){
     if(!ACCOUNT_PRIVS[p.profile_id])ACCOUNT_PRIVS[p.profile_id]=new Set();
     ACCOUNT_PRIVS[p.profile_id].add(p.privilege_key);
   });
+  KPI_SCORES={};
+  (kpisc||[]).forEach(k=>{
+    KPI_SCORES[k.resident_id]={commScore:k.committee_score||0,researchDone:!!k.research_participated,qiDone:!!k.qi_participated,bonusPublished:!!k.bonus_published,bonusOral:!!k.bonus_oral,bonusPoster:!!k.bonus_poster};
+    COMM_SC[k.resident_id]=k.committee_score||0;
+  });
   ensureResidentAuxData();
   buildLeaveData();
   MENTOR_NOTES={};
@@ -665,6 +766,15 @@ let MENTOR_NOTES={};
 async function loadMentorNotes(residentId){
   const{data,error}=await sb.from("mentor_notes").select("*").eq("resident_id",residentId).order("created_at",{ascending:false});
   MENTOR_NOTES[residentId]=error?[]:(data||[]);
+  render();
+}
+async function loadAllMentorNotes(resIds){
+  if(!resIds||!resIds.length)return;
+  resIds.forEach(id=>{if(MENTOR_NOTES[id]===undefined)MENTOR_NOTES[id]=null;});
+  render();
+  const{data,error}=await sb.from("mentor_notes").select("*").in("resident_id",resIds).order("created_at",{ascending:false});
+  resIds.forEach(id=>{MENTOR_NOTES[id]=[];});
+  if(!error&&data)data.forEach(n=>{if(Array.isArray(MENTOR_NOTES[n.resident_id]))MENTOR_NOTES[n.resident_id].push(n);});
   render();
 }
 function consultantName(cid){const c=CONSULTANTS.find(x=>x.id===cid);return c?c.name:"Unknown";}
@@ -697,51 +807,55 @@ function counselRecipientOptions(res){
   return opts;
 }
 function noteTypeInfo(t){
-  if(t==="concern")return{label:"⚠️ Area of Concern",bg:"#fee2e2",fg:"#991b1b"};
-  if(t==="improvement")return{label:"📈 Area of Improvement",bg:"#dbeafe",fg:"#1e40af"};
-  return{label:"💬 Comment",bg:"#f1f5f9",fg:"#334155"};
+  if(t==="strength")return{label:"💪 Areas of Strength",bg:"#d1fae5",fg:"#065f46",accent:"#2a7a5a"};
+  if(t==="improvement")return{label:"📈 Areas of Improvement",bg:"#dbeafe",fg:"#1e40af",accent:"#1a6a9a"};
+  if(t==="interest")return{label:"🌟 Field of Interest",bg:"#ede9fe",fg:"#5b21b6",accent:"#7c3aad"};
+  if(t==="concern")return{label:"⚠️ Area of Concern",bg:"#fee2e2",fg:"#991b1b",accent:"#b52040"};
+  return{label:"💬 Comment",bg:"#f1f5f9",fg:"#334155",accent:"#64748b"};
 }
 function getAccess(cid){return RESIDENTS.filter(r=>MENTORS[r.id]===cid).map(r=>r.id);}
+function isPdRole(r){return r==="pd"||r==="deputy_pd";}
 function visRes(){
   const u=STATE.user;
   if(!u)return[];
-  if(u.role==="pd"||u.role==="chief")return RESIDENTS;
+  if(isPdRole(u.role)||u.role==="chief")return RESIDENTS;
   if(u.role==="consultant"){const ids=getAccess(u.cid);return RESIDENTS.filter(r=>ids.includes(r.id));}
   if(u.role==="resident"){
-    // Residents with attendance privilege can see all residents (to mark their attendance)
     if(hasPriv(u.profileId,"edit_mm_attendance")||hasPriv(u.profileId,"edit_teach_attendance"))return RESIDENTS;
     return RESIDENTS.filter(r=>r.id===u.rid);
   }
   return[];
 }
-function canEdit(){const r=STATE.user?.role;return r==="pd"||r==="chief";}
-function isPD(){return STATE.user?.role==="pd";}
+function canEdit(){const r=STATE.user?.role;return isPdRole(r)||r==="chief";}
+function isPD(){return isPdRole(STATE.user?.role);}
 function isConsultant(){return STATE.user?.role==="consultant";}
 function isResident(){return STATE.user?.role==="resident";}
-// Schedule-editing (entering next block's Morning Meeting / Teaching schedule) is a
-// distinct permission from attendance-marking — PD grants it per-person via the
-// Admin > Accounts privileges grid (edit_mm_schedule / edit_teach_schedule).
 function canEditMMSchedule(){
   const u=STATE.user;if(!u)return false;
-  if(u.role==="pd"||u.role==="chief")return true;
+  if(isPdRole(u.role)||u.role==="chief")return true;
   return hasPriv(u.profileId,"edit_mm_schedule");
 }
 function canEditTeachSchedule(){
   const u=STATE.user;if(!u)return false;
-  if(u.role==="pd"||u.role==="chief")return true;
+  if(isPdRole(u.role)||u.role==="chief")return true;
   return hasPriv(u.profileId,"edit_teach_schedule");
 }
 function canLogMMAttendance(){
   const u=STATE.user;if(!u)return false;
-  if(u.role==="pd"||u.role==="chief")return true;
-  if(u.role==="consultant")return true; // any mentor can log attendance for sessions
+  if(isPdRole(u.role)||u.role==="chief")return true;
+  if(u.role==="consultant")return true;
   return hasPriv(u.profileId,"edit_mm_attendance");
 }
 function canLogTeachAttendance(){
   const u=STATE.user;if(!u)return false;
-  if(u.role==="pd"||u.role==="chief")return true;
+  if(isPdRole(u.role)||u.role==="chief")return true;
   if(u.role==="consultant")return true;
   return hasPriv(u.profileId,"edit_teach_attendance");
+}
+// Attendance locking: all authorised users can mark attendance for any session at any time.
+// PD/chief can edit any session; consultants/residents with privilege can also edit any session.
+function canEditAttSession(dateStr){
+  return true;
 }
 // KPI edits (committee score, quiz marks for a resident): PD or that resident's assigned mentor
 function canEditKPI(resId){
@@ -765,8 +879,13 @@ function calcKPI(id){
   const pres=MM_SESSIONS.some(m=>m.presenter_resident_id===id);
   const presCount=MM_SESSIONS.filter(m=>m.presenter_resident_id===id).length;
   const commPct=Math.round(((COMM_SC[id]||0)/10)*100);
-  const overall=Math.round(qAvg*KPI_W.quiz/100+mmPct*KPI_W.mm/100+tPct*KPI_W.teach/100+(pres?100:0)*KPI_W.pres/100+commPct*KPI_W.comm/100);
-  return{mmPct,mmAtt,mmTotal,tPct,tAtt,tTotal,rotPct,qAvg,pres,presCount,commPct,overall};
+  const ks=KPI_SCORES[id]||{};
+  const researchPct=ks.researchDone?100:0;
+  const qiPct=ks.qiDone?100:0;
+  const bonus=(ks.bonusPublished?KPI_BONUS.published:0)+(ks.bonusOral?KPI_BONUS.oral:0)+(ks.bonusPoster?KPI_BONUS.poster:0);
+  const baseScore=Math.round(qAvg*KPI_W.quiz/100+mmPct*KPI_W.mm/100+tPct*KPI_W.teach/100+(pres?100:0)*KPI_W.pres/100+commPct*KPI_W.comm/100+researchPct*KPI_W.research/100+qiPct*KPI_W.qi/100);
+  const overall=baseScore+bonus;
+  return{mmPct,mmAtt,mmTotal,tPct,tAtt,tTotal,rotPct,qAvg,pres,presCount,commPct,researchPct,qiPct,bonus,baseScore,overall};
 }
 function pbar(pct,color){
   return el("div",{cls:"flex-gap",st:{width:"100%"}},
@@ -832,16 +951,16 @@ function renderLogin(){
 }
 // ─── NAV ─────────────────────────────────────────────────────────────────────
 const MODS=[
-  {id:"rota",label:"Rota Schedule",icon:"📅",roles:["pd","chief","consultant","resident"]},
-  {id:"rottrack",label:"Rotation Tracker",icon:"🔄",roles:["pd","chief","consultant"]},
-  {id:"morning",label:"Morning Meetings",icon:"🌅",roles:["pd","chief","consultant","resident"]},
-  {id:"teaching",label:"Teaching Att.",icon:"📚",roles:["pd","chief","consultant","resident"]},
-  {id:"kpi",label:"KPI Dashboard",icon:"📊",roles:["pd","chief","consultant","resident"]},
-  {id:"quiz",label:"Quiz Marks",icon:"📝",roles:["pd","chief","consultant","resident"]},
-  {id:"leave",label:"Annual Leave",icon:"🏖️",roles:["pd","chief","resident"]},
-  {id:"counseling",label:"Counseling",icon:"📋",roles:["pd","chief","consultant","resident"]},
-  {id:"mentornotes",label:"Mentor Notes",icon:"🗒️",roles:["pd","chief","consultant"]},
-  {id:"admin",label:"PD Admin Panel",icon:"⚙️",roles:["pd"]},
+  {id:"rota",label:"Rota Schedule",icon:"📅",desc:"Master rotation plan for all residents",color:"#2a7a5a",roles:["pd","chief","consultant","resident"]},
+  {id:"rottrack",label:"Rotation Tracker",icon:"🔄",desc:"Track where every resident is rotating",color:"#1a6a9a",roles:["pd","chief","consultant"]},
+  {id:"morning",label:"Morning Meetings",icon:"🌅",desc:"Attendance, schedules & topics",color:"#c97a2a",roles:["pd","chief","consultant","resident"]},
+  {id:"teaching",label:"Teaching Att.",icon:"📚",desc:"Teaching session attendance records",color:"#7c3aad",roles:["pd","chief","consultant","resident"]},
+  {id:"kpi",label:"KPI Dashboard",icon:"📊",desc:"Performance indicators & scores",color:"#2a7a4a",roles:["pd","chief","consultant","resident"]},
+  {id:"quiz",label:"Quiz Marks",icon:"📝",desc:"Assessment marks & grading",color:"#c96a4a",roles:["pd","chief","consultant","resident"]},
+  {id:"leave",label:"Annual Leave",icon:"🏖️",desc:"Leave requests, balances & records",color:"#0e78ba",roles:["pd","chief","resident"]},
+  {id:"counseling",label:"Counseling",icon:"📋",desc:"Formal counseling & acknowledgement",color:"#b52040",roles:["pd","chief","consultant","resident"]},
+  {id:"mentornotes",label:"Mentor Notes",icon:"🗒️",desc:"Private observations for mentors",color:"#4a5e7a",roles:["pd","chief","consultant"]},
+  {id:"admin",label:"PD Admin Panel",icon:"⚙️",desc:"Accounts, privileges & settings",color:"#2e3a4e",roles:["pd","deputy_pd"]},
 ];
 function renderNav(){return null;}// legacy — replaced by sidebar
 function renderSidebar(){
@@ -849,7 +968,7 @@ function renderSidebar(){
   const avail=MODS.filter(m=>m.roles.includes(u.role));
   // User avatar initials (initials from display name, fallback)
   const initials=(u.name||"").split(" ").map(w=>w[0]||"").slice(0,2).join("").toUpperCase();
-  const roleBg={pd:"#4f46e5",chief:"#d97706",consultant:"#059669",resident:"#6366f1"}[u.role]||"#4f46e5";
+  const roleBg={pd:"#c96a4a",deputy_pd:"#c96a4a",chief:"#c9913a",consultant:"#7a5a3a",resident:"#4a6a8a"}[u.role]||"#c96a4a";
   return el("aside",{cls:"sidebar"},
     el("div",{cls:"sidebar-brand"},
       el("h1",null,"🏥 DSFH Residency"),
@@ -878,10 +997,37 @@ function renderSidebar(){
     )
   );
 }
+function renderMobileTopBar(){
+  const u=STATE.user;
+  return el("div",{cls:"mob-topbar"},
+    STATE.mod?el("button",{cls:"sbtn ghost",st:{padding:"5px 10px",fontSize:".8rem",background:"rgba(255,255,255,.1)",color:"#fff",border:"1px solid rgba(255,255,255,.2)"},onClick:()=>set({mod:null})},"← Home"):
+    el("span",{cls:"mob-topbar-brand"},"🏥 DSFH Residency"),
+    el("div",{cls:"mob-topbar-right"},
+      el("button",{cls:"sbtn ghost",st:{padding:"6px 10px",fontSize:".8rem",background:"rgba(255,255,255,.1)",color:"#fff",border:"1px solid rgba(255,255,255,.2)"},onClick:()=>set({showAccount:true})},"⚙"),
+      el("button",{st:{background:"rgba(239,68,68,.2)",border:"1px solid rgba(239,68,68,.4)",color:"#fca5a5",padding:"6px 10px",borderRadius:"8px",cursor:"pointer",fontSize:".8rem"},onClick:async()=>{await sb.auth.signOut();STATE.user=null;STATE.mod=null;render();}},"Sign Out")
+    )
+  );
+}
 function renderAccountModal(){
   if(!STATE.showAccount)return null;
   const u=STATE.user;
   function close(){set({showAccount:false});}
+  async function saveUsername(){
+    const newUser=document.getElementById("acc_uname").value.trim().toLowerCase().replace(/\s+/g,"");
+    const msg=document.getElementById("acc_umsg");
+    msg.style.color="#b52040";msg.textContent="";
+    if(!newUser||newUser.length<3){msg.textContent="Username must be at least 3 characters.";return;}
+    if(!/^[a-z0-9._-]+$/.test(newUser)){msg.textContent="Only letters, numbers, dots, dashes or underscores.";return;}
+    const btn=document.getElementById("acc_ubtn");
+    btn.disabled=true;btn.textContent="Saving…";
+    const{error:authErr}=await sb.auth.updateUser({email:newUser+"@"+AUTH_EMAIL_DOMAIN});
+    if(authErr){msg.textContent="Could not update: "+authErr.message;btn.disabled=false;btn.textContent="Update Username";return;}
+    const{error:dbErr}=await sb.from("profiles").update({username:newUser}).eq("id",u.profileId);
+    btn.disabled=false;btn.textContent="Update Username";
+    if(dbErr){msg.textContent="Auth updated but profile sync failed: "+dbErr.message;return;}
+    STATE.user.user=newUser;
+    msg.style.color="#2a7a5a";msg.textContent="✓ Username changed to '"+newUser+"'. Use it to sign in from now on.";
+  }
   async function savePassword(){
     const p1=document.getElementById("acc_p1").value;
     const p2=document.getElementById("acc_p2").value;
@@ -896,6 +1042,19 @@ function renderAccountModal(){
     if(error){msg.textContent="Could not update password: "+error.message;return;}
     msg.style.color="#16a34a";msg.textContent="Password updated.";
     document.getElementById("acc_p1").value="";document.getElementById("acc_p2").value="";
+  }
+  async function saveDisplayName(){
+    const name=document.getElementById("acc_name").value.trim();
+    const msg=document.getElementById("acc_nmsg");
+    msg.style.color="#dc2626";msg.textContent="";
+    if(!name||name.length<2){msg.textContent="Name must be at least 2 characters.";return;}
+    const btn=document.getElementById("acc_nbtn");
+    btn.disabled=true;btn.textContent="Saving…";
+    const{error}=await sb.from("profiles").update({display_name:name}).eq("id",u.profileId);
+    btn.disabled=false;btn.textContent="Save Name";
+    if(error){msg.textContent="Could not save: "+error.message;return;}
+    STATE.user.name=name;
+    msg.style.color="#16a34a";msg.textContent="Name updated.";
   }
   async function saveEmail(){
     const email=document.getElementById("acc_email").value.trim();
@@ -915,8 +1074,17 @@ function renderAccountModal(){
         el("h3",null,"My Account"),
         el("button",{cls:"sbtn ghost",onClick:close},"✕")
       ),
-      el("p",{cls:"sh"},"Logged in as "+u.user),
-      el("div",{cls:"inline-form"},
+      el("p",{cls:"sh",st:{marginBottom:"12px"}},"Logged in as "+u.user),
+      el("div",{cls:"inline-form",st:{marginBottom:"10px"}},
+        el("div",{st:{fontWeight:"700",marginBottom:"8px"}},"Display Name"),
+        el("div",{st:{marginBottom:"8px"}},
+          el("label",null,"Full name (shown throughout the portal)"),
+          el("input",{id:"acc_name",type:"text",placeholder:"Dr. First Last",value:u.name||""})
+        ),
+        el("p",{id:"acc_nmsg",cls:"err"}),
+        el("button",{id:"acc_nbtn",cls:"sbtn primary",onClick:saveDisplayName},"Save Name")
+      ),
+      el("div",{cls:"inline-form",st:{marginBottom:"10px"}},
         el("div",{st:{fontWeight:"700",marginBottom:"8px"}},"Change Password"),
         el("div",{st:{marginBottom:"8px"}},
           el("label",null,"New password"),
@@ -929,9 +1097,18 @@ function renderAccountModal(){
         el("p",{id:"acc_pmsg",cls:"err"}),
         el("button",{id:"acc_pbtn",cls:"sbtn primary",onClick:savePassword},"Update Password")
       ),
+      el("div",{cls:"inline-form",st:{marginBottom:"10px"}},
+        el("div",{st:{fontWeight:"700",marginBottom:"8px"}},"Change Username"),
+        el("p",{cls:"sh",st:{marginBottom:"8px"}},"Your login username. Must be lowercase letters, numbers, dots, dashes, or underscores."),
+        el("div",{st:{marginBottom:"8px"}},
+          el("input",{id:"acc_uname",type:"text",placeholder:u.user||"new.username",value:u.user||""})
+        ),
+        el("p",{id:"acc_umsg",cls:"err"}),
+        el("button",{id:"acc_ubtn",cls:"sbtn primary",onClick:saveUsername},"Update Username")
+      ),
       el("div",{cls:"inline-form"},
         el("div",{st:{fontWeight:"700",marginBottom:"8px"}},"Contact Email"),
-        el("p",{cls:"sh",st:{marginBottom:"8px"}},"Used for notifications only — this is not your login username."),
+        el("p",{cls:"sh",st:{marginBottom:"8px"}},"Used for notifications only — not your login username."),
         el("div",{st:{marginBottom:"8px"}},
           el("input",{id:"acc_email",type:"email",placeholder:"you@example.com",value:u.contactEmail||""})
         ),
@@ -959,33 +1136,93 @@ function renderModGrid(){
   const avail=MODS.filter(m=>m.roles.includes(u.role));
   const myDuties=getMyDuties();
   const today=new Date();
+  const hour=today.getHours();
+  const greeting=hour<12?"Good morning":hour<17?"Good afternoon":"Good evening";
   const dateStr=today.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
-  return el("div",{cls:"content"},
-    // Welcome header
-    el("div",{st:{marginBottom:"22px"}},
-      el("h1",{st:{fontWeight:"800",fontSize:"1.5rem",color:"#111827",letterSpacing:"-.02em"}},"Welcome back, "+u.name.split(" ")[u.name.split(" ").length>1?1:0]+" 👋"),
-      el("p",{cls:"sh",st:{marginTop:"3px"}},dateStr+" · Block "+CURRENT_PERIOD+" of "+ROTA_PERIODS.length)
-    ),
-    // Alerts
-    PENDING_COUNSEL_COUNT>0?el("div",{cls:"alert-red",st:{cursor:"pointer"},onClick:()=>set({mod:"counseling"})},
+  const firstName=u.name.split(" ").length>1?u.name.split(" ")[1]:u.name.split(" ")[0];
+  const periodLabel=ROTA_PERIODS[CURRENT_PERIOD-1]||"";
+  const roleLabel=u.role==="pd"?"Program Director":u.role==="chief"?"Chief Resident":u.role==="consultant"?"Consultant / Mentor":"Resident";
+
+  // ── Decorative floating shapes ──────────────────────────────
+  function shape(top,left,w,h,color,rot){
+    return el("div",{cls:"home-shape",st:{top,left,width:w,height:h,background:color,transform:`rotate(${rot}deg)`}});
+  }
+  const shapes=el("div",{cls:"home-hero-shapes"},
+    shape("14%","7%","16px","16px","#c96a4a",18),
+    shape("72%","11%","9px","9px","#c9913a",34),
+    shape("42%","4%","5px","20px","#a0805a",-22),
+    shape("82%","82%","13px","13px","#c9913a",48),
+    shape("18%","90%","7px","26px","#b07050",-38),
+    shape("58%","93%","11px","11px","#c96a4a",22),
+    shape("30%","78%","5px","5px","#a07050",0),
+    shape("8%","52%","9px","9px","#c9913a",14),
+    shape("88%","46%","14px","7px","#b08060",55),
+    shape("50%","60%","6px","18px","#c96a4a",-15),
+  );
+
+  // ── Right-side portal info card ──────────────────────────────
+  const infoCard=el("div",{cls:"home-infocard"},
+    el("div",{cls:"home-infocard-tag"},"DSFH · Internal Medicine"),
+    el("div",{cls:"home-infocard-block"},"Block "+CURRENT_PERIOD),
+    el("div",{cls:"home-infocard-sub"},periodLabel+" · AY "+CURRENT_ACADEMIC_YEAR+"–"+(CURRENT_ACADEMIC_YEAR+1)),
+    el("div",{cls:"home-infocard-divider"}),
+    el("div",{cls:"home-infocard-label"},"Signed in as"),
+    el("div",{cls:"home-infocard-name"},u.name),
+    el("div",{cls:"home-infocard-role"},roleLabel)
+  );
+
+  // ── Hero section ─────────────────────────────────────────────
+  const hero=el("div",{cls:"home-hero"},
+    shapes,
+    el("div",{cls:"home-hero-inner"},
+      el("div",{st:{flex:"1",minWidth:"180px"}},
+        el("p",{cls:"home-eyebrow"},greeting+" · "+dateStr),
+        el("h1",{cls:"home-title"},firstName),
+        el("p",{cls:"home-subtitle"},"Block "+CURRENT_PERIOD+" · "+periodLabel)
+      ),
+      infoCard
+    )
+  );
+
+  // ── Alerts ───────────────────────────────────────────────────
+  const alerts=[];
+  if(PENDING_COUNSEL_COUNT>0) alerts.push(
+    el("div",{cls:"alert-red",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({mod:"counseling"})},
       "🚨 You have "+PENDING_COUNSEL_COUNT+" counseling record"+(PENDING_COUNSEL_COUNT>1?"s":"")+" awaiting your countersignature. Click to review."
-    ):null,
-    myDuties.length>0?el("div",{cls:"alert-yellow",st:{cursor:"pointer"},onClick:()=>set({mod:"morning",mmTab:"schedule",mmBlock:myDuties[0].session.block_number})},
+    )
+  );
+  if(myDuties.length>0) alerts.push(
+    el("div",{cls:"alert-yellow",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({mod:"morning",mmTab:"schedule",mmBlock:myDuties[0].session.block_number})},
       el("div",{st:{fontWeight:"700",marginBottom:"4px"}},"📋 Upcoming Duties — "+myDuties.length+" Morning Meeting "+(myDuties.length>1?"duties":"duty")),
       ...myDuties.slice(0,3).map(d=>el("div",{st:{fontSize:".82rem",marginTop:"2px"}},fmtDate(d.session.session_date)+" · "+d.role+" · "+d.session.topic)),
       myDuties.length>3?el("div",{cls:"sh",st:{marginTop:"4px"}},"+"+(myDuties.length-3)+" more — click to view"):null
-    ):null,
-    // Module grid
-    el("div",{cls:"card"},
-      el("div",{cls:"card-title"},"Modules"),
-      el("div",{cls:"modbtn-grid"},
-        ...avail.map(m=>el("div",{cls:"modbtn",onClick:()=>set({mod:m.id,adminProfile:null})},
-          el("span",{cls:"ico"},m.icon),
-          el("span",{cls:"lbl2"},m.label)
-        ))
-      )
     )
   );
+  const alertsDiv=alerts.length?el("div",{cls:"home-alerts"},
+    ...alerts
+  ):null;
+
+  // ── Module grid ──────────────────────────────────────────────
+  const modules=el("div",{cls:"home-modules"},
+    el("p",{cls:"home-section-tag"},"Quick Access"),
+    el("h2",{cls:"home-section-title"},"Where would you like to go?"),
+    el("div",{cls:"home-mod-grid"},
+      ...avail.map(m=>el("div",{cls:"home-modbtn",onClick:()=>set({mod:m.id,adminProfile:null})},
+        el("div",{cls:"home-mod-ico-wrap",st:{background:(m.color||"#c96a4a")+"22"}},
+          el("span",{cls:"home-mod-ico"},m.icon)
+        ),
+        el("div",{cls:"home-mod-lbl"},m.label),
+        el("div",{cls:"home-mod-desc"},m.desc||""),
+        el("div",{cls:"home-mod-arrow"},"Open →")
+      ))
+    )
+  );
+
+  const wrap=el("div");
+  wrap.appendChild(hero);
+  if(alertsDiv)wrap.appendChild(alertsDiv);
+  wrap.appendChild(modules);
+  return wrap;
 }
 // ─── ROTA MODULE ─────────────────────────────────────────────────────────────
 function renderRota(){
@@ -1459,13 +1696,13 @@ function blockStartDate(blockNum,academicYear){
   const year=(sm>=9)?academicYear:academicYear+1;
   return new Date(year,sm-1,sd,0,0,0);
 }
-// Generate Sunday (day 0) + Tuesday (day 2) dates for each of the 4 weeks of a block.
+// Generate Sunday–Thursday dates for each of the 4 weeks of a block (5 days × 4 weeks = 20 sessions).
 function mmDatesForBlock(blockNum,academicYear){
   const start=blockStartDate(blockNum,academicYear);if(!start)return[];
   const DAY_NAMES=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   const dates=[];
   for(let wk=0;wk<4;wk++){
-    [0,2].forEach(dow=>{
+    [0,1,2,3,4].forEach(dow=>{
       const d=new Date(start.getTime()+(wk*7+dow)*86400000);
       dates.push({date:d.toISOString().split("T")[0],day:DAY_NAMES[d.getDay()],week:wk+1});
     });
@@ -1473,7 +1710,7 @@ function mmDatesForBlock(blockNum,academicYear){
   return dates;
 }
 async function generateMMSessions(blk){
-  if(!confirm("Auto-generate Sunday + Tuesday session slots (8 total) for Block "+blk+"?\nOnly dates not already in the schedule will be added."))return;
+  if(!confirm("Auto-generate Sunday–Thursday session slots (20 total) for Block "+blk+"?\nOnly dates not already in the schedule will be added."))return;
   const dates=mmDatesForBlock(blk,CURRENT_ACADEMIC_YEAR);
   if(!dates.length){alert("Could not compute dates for Block "+blk);return;}
   const existingDates=new Set(MM_SESSIONS.filter(s=>s.block_number===blk).map(s=>s.session_date));
@@ -1563,7 +1800,7 @@ function renderMMAttendance(){
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
         el("span",{cls:"card-title",st:{margin:"0"}},"Attendance Table"),
-        canLogMMAttendance()?el("button",{cls:"sbtn primary",onClick:()=>set({mmShowEntry:!STATE.mmShowEntry,mmEntrySession:null})},STATE.mmShowEntry?"Hide Form":"Log Attendance"):null
+        canLogMMAttendance()&&(isPD()||sessions.some(s=>canEditAttSession(s.session_date)))?el("button",{cls:"sbtn primary",onClick:()=>set({mmShowEntry:!STATE.mmShowEntry,mmEntrySession:null})},STATE.mmShowEntry?"Hide Form":"Log Attendance"):null
       ),
       STATE.mmShowEntry?renderMMEntryForm(blk,sessions):null,
       el("div",{cls:"tbl-wrap"},
@@ -1585,9 +1822,10 @@ function renderMMAttendance(){
               ...sessions.map(s=>{
                 const dayAtt=(MM_ATT[blk]||{})[s.session_date]||{};
                 const st=dayAtt[r.id];
+                const cmt=((MM_ATT_CMT[blk]||{})[s.session_date]||{})[r.id]||"";
                 const cls=st==="P"?"att-p":st==="L"?"att-l":st==="A"?"att-a":st==="E"?"att-e":st==="O"?"att-o":"";
                 return el("td",{st:{textAlign:"center"}},
-                  st?el("span",{cls:"bdg "+cls},st):el("span",{cls:"sh"},"—")
+                  st?el("span",{cls:"bdg "+cls,title:cmt||""},st+(cmt?" 💬":"")):el("span",{cls:"sh"},"—")
                 );
               })
             ))
@@ -1599,22 +1837,30 @@ function renderMMAttendance(){
 }
 function renderMMEntryForm(blk,sessions){
   const vr=visRes();
+  if(!sessions.length){
+    return el("div",{cls:"inline-form"},
+      el("div",{cls:"alert-yellow",st:{margin:"0"}},"No sessions scheduled for this block yet.")
+    );
+  }
   let selSession=STATE.mmEntrySession&&typeof STATE.mmEntrySession==="number"?MM_SESSION_BY_ID[STATE.mmEntrySession]?.session_date:sessions[0]?.session_date;
   let attMap={};
-  vr.forEach(r=>{
-    const existing=((MM_ATT[blk]||{})[selSession]||{})[r.id];
-    attMap[r.id]=existing||null;
-  });
+  let cmtMap={};
+  function loadSession(dateStr){
+    vr.forEach(r=>{
+      attMap[r.id]=((MM_ATT[blk]||{})[dateStr]||{})[r.id]||null;
+      cmtMap[r.id]=((MM_ATT_CMT[blk]||{})[dateStr]||{})[r.id]||"";
+    });
+  }
+  loadSession(selSession);
   function findSessionId(dateStr){const s=sessions.find(x=>x.session_date===dateStr);return s?s.id:null;}
   async function saveAtt(){
-    if(!selSession)return;
+    if(!selSession){alert("Please select a session first.");return;}
     const sessionId=findSessionId(selSession);
-    if(!sessionId)return;
-    const rows=vr.filter(r=>attMap[r.id]).map(r=>({session_id:sessionId,resident_id:r.id,status:attMap[r.id],marked_by:STATE.user.profileId}));
-    if(rows.length){
-      const{error}=await sb.from("mm_attendance").upsert(rows,{onConflict:"session_id,resident_id"});
-      if(error){alert("Could not save attendance: "+error.message);return;}
-    }
+    if(!sessionId){alert("Session not found — please refresh and try again.");return;}
+    const rows=vr.filter(r=>attMap[r.id]).map(r=>({session_id:sessionId,resident_id:r.id,status:attMap[r.id],comment:cmtMap[r.id]||null,marked_by:STATE.user.profileId}));
+    if(!rows.length){alert("Please mark at least one resident before saving.");return;}
+    const{error}=await sb.from("mm_attendance").upsert(rows,{onConflict:"session_id,resident_id"});
+    if(error){alert("Could not save attendance:\n"+error.message);return;}
     set({mmShowEntry:false,mmEntrySession:null});
     await loadSchedules();
   }
@@ -1624,38 +1870,46 @@ function renderMMEntryForm(blk,sessions){
   );
   sessSelector.onchange=e=>{
     selSession=e.target.value;
+    loadSession(selSession);
     vr.forEach(r=>{
-      const ex=((MM_ATT[blk]||{})[selSession]||{})[r.id];
-      attMap[r.id]=ex||null;
       const row=wrap.querySelector("#mmrow_"+r.id);
-      if(row){["P","L","A","E","O"].forEach(s=>{
-        const btn=row.querySelector(".att-btn-"+s);
-        if(btn){btn.className="att-btn att-btn-"+s+(attMap[r.id]===s?" sel-"+s:"");}
-      });}
+      if(row){
+        ["P","L","A","E","O"].forEach(s=>{
+          const btn=row.querySelector(".att-btn-"+s);
+          if(btn){btn.className="att-btn att-btn-"+s+(attMap[r.id]===s?" sel-"+s:"");}
+        });
+        const cinput=row.querySelector(".att-cmt-input");
+        if(cinput)cinput.value=cmtMap[r.id]||"";
+      }
     });
   };
   wrap.appendChild(el("div",{cls:"lbl"},"Select Session"));
   wrap.appendChild(sessSelector);
   wrap.appendChild(el("div",{cls:"lbl",st:{marginBottom:"8px"}},"Mark Attendance (P=Present  L=Late  A=Absent  E=Excused  O=Off)"));
-  const rows=el("div",null);
+  const rowsEl=el("div",null);
   vr.forEach(r=>{
-    const row=el("div",{id:"mmrow_"+r.id,st:{display:"flex",alignItems:"center",gap:"8px",padding:"6px 0",borderBottom:"1px solid #f1f5f9"}},
-      el("div",{st:{minWidth:"160px"}},el("div",{cls:"flex-gap"},avEl(r),el("span",{cls:"name",st:{fontSize:".82rem"}},r.name))),
-      ...["P","L","A","E","O"].map(s=>{
-        const btn=el("button",{cls:"att-btn att-btn-"+s+(attMap[r.id]===s?" sel-"+s:"")},s);
-        btn.onclick=()=>{
-          attMap[r.id]=attMap[r.id]===s?null:s;
-          ["P","L","A","E","O"].forEach(ss=>{
-            const b=row.querySelector(".att-btn-"+ss);
-            if(b)b.className="att-btn att-btn-"+ss+(attMap[r.id]===ss?" sel-"+ss:"");
-          });
-        };
-        return btn;
-      })
+    const cmtInput=el("input",{cls:"att-cmt-input",type:"text",placeholder:"Comment (optional)",value:cmtMap[r.id]||"",st:{flex:"1",fontSize:".78rem",padding:"3px 8px",borderRadius:"6px",border:"1px solid #ede5d8",background:"#faf6f1",minWidth:"0"}});
+    cmtInput.oninput=()=>{cmtMap[r.id]=cmtInput.value;};
+    const row=el("div",{id:"mmrow_"+r.id,st:{display:"flex",alignItems:"center",gap:"8px",padding:"8px 0",borderBottom:"1px solid #ede5d8",flexWrap:"wrap"}},
+      el("div",{st:{minWidth:"150px",flexShrink:"0"}},el("div",{cls:"flex-gap"},avEl(r),el("span",{cls:"name",st:{fontSize:".82rem"}},r.name))),
+      el("div",{st:{display:"flex",gap:"4px",flexShrink:"0"}},
+        ...["P","L","A","E","O"].map(s=>{
+          const btn=el("button",{cls:"att-btn att-btn-"+s+(attMap[r.id]===s?" sel-"+s:"")},s);
+          btn.onclick=()=>{
+            attMap[r.id]=attMap[r.id]===s?null:s;
+            ["P","L","A","E","O"].forEach(ss=>{
+              const b=row.querySelector(".att-btn-"+ss);
+              if(b)b.className="att-btn att-btn-"+ss+(attMap[r.id]===ss?" sel-"+ss:"");
+            });
+          };
+          return btn;
+        })
+      ),
+      cmtInput
     );
-    rows.appendChild(row);
+    rowsEl.appendChild(row);
   });
-  wrap.appendChild(rows);
+  wrap.appendChild(rowsEl);
   wrap.appendChild(el("div",{cls:"flex-gap",st:{marginTop:"12px"}},
     el("button",{cls:"sbtn success",onClick:saveAtt},"Save Attendance"),
     el("button",{cls:"sbtn ghost",onClick:()=>set({mmShowEntry:false,mmEntrySession:null})},"Cancel")
@@ -1842,7 +2096,7 @@ function renderTeachAttendance(){
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
         el("span",{cls:"card-title",st:{margin:"0"}},"Attendance Table"),
-        canLogTeachAttendance()?el("button",{cls:"sbtn primary",onClick:()=>set({teachShowEntry:!STATE.teachShowEntry,teachEntrySession:null})},STATE.teachShowEntry?"Hide Form":"Log Attendance"):null
+        canLogTeachAttendance()&&(isPD()||sessions.some(s=>canEditAttSession(s.session_date)))?el("button",{cls:"sbtn primary",onClick:()=>set({teachShowEntry:!STATE.teachShowEntry,teachEntrySession:null})},STATE.teachShowEntry?"Hide Form":"Log Attendance"):null
       ),
       STATE.teachShowEntry?renderTeachEntryForm(blk,sessions):null,
       sessions.length===0?el("p",{cls:"sh"},"No sessions."):
@@ -1862,8 +2116,9 @@ function renderTeachAttendance(){
               el("td",{cls:"sticky-col"},el("div",{cls:"flex-gap"},avEl(r),el("span",{cls:"name",st:{fontSize:".82rem"}},r.name))),
               ...sessions.map(s=>{
                 const st=((TEACH_ATT[blk]||{})[s.session_date]||{})[r.id];
+                const cmt=((TEACH_ATT_CMT[blk]||{})[s.session_date]||{})[r.id]||"";
                 const cls=st==="P"?"att-p":st==="L"?"att-l":st==="A"?"att-a":st==="E"?"att-e":st==="O"?"att-o":"";
-                return el("td",{st:{textAlign:"center"}},st?el("span",{cls:"bdg "+cls},st):el("span",{cls:"sh"},"—"));
+                return el("td",{st:{textAlign:"center"}},st?el("span",{cls:"bdg "+cls,title:cmt||""},st+(cmt?" 💬":"")):el("span",{cls:"sh"},"—"));
               })
             ))
           )
@@ -1874,19 +2129,30 @@ function renderTeachAttendance(){
 }
 function renderTeachEntryForm(blk,sessions){
   const vr=visRes();
+  if(!sessions.length){
+    return el("div",{cls:"inline-form"},
+      el("div",{cls:"alert-yellow",st:{margin:"0"}},"No sessions scheduled for this block yet.")
+    );
+  }
   let selSession=sessions[0]?.session_date;
   let attMap={};
-  vr.forEach(r=>{attMap[r.id]=((TEACH_ATT[blk]||{})[selSession]||{})[r.id]||null;});
+  let cmtMap={};
+  function loadSession(dateStr){
+    vr.forEach(r=>{
+      attMap[r.id]=((TEACH_ATT[blk]||{})[dateStr]||{})[r.id]||null;
+      cmtMap[r.id]=((TEACH_ATT_CMT[blk]||{})[dateStr]||{})[r.id]||"";
+    });
+  }
+  loadSession(selSession);
   function findSessionId(dateStr){const s=sessions.find(x=>x.session_date===dateStr);return s?s.id:null;}
   async function saveAtt(){
-    if(!selSession)return;
+    if(!selSession){alert("Please select a session first.");return;}
     const sessionId=findSessionId(selSession);
-    if(!sessionId)return;
-    const rows=vr.filter(r=>attMap[r.id]).map(r=>({session_id:sessionId,resident_id:r.id,status:attMap[r.id],marked_by:STATE.user.profileId}));
-    if(rows.length){
-      const{error}=await sb.from("teaching_attendance").upsert(rows,{onConflict:"session_id,resident_id"});
-      if(error){alert("Could not save attendance: "+error.message);return;}
-    }
+    if(!sessionId){alert("Session not found — please refresh and try again.");return;}
+    const rows=vr.filter(r=>attMap[r.id]).map(r=>({session_id:sessionId,resident_id:r.id,status:attMap[r.id],comment:cmtMap[r.id]||null,marked_by:STATE.user.profileId}));
+    if(!rows.length){alert("Please mark at least one resident before saving.");return;}
+    const{error}=await sb.from("teaching_attendance").upsert(rows,{onConflict:"session_id,resident_id"});
+    if(error){alert("Could not save attendance:\n"+error.message);return;}
     set({teachShowEntry:false,teachEntrySession:null});
     await loadSchedules();
   }
@@ -1896,30 +2162,40 @@ function renderTeachEntryForm(blk,sessions){
   );
   sessSelector.onchange=e=>{
     selSession=e.target.value;
-    vr.forEach(r=>{attMap[r.id]=((TEACH_ATT[blk]||{})[selSession]||{})[r.id]||null;
+    loadSession(selSession);
+    vr.forEach(r=>{
       const row=wrap.querySelector("#teachrow_"+r.id);
-      if(row){["P","L","A","E","O"].forEach(s=>{const btn=row.querySelector(".att-btn-"+s);if(btn)btn.className="att-btn att-btn-"+s+(attMap[r.id]===s?" sel-"+s:"");});}
+      if(row){
+        ["P","L","A","E","O"].forEach(s=>{const btn=row.querySelector(".att-btn-"+s);if(btn)btn.className="att-btn att-btn-"+s+(attMap[r.id]===s?" sel-"+s:"");});
+        const cinput=row.querySelector(".att-cmt-input");
+        if(cinput)cinput.value=cmtMap[r.id]||"";
+      }
     });
   };
   wrap.appendChild(el("div",{cls:"lbl"},"Select Session"));
   wrap.appendChild(sessSelector);
   wrap.appendChild(el("div",{cls:"lbl",st:{marginBottom:"8px"}},"Mark Attendance (P=Present  L=Late  A=Absent  E=Excused  O=Off)"));
-  const rows=el("div",null);
+  const rowsEl=el("div",null);
   vr.forEach(r=>{
-    const row=el("div",{id:"teachrow_"+r.id,st:{display:"flex",alignItems:"center",gap:"8px",padding:"6px 0",borderBottom:"1px solid #f1f5f9"}},
-      el("div",{st:{minWidth:"160px"}},el("div",{cls:"flex-gap"},avEl(r),el("span",{cls:"name",st:{fontSize:".82rem"}},r.name))),
-      ...["P","L","A","E","O"].map(s=>{
-        const btn=el("button",{cls:"att-btn att-btn-"+s+(attMap[r.id]===s?" sel-"+s:"")},s);
-        btn.onclick=()=>{
-          attMap[r.id]=attMap[r.id]===s?null:s;
-          ["P","L","A","E","O"].forEach(ss=>{const b=row.querySelector(".att-btn-"+ss);if(b)b.className="att-btn att-btn-"+ss+(attMap[r.id]===ss?" sel-"+ss:"");});
-        };
-        return btn;
-      })
+    const cmtInput=el("input",{cls:"att-cmt-input",type:"text",placeholder:"Comment (optional)",value:cmtMap[r.id]||"",st:{flex:"1",fontSize:".78rem",padding:"3px 8px",borderRadius:"6px",border:"1px solid #ede5d8",background:"#faf6f1",minWidth:"0"}});
+    cmtInput.oninput=()=>{cmtMap[r.id]=cmtInput.value;};
+    const row=el("div",{id:"teachrow_"+r.id,st:{display:"flex",alignItems:"center",gap:"8px",padding:"8px 0",borderBottom:"1px solid #ede5d8",flexWrap:"wrap"}},
+      el("div",{st:{minWidth:"150px",flexShrink:"0"}},el("div",{cls:"flex-gap"},avEl(r),el("span",{cls:"name",st:{fontSize:".82rem"}},r.name))),
+      el("div",{st:{display:"flex",gap:"4px",flexShrink:"0"}},
+        ...["P","L","A","E","O"].map(s=>{
+          const btn=el("button",{cls:"att-btn att-btn-"+s+(attMap[r.id]===s?" sel-"+s:"")},s);
+          btn.onclick=()=>{
+            attMap[r.id]=attMap[r.id]===s?null:s;
+            ["P","L","A","E","O"].forEach(ss=>{const b=row.querySelector(".att-btn-"+ss);if(b)b.className="att-btn att-btn-"+ss+(attMap[r.id]===ss?" sel-"+ss:"");});
+          };
+          return btn;
+        })
+      ),
+      cmtInput
     );
-    rows.appendChild(row);
+    rowsEl.appendChild(row);
   });
-  wrap.appendChild(rows);
+  wrap.appendChild(rowsEl);
   wrap.appendChild(el("div",{cls:"flex-gap",st:{marginTop:"12px"}},
     el("button",{cls:"sbtn success",onClick:saveAtt},"Save Attendance"),
     el("button",{cls:"sbtn ghost",onClick:()=>set({teachShowEntry:false,teachEntrySession:null})},"Cancel")
@@ -2329,26 +2605,56 @@ function renderKPI(){
         kpiRow("Quiz Average","📝",k.qAvg,KPI_W.quiz,kpiColor(k.qAvg)),
         kpiRow("Morning Meetings","🌅",k.mmPct,KPI_W.mm,kpiColor(k.mmPct),k.mmAtt+"/"+k.mmTotal+" sessions"),
         kpiRow("Teaching Sessions","📚",k.tPct,KPI_W.teach,kpiColor(k.tPct),k.tAtt+"/"+k.tTotal+" sessions"),
-        kpiRow("MM Presentation","🎤",k.pres?100:0,KPI_W.pres,k.pres?"#16a34a":"#dc2626",k.presCount+" presentation"+(k.presCount!==1?"s":"")),
-        kpiRow("Committee Work","🏛️",k.commPct,KPI_W.comm,kpiColor(k.commPct),"Score: "+(COMM_SC[res.id]||0)+"/10")
-      )
+        kpiRow("MM Presentation","🎤",k.pres?100:0,KPI_W.pres,k.pres?"#059669":"#dc2626",k.presCount+" presentation"+(k.presCount!==1?"s":"")),
+        kpiRow("Committee Work","🏛️",k.commPct,KPI_W.comm,kpiColor(k.commPct),"Score: "+(COMM_SC[res.id]||0)+"/10"),
+        kpiRow("Research Participation","🔬",k.researchPct,KPI_W.research,k.researchPct?"#059669":"#dc2626",k.researchPct?"✅ Participated":"❌ Not recorded"),
+        kpiRow("QI Project","📈",k.qiPct,KPI_W.qi,k.qiPct?"#059669":"#dc2626",k.qiPct?"✅ Participated":"❌ Not recorded")
+      ),
+      k.bonus>0?el("div",{st:{marginTop:"14px",padding:"10px 14px",background:"#fefce8",border:"1px solid #fde68a",borderRadius:"10px",display:"flex",alignItems:"center",gap:"8px"}},
+        el("span",{st:{fontSize:"1.1rem"}},"🏆"),
+        el("span",{st:{fontWeight:"700",color:"#92400e"}},"Bonus: +"+k.bonus+" points"),
+        el("span",{cls:"sh"},"("+(KPI_SCORES[res.id]?.bonusPublished?"📄 Published ":"")+
+          (KPI_SCORES[res.id]?.bonusOral?"🎤 Oral ":"")+
+          (KPI_SCORES[res.id]?.bonusPoster?"🪧 Poster ":"")+")")
+      ):null
     ),
     canEditKPI(res.id)?el("div",{cls:"card"},
       el("div",{cls:"card-title"},"Manual KPI Scores"),
-      el("div",{cls:"sh",st:{marginBottom:"12px"}},"Presentations and committee work are entered manually. Only you (PD) or this resident's mentor can edit."),
-      el("div",{cls:"flex-gap",st:{alignItems:"center",gap:"14px",flexWrap:"wrap"}},
+      el("div",{cls:"sh",st:{marginBottom:"14px"}},"Only you (PD) or this resident's mentor can edit these."),
+      el("div",{cls:"grid-2",st:{gap:"14px"}},
         el("div",null,
-          el("div",{cls:"lbl",st:{marginBottom:"4px"}},"Committee Participation (0–10)"),
+          el("div",{cls:"lbl"},"Committee Participation (0–10)"),
           el("div",{cls:"flex-gap"},
             el("input",{type:"number",cls:"input-sm",st:{width:"70px"},min:"0",max:"10",value:COMM_SC[res.id]||0,
-              onChange:e=>{COMM_SC[res.id]=Math.min(10,Math.max(0,parseInt(e.target.value)||0));render();}}),
+              onChange:e=>{const v=Math.min(10,Math.max(0,parseInt(e.target.value)||0));saveKpiScore(res.id,{commScore:v});}}),
             el("span",{cls:"sh"},"/10 → "+Math.round(((COMM_SC[res.id]||0)/10)*100)+"% (×"+KPI_W.comm+"%)")
           )
         ),
         el("div",null,
-          el("div",{cls:"lbl",st:{marginBottom:"4px"}},"MM Presentations (auto-tracked)"),
+          el("div",{cls:"lbl"},"MM Presentations (auto-tracked)"),
           el("div",{cls:"sh"},k.presCount+" session"+(k.presCount!==1?"s":"")+" as presenter → "+(k.pres?"100":"0")+"% (×"+KPI_W.pres+"%)")
+        ),
+        el("div",null,
+          el("div",{cls:"lbl"},"Research Participation"),
+          (()=>{const chk=document.createElement("input");chk.type="checkbox";chk.checked=!!(KPI_SCORES[res.id]?.researchDone);chk.style.cssText="width:auto;margin-right:6px;";chk.onchange=e=>saveKpiScore(res.id,{researchDone:e.target.checked});const lbl=document.createElement("label");lbl.style.cssText="display:flex;align-items:center;font-size:.84rem;color:#374151;margin:0;font-weight:600;cursor:pointer;width:auto;";lbl.appendChild(chk);lbl.appendChild(document.createTextNode("Participated in research this year"));return lbl;})()
+        ),
+        el("div",null,
+          el("div",{cls:"lbl"},"QI Project Participation"),
+          (()=>{const chk=document.createElement("input");chk.type="checkbox";chk.checked=!!(KPI_SCORES[res.id]?.qiDone);chk.style.cssText="width:auto;margin-right:6px;";chk.onchange=e=>saveKpiScore(res.id,{qiDone:e.target.checked});const lbl=document.createElement("label");lbl.style.cssText="display:flex;align-items:center;font-size:.84rem;color:#374151;margin:0;font-weight:600;cursor:pointer;width:auto;";lbl.appendChild(chk);lbl.appendChild(document.createTextNode("Participated in a QI project this year"));return lbl;})()
         )
+      ),
+      el("div",{cls:"sep"}),
+      el("div",{cls:"lbl",st:{marginBottom:"10px"}},"🏆 Bonus Achievements"),
+      el("div",{cls:"flex-wrap",st:{gap:"14px"}},
+        ...[
+          ["bonusPublished","📄 Research Published",KPI_BONUS.published],
+          ["bonusOral","🎤 Oral Presentation at Conference",KPI_BONUS.oral],
+          ["bonusPoster","🪧 Poster Presentation at Conference",KPI_BONUS.poster]
+        ].map(([field,label,pts])=>{
+          const chk=document.createElement("input");chk.type="checkbox";chk.checked=!!(KPI_SCORES[res.id]?.[field]);chk.style.cssText="width:auto;margin-right:6px;";chk.onchange=e=>saveKpiScore(res.id,{[field]:e.target.checked});
+          const lbl=document.createElement("label");lbl.style.cssText="display:flex;align-items:center;font-size:.84rem;color:#374151;margin:0;font-weight:600;cursor:pointer;width:auto;background:#f9fafb;border:1.5px solid #e5e7eb;borderRadius:9px;padding:8px 12px;";
+          lbl.appendChild(chk);lbl.appendChild(document.createTextNode(label+" (+"+pts+" pts)"));return lbl;
+        })
       )
     ):null,
     renderQuarterlyKPICard(res.id),
@@ -2758,83 +3064,149 @@ function renderCounselForm(rid,existing){
   );
 }
 // ─── MENTOR NOTES ────────────────────────────────────────────────────────────
+const MN_COLS=[
+  {type:"strength",  shortLabel:"Areas of Strength",   accent:"#2a7a5a",bg:"#d1fae5",fg:"#065f46"},
+  {type:"improvement",shortLabel:"Areas of Improvement",accent:"#1a6a9a",bg:"#dbeafe",fg:"#1e40af"},
+  {type:"interest",  shortLabel:"Field of Interest",   accent:"#7c3aad",bg:"#ede9fe",fg:"#5b21b6"},
+];
+function mnGetNote(resId,type){
+  const arr=MENTOR_NOTES[resId];
+  if(!arr||arr===null)return null;
+  return arr.find(n=>n.type===type)||null;
+}
 function renderMentorNotes(){
   const vr=visRes();
-  const selId=STATE.notesSelRes||(vr[0]?.id);
-  const res=resById(selId)||vr[0];
-  if(!res)return el("div",{cls:"content"},el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),el("p",null,"No residents available"));
-  if(MENTOR_NOTES[res.id]===undefined){
-    MENTOR_NOTES[res.id]=null;
-    loadMentorNotes(res.id);
-  }
-  const notes=MENTOR_NOTES[res.id];
-  const canWrite=isConsultant();
+  if(!vr.length)return el("div",{cls:"content"},el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),el("p",null,"No residents available"));
   const u=STATE.user;
+  const canWrite=isConsultant();
+  const myResIds=canWrite?getAccess(u.cid):[];
+  // Trigger bulk load for any resident not yet loaded
+  const needLoad=vr.filter(r=>MENTOR_NOTES[r.id]===undefined).map(r=>r.id);
+  if(needLoad.length)loadAllMentorNotes(needLoad);
+  const detail=STATE.notesDetail; // {resId,type}
+  // Find selected note for detail panel
+  const detailNote=detail?mnGetNote(detail.resId,detail.type):null;
+  const detailRes=detail?resById(detail.resId):null;
+  const detailInfo=detail?noteTypeInfo(detail.type):null;
   return el("div",{cls:"content"},
     el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
-      el("h2",{st:{fontWeight:"800",color:"#111827"}},"Mentor Notes")
+      el("button",{cls:"back-btn",onClick:()=>set({mod:null,notesDetail:null,notesShowForm:false})},"← Back"),
+      el("h2",{st:{fontWeight:"800",color:"#1c1410",fontFamily:"'Playfair Display',Georgia,serif"}},"Mentor Notes")
     ),
-    el("p",{cls:"sh",st:{marginBottom:"12px"}},canWrite?"Log areas of concern, areas of improvement, or free-text comments about your assigned residents. Only you and the Program Director can see these.":"Visible here: notes mentors have logged about their assigned residents."),
-    el("div",{cls:"card"},
-      el("div",{cls:"lbl"},"Select Resident"),
-      el("select",{onChange:e=>set({notesSelRes:parseInt(e.target.value),notesShowForm:false})},
-        ...vr.map(r=>el("option",{value:r.id,...(r.id===selId?{selected:""}:{})},r.name+" ("+r.level+")"))
+    el("p",{cls:"sh",st:{marginBottom:"16px"}},
+      canWrite?"Log your observations for assigned residents. Only you and the Program Director can see these.":
+      "Overview of mentor observations for all residents. Click a highlighted cell to read the note."
+    ),
+    // Add Note button (mentor only)
+    canWrite?el("div",{st:{marginBottom:"12px"}},
+      el("button",{cls:"sbtn primary",onClick:()=>set({notesShowForm:!STATE.notesShowForm,notesDetail:null})},STATE.notesShowForm?"✕ Cancel":"+ Add Note")
+    ):null,
+    // Add Note form
+    STATE.notesShowForm&&canWrite?el("div",{cls:"card",st:{marginBottom:"16px"}},
+      el("div",{cls:"card-title",st:{marginBottom:"12px"}},"New Observation"),
+      renderMentorNoteForm()
+    ):null,
+    // Overview table
+    el("div",{cls:"card",st:{padding:"0",overflowX:"auto"}},
+      el("table",{st:{width:"100%",borderCollapse:"collapse",minWidth:"480px"}},
+        el("thead",null,
+          el("tr",null,
+            el("th",{st:{textAlign:"left",padding:"14px 16px",borderBottom:"2px solid #ede5d8",fontFamily:"'Playfair Display',Georgia,serif",fontSize:".88rem",color:"#3d2b1a",fontWeight:"700",background:"#faf6f1",borderRadius:"12px 0 0 0"}},"Resident"),
+            ...MN_COLS.map((c,ci)=>el("th",{st:{textAlign:"center",padding:"14px 12px",borderBottom:"2px solid #ede5d8",fontFamily:"'Playfair Display',Georgia,serif",fontSize:".88rem",color:"#3d2b1a",fontWeight:"700",background:"#faf6f1",minWidth:"130px",...(ci===MN_COLS.length-1?{borderRadius:"0 12px 0 0"}:{})}},c.shortLabel))
+          )
+        ),
+        el("tbody",null,
+          ...vr.map((r,i)=>{
+            const isLoading=MENTOR_NOTES[r.id]===null||MENTOR_NOTES[r.id]===undefined;
+            const isMine=myResIds.includes(r.id); // consultant's own assigned resident
+            return el("tr",{st:{background:i%2===0?"#faf6f1":"#ffffff",transition:"background .1s"}},
+              // Resident name cell
+              el("td",{st:{padding:"12px 16px",verticalAlign:"middle",borderBottom:"1px solid #ede5d8"}},
+                el("div",{st:{fontWeight:"600",fontSize:".88rem",color:"#1c1410",marginBottom:"2px"}},r.name),
+                el("span",{cls:"bdg",st:{fontSize:".68rem",background:(LC[r.level]||"#94a3b8")+"22",color:LC[r.level]||"#555",border:"1px solid "+(LC[r.level]||"#94a3b8")+"44",padding:"1px 6px",borderRadius:"99px"}},r.level)
+              ),
+              // Note type cells
+              ...MN_COLS.map(c=>{
+                const note=mnGetNote(r.id,c.type);
+                const isSel=detail&&detail.resId===r.id&&detail.type===c.type;
+                return el("td",{st:{textAlign:"center",padding:"10px 12px",borderBottom:"1px solid #ede5d8",verticalAlign:"middle"}},
+                  isLoading?el("span",{st:{fontSize:".78rem",color:"#c4a882"}},"…"):
+                  note?el("button",{
+                    st:{background:isSel?c.accent:c.bg,color:isSel?"#fff":c.fg,border:"1.5px solid "+(isSel?c.accent:c.accent+"44"),borderRadius:"20px",padding:"5px 14px",cursor:"pointer",fontSize:".78rem",fontWeight:"700",transition:"all .15s",outline:"none"},
+                    onClick:()=>set({notesDetail:isSel?null:{resId:r.id,type:c.type},notesShowForm:false})
+                  },"✓ View"):
+                  (canWrite&&isMine)?el("button",{
+                    st:{background:"transparent",color:"#c4a882",border:"1.5px dashed #d4c4b8",borderRadius:"20px",padding:"4px 12px",cursor:"pointer",fontSize:".76rem",transition:"all .15s",outline:"none"},
+                    onClick:()=>set({notesShowForm:true,notesFormRes:r.id,notesFormType:c.type,notesDetail:null})
+                  },"+ Add"):
+                  el("span",{st:{fontSize:".8rem",color:"#d4c4b8"}},"—")
+                );
+              })
+            );
+          })
+        )
       )
     ),
-    el("div",{cls:"card"},
-      el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
-        el("span",{cls:"card-title",st:{margin:"0"}},"Notes for "+res.name),
-        canWrite?el("button",{cls:"sbtn primary",onClick:()=>set({notesShowForm:!STATE.notesShowForm})},STATE.notesShowForm?"Cancel":"+ Add Note"):null
+    // Detail panel
+    detail&&detailNote?el("div",{cls:"card",st:{marginTop:"16px",border:"2px solid "+(detailInfo?.accent||"#ede5d8")}},
+      el("div",{cls:"flex-gap",st:{marginBottom:"10px"}},
+        el("div",null,
+          el("span",{cls:"bdg",st:{background:detailInfo?.bg,color:detailInfo?.fg,fontSize:".78rem",marginRight:"8px"}},detailInfo?.label),
+          el("span",{st:{fontWeight:"700",fontSize:".95rem",color:"#1c1410"}},detailRes?.name)
+        ),
+        el("button",{cls:"sbtn ghost",st:{padding:"3px 10px",fontSize:".78rem"},onClick:()=>set({notesDetail:null})},"✕ Close")
       ),
-      STATE.notesShowForm&&canWrite?renderMentorNoteForm(res.id):null,
-      notes===null?el("p",{cls:"sh"},"Loading…"):
-      notes.length===0?el("p",{cls:"sh"},"No notes yet."):
-      el("div",null,
-        ...notes.map(n=>{
-          const info=noteTypeInfo(n.type);
-          const canDelete=isConsultant()&&n.mentor_id===u.cid;
-          return el("div",{st:{border:"1px solid #e2e8f0",borderRadius:"10px",padding:"12px 14px",marginBottom:"8px"}},
-            el("div",{cls:"flex-gap",st:{marginBottom:"6px"}},
-              el("span",{cls:"bdg",st:{background:info.bg,color:info.fg}},info.label),
-              el("span",{cls:"sh",st:{flex:"1",textAlign:"right"}},fmtDate((n.created_at||"").slice(0,10))+" · "+consultantName(n.mentor_id)),
-              canDelete?el("button",{cls:"sbtn danger",st:{fontSize:".72rem",padding:"2px 7px"},onClick:async()=>{
-                if(!confirm("Delete this note?"))return;
-                await sb.from("mentor_notes").delete().eq("id",n.id);
-                loadMentorNotes(res.id);
-              }},"Del"):null
-            ),
-            el("p",{st:{fontSize:".84rem",color:"#475569",lineHeight:"1.5"}},n.body)
-          );
-        })
+      el("p",{st:{fontSize:".88rem",lineHeight:"1.7",color:"#3d2b1a",margin:"0 0 12px",whiteSpace:"pre-wrap"}},detailNote.body),
+      el("div",{cls:"flex-gap"},
+        el("span",{cls:"sh",st:{fontSize:".76rem"}},"By "+consultantName(detailNote.mentor_id)+" · "+fmtDate((detailNote.created_at||"").slice(0,10))),
+        (isConsultant()&&detailNote.mentor_id===u.cid)?el("button",{cls:"sbtn danger",st:{fontSize:".74rem",padding:"2px 8px"},onClick:async()=>{
+          if(!confirm("Delete this note?"))return;
+          await sb.from("mentor_notes").delete().eq("id",detailNote.id);
+          MENTOR_NOTES[detail.resId]=null;
+          set({notesDetail:null});
+          loadMentorNotes(detail.resId);
+        }},"Delete"):null
       )
-    )
+    ):null
   );
 }
-function renderMentorNoteForm(residentId){
-  return el("div",{cls:"inline-form",st:{marginBottom:"14px"}},
-    el("div",{st:{marginBottom:"10px"}},
-      el("label",null,"Type"),
-      el("select",{id:"note_type"},
-        el("option",{value:"concern"},"Area of Concern"),
-        el("option",{value:"improvement"},"Area of Improvement"),
-        el("option",{value:"comment"},"Comment")
+function renderMentorNoteForm(){
+  const u=STATE.user;
+  const myResIds=getAccess(u.cid);
+  const myRes=RESIDENTS.filter(r=>myResIds.includes(r.id));
+  const preRes=STATE.notesFormRes||myRes[0]?.id;
+  const preType=STATE.notesFormType||"strength";
+  return el("div",{cls:"inline-form"},
+    el("div",{cls:"grid-2",st:{marginBottom:"10px"}},
+      el("div",null,
+        el("label",null,"Resident"),
+        el("select",{id:"note_res"},
+          ...myRes.map(r=>el("option",{value:r.id,...(r.id===preRes?{selected:""}:{})},r.name+" ("+r.level+")"))
+        )
+      ),
+      el("div",null,
+        el("label",null,"Category"),
+        el("select",{id:"note_type"},
+          MN_COLS.map(c=>el("option",{value:c.type,...(c.type===preType?{selected:""}:{})},c.shortLabel))
+        )
       )
     ),
-    el("div",{st:{marginBottom:"10px"}},el("label",null,"Details"),el("textarea",{id:"note_body",rows:"3",placeholder:"Write your note..."})),
+    el("div",{st:{marginBottom:"10px"}},el("label",null,"Details"),el("textarea",{id:"note_body",rows:"4",placeholder:"Write your observation…"})),
     el("p",{id:"note_err",cls:"err"}),
     el("div",{cls:"flex-gap"},
       el("button",{cls:"sbtn success",onClick:async()=>{
+        const resId=parseInt(document.getElementById("note_res").value);
         const type=document.getElementById("note_type").value;
         const body=document.getElementById("note_body").value.trim();
         const err=document.getElementById("note_err");
         if(!body){err.textContent="Please enter details.";return;}
-        const{error}=await sb.from("mentor_notes").insert({resident_id:residentId,mentor_id:STATE.user.cid,type,body});
+        const{error}=await sb.from("mentor_notes").insert({resident_id:resId,mentor_id:u.cid,type,body});
         if(error){err.textContent=error.message;return;}
-        set({notesShowForm:false});
-        loadMentorNotes(residentId);
+        MENTOR_NOTES[resId]=null;
+        set({notesShowForm:false,notesFormRes:null,notesFormType:null});
+        loadMentorNotes(resId);
       }},"Save Note"),
-      el("button",{cls:"sbtn ghost",onClick:()=>set({notesShowForm:false})},"Cancel")
+      el("button",{cls:"sbtn ghost",onClick:()=>set({notesShowForm:false,notesFormRes:null,notesFormType:null})},"Cancel")
     )
   );
 }
@@ -3513,25 +3885,52 @@ function renderProfileKPI(res){
         kpiRow("Quiz Average","📝",k.qAvg,KPI_W.quiz,kpiColor(k.qAvg)),
         kpiRow("Morning Meetings","🌅",k.mmPct,KPI_W.mm,kpiColor(k.mmPct),k.mmAtt+"/"+k.mmTotal+" sessions"),
         kpiRow("Teaching Sessions","📚",k.tPct,KPI_W.teach,kpiColor(k.tPct),k.tAtt+"/"+k.tTotal+" sessions"),
-        kpiRow("MM Presentation","🎤",k.pres?100:0,KPI_W.pres,k.pres?"#16a34a":"#dc2626",k.presCount+" presentation"+(k.presCount!==1?"s":"")),
-        kpiRow("Committee Work","🏛️",k.commPct,KPI_W.comm,kpiColor(k.commPct),"Score: "+(COMM_SC[res.id]||0)+"/10")
-      )
+        kpiRow("MM Presentation","🎤",k.pres?100:0,KPI_W.pres,k.pres?"#059669":"#dc2626",k.presCount+" presentation"+(k.presCount!==1?"s":"")),
+        kpiRow("Committee Work","🏛️",k.commPct,KPI_W.comm,kpiColor(k.commPct),"Score: "+(COMM_SC[res.id]||0)+"/10"),
+        kpiRow("Research Participation","🔬",k.researchPct,KPI_W.research,k.researchPct?"#059669":"#dc2626",k.researchPct?"✅ Participated":"❌ Not recorded"),
+        kpiRow("QI Project","📈",k.qiPct,KPI_W.qi,k.qiPct?"#059669":"#dc2626",k.qiPct?"✅ Participated":"❌ Not recorded")
+      ),
+      k.bonus>0?el("div",{st:{marginTop:"12px",padding:"10px 14px",background:"#fefce8",border:"1px solid #fde68a",borderRadius:"10px",display:"flex",alignItems:"center",gap:"8px"}},
+        el("span",{st:{fontSize:"1.1rem"}},"🏆"),
+        el("span",{st:{fontWeight:"700",color:"#92400e"}},"Bonus: +"+k.bonus+" points"),
+        el("span",{cls:"sh"},"("+(KPI_SCORES[res.id]?.bonusPublished?"📄 Published ":"")+
+          (KPI_SCORES[res.id]?.bonusOral?"🎤 Oral ":"")+
+          (KPI_SCORES[res.id]?.bonusPoster?"🪧 Poster ":"")+")")
+      ):null
     ),
     canEditKPI(res.id)?el("div",{cls:"card"},
       el("div",{cls:"card-title"},"Manual KPI Scores"),
-      el("div",{cls:"flex-gap",st:{alignItems:"center",gap:"14px",flexWrap:"wrap"}},
+      el("div",{cls:"sh",st:{marginBottom:"14px"}},"Only PD or this resident's mentor can edit."),
+      el("div",{cls:"grid-2",st:{gap:"14px"}},
         el("div",null,
-          el("div",{cls:"lbl",st:{marginBottom:"4px"}},"Committee Participation (0–10)"),
+          el("div",{cls:"lbl"},"Committee Participation (0–10)"),
           el("div",{cls:"flex-gap"},
             el("input",{type:"number",cls:"input-sm",st:{width:"70px"},min:"0",max:"10",value:COMM_SC[res.id]||0,
-              onChange:e=>{COMM_SC[res.id]=Math.min(10,Math.max(0,parseInt(e.target.value)||0));render();}}),
+              onChange:e=>{const v=Math.min(10,Math.max(0,parseInt(e.target.value)||0));saveKpiScore(res.id,{commScore:v});}}),
             el("span",{cls:"sh"},"/10 → "+Math.round(((COMM_SC[res.id]||0)/10)*100)+"% (×"+KPI_W.comm+"%)")
           )
         ),
         el("div",null,
-          el("div",{cls:"lbl",st:{marginBottom:"4px"}},"MM Presentations (auto-tracked)"),
+          el("div",{cls:"lbl"},"MM Presentations (auto-tracked)"),
           el("div",{cls:"sh"},k.presCount+" session"+(k.presCount!==1?"s":"")+" as presenter → "+(k.pres?"100":"0")+"% (×"+KPI_W.pres+"%)")
+        ),
+        el("div",null,
+          el("div",{cls:"lbl"},"Research Participation"),
+          (()=>{const chk=document.createElement("input");chk.type="checkbox";chk.checked=!!(KPI_SCORES[res.id]?.researchDone);chk.style.cssText="width:auto;margin-right:6px;";chk.onchange=e=>saveKpiScore(res.id,{researchDone:e.target.checked});const lbl=document.createElement("label");lbl.style.cssText="display:flex;align-items:center;font-size:.84rem;color:#374151;margin:0;font-weight:600;cursor:pointer;width:auto;";lbl.appendChild(chk);lbl.appendChild(document.createTextNode("Participated this year"));return lbl;})()
+        ),
+        el("div",null,
+          el("div",{cls:"lbl"},"QI Project Participation"),
+          (()=>{const chk=document.createElement("input");chk.type="checkbox";chk.checked=!!(KPI_SCORES[res.id]?.qiDone);chk.style.cssText="width:auto;margin-right:6px;";chk.onchange=e=>saveKpiScore(res.id,{qiDone:e.target.checked});const lbl=document.createElement("label");lbl.style.cssText="display:flex;align-items:center;font-size:.84rem;color:#374151;margin:0;font-weight:600;cursor:pointer;width:auto;";lbl.appendChild(chk);lbl.appendChild(document.createTextNode("Participated this year"));return lbl;})()
         )
+      ),
+      el("div",{cls:"sep"}),
+      el("div",{cls:"lbl",st:{marginBottom:"10px"}},"🏆 Bonus Achievements"),
+      el("div",{cls:"flex-wrap",st:{gap:"10px"}},
+        ...[["bonusPublished","📄 Research Published",KPI_BONUS.published],["bonusOral","🎤 Oral Presentation",KPI_BONUS.oral],["bonusPoster","🪧 Poster Presentation",KPI_BONUS.poster]].map(([field,label,pts])=>{
+          const chk=document.createElement("input");chk.type="checkbox";chk.checked=!!(KPI_SCORES[res.id]?.[field]);chk.style.cssText="width:auto;margin-right:6px;";chk.onchange=e=>saveKpiScore(res.id,{[field]:e.target.checked});
+          const lbl=document.createElement("label");lbl.style.cssText="display:flex;align-items:center;font-size:.84rem;color:#374151;margin:0;font-weight:600;cursor:pointer;width:auto;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:9px;padding:8px 12px;";
+          lbl.appendChild(chk);lbl.appendChild(document.createTextNode(label+" (+"+pts+" pts)"));return lbl;
+        })
       )
     ):null,
     renderQuarterlyKPICard(res.id)
@@ -3690,6 +4089,7 @@ function render(){
   const layout=el("div",{cls:"app-layout"});
   layout.appendChild(renderSidebar());
   const main=el("div",{cls:"main-area"});
+  main.appendChild(renderMobileTopBar()); // visible only on mobile via CSS
   let content;
   if(!STATE.mod){
     content=renderModGrid();
