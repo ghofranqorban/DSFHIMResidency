@@ -961,6 +961,7 @@ const MODS=[
   {id:"counseling",label:"Counseling",icon:"📋",desc:"Formal counseling & acknowledgement",color:"#b52040",roles:["pd","chief","consultant","resident"]},
   {id:"mentornotes",label:"Mentor Notes",icon:"🗒️",desc:"Private observations for mentors",color:"#4a5e7a",roles:["pd","chief","consultant"]},
   {id:"admin",label:"PD Admin Panel",icon:"⚙️",desc:"Accounts, privileges & settings",color:"#2e3a4e",roles:["pd","deputy_pd"]},
+  {id:"overview",label:"Overview Dashboard",icon:"🏠",desc:"Bird's-eye view of all residents' performance",color:"#c96a4a",roles:["pd","deputy_pd","chief"]},
 ];
 function renderNav(){return null;}// legacy — replaced by sidebar
 function renderSidebar(){
@@ -3210,6 +3211,178 @@ function renderMentorNoteForm(){
     )
   );
 }
+// ─── PD OVERVIEW DASHBOARD ───────────────────────────────────────────────────
+function renderPDOverview(){
+  const kpiColor=v=>v>=80?"#16a34a":v>=60?"#d97706":"#dc2626";
+  const filterLevel=STATE.ovLevel||"all";
+  const sortBy=STATE.ovSort||"name";
+
+  // ── Lazy-load all counseling in one shot if not yet done ──────────────────
+  const anyUnloaded=RESIDENTS.some(r=>COUNSEL_CACHE[r.id]===undefined);
+  if(anyUnloaded){
+    RESIDENTS.forEach(r=>{if(COUNSEL_CACHE[r.id]===undefined)COUNSEL_CACHE[r.id]=null;});
+    sb.from("counseling").select("*").order("date",{ascending:false}).then(({data})=>{
+      const fresh={};
+      (data||[]).forEach(rec=>{
+        if(!fresh[rec.resident_id])fresh[rec.resident_id]=[];
+        fresh[rec.resident_id].push(rec);
+      });
+      RESIDENTS.forEach(r=>{COUNSEL_CACHE[r.id]=fresh[r.id]||[];});
+      set({});
+    });
+  }
+
+  // ── Build rows ────────────────────────────────────────────────────────────
+  let rows=RESIDENTS.map(r=>{
+    const k=calcKPI(r.id);
+    const cRecs=COUNSEL_CACHE[r.id];
+    const counselCount=Array.isArray(cRecs)?cRecs.length:null;
+    const atRisk=k.overall<60||k.mmPct<60||k.tPct<60;
+    return{...r,k,counselCount,atRisk};
+  });
+  if(filterLevel!=="all")rows=rows.filter(r=>r.level===filterLevel);
+  const sortRows={name:(a,b)=>a.name.localeCompare(b.name),level:(a,b)=>a.level.localeCompare(b.level)||a.name.localeCompare(b.name),kpi:(a,b)=>b.k.overall-a.k.overall,mm:(a,b)=>b.k.mmPct-a.k.mmPct,teach:(a,b)=>b.k.tPct-a.k.tPct,quiz:(a,b)=>b.k.qAvg-a.k.qAvg};
+  rows.sort(sortRows[sortBy]||sortRows.name);
+
+  // ── Summary stats ─────────────────────────────────────────────────────────
+  const total=rows.length;
+  const avgKPI=total?Math.round(rows.reduce((s,r)=>s+r.k.overall,0)/total):0;
+  const atRiskCount=rows.filter(r=>r.atRisk).length;
+  const withCounsel=rows.filter(r=>r.counselCount>0).length;
+
+  function statCard(icon,label,val,color,sub){
+    return el("div",{st:{flex:"1",minWidth:"130px",background:color+"0d",border:"1px solid "+color+"33",borderRadius:"14px",padding:"16px 14px",textAlign:"center"}},
+      el("div",{st:{fontSize:"1.5rem",marginBottom:"4px"}},icon),
+      el("div",{st:{fontSize:"1.55rem",fontWeight:"900",color,lineHeight:"1.1"}},val),
+      el("div",{st:{fontSize:".8rem",fontWeight:"700",color:"#374151",marginTop:"4px"}},label),
+      sub?el("div",{cls:"sh",st:{fontSize:".72rem",marginTop:"2px"}},sub):null
+    );
+  }
+
+  const summary=el("div",{st:{display:"flex",flexWrap:"wrap",gap:"12px",marginBottom:"20px"}},
+    statCard("👥","Total Residents",total,"#1a6a9a"),
+    statCard("📊","Average KPI",avgKPI+"%",kpiColor(avgKPI)),
+    statCard("🔴","At Risk",atRiskCount,"#dc2626","KPI or attendance < 60%"),
+    statCard("📋","With Counseling",withCounsel,"#7c3aad","Active records")
+  );
+
+  // ── Filters ───────────────────────────────────────────────────────────────
+  const filters=el("div",{st:{display:"flex",flexWrap:"wrap",gap:"8px",alignItems:"center",padding:"14px 16px 6px"}},
+    el("span",{cls:"sh",st:{fontWeight:"700",marginRight:"2px"}},"Level:"),
+    ...["all","R1","R2","R3","R4"].map(l=>
+      el("span",{cls:"pill"+(filterLevel===l?" on":""),onClick:()=>set({ovLevel:l})},l==="all"?"All":l)
+    ),
+    el("span",{st:{flex:"1"}}),
+    el("span",{cls:"sh",st:{fontWeight:"700",marginRight:"2px"}},"Sort:"),
+    ...[["name","Name"],["level","Level"],["kpi","KPI ↓"],["mm","MM"],["teach","Teach"],["quiz","Quiz"]].map(([k,lbl])=>
+      el("span",{cls:"pill"+(sortBy===k?" on":""),onClick:()=>set({ovSort:k})},lbl)
+    )
+  );
+
+  // ── Level badge colors ────────────────────────────────────────────────────
+  const lvlStyle={R1:{bg:"#dbeafe",fg:"#1e40af"},R2:{bg:"#d1fae5",fg:"#065f46"},R3:{bg:"#fef3c7",fg:"#92400e"},R4:{bg:"#fce7f3",fg:"#7c3aad"}};
+
+  // ── Table ─────────────────────────────────────────────────────────────────
+  function colH(label,key){
+    return el("th",{
+      st:{padding:"10px 12px",fontWeight:"700",fontSize:".74rem",textTransform:"uppercase",letterSpacing:".04em",color:"#6b7280",whiteSpace:"nowrap",cursor:"pointer",userSelect:"none",background:"#f8fafc"},
+      onClick:()=>set({ovSort:key})
+    },label+(sortBy===key?" ↓":""));
+  }
+  function pctCell(val){
+    const col=kpiColor(val);
+    return el("td",{st:{padding:"8px 10px",textAlign:"center"}},
+      el("div",{st:{display:"flex",flexDirection:"column",alignItems:"center",gap:"3px"}},
+        el("span",{st:{fontWeight:"700",fontSize:".86rem",color:col}},val+"%"),
+        el("div",{st:{width:"48px",height:"4px",background:"#e5e7eb",borderRadius:"2px"}},
+          el("div",{st:{width:Math.min(val,100)+"%",height:"100%",background:col,borderRadius:"2px"}})
+        )
+      )
+    );
+  }
+
+  const thead=el("thead",null,
+    el("tr",{st:{borderBottom:"2px solid #e2e8f0"}},
+      colH("Resident","name"),colH("Level","level"),colH("KPI","kpi"),
+      colH("MM Att.","mm"),colH("Teaching","teach"),colH("Quiz","quiz"),
+      el("th",{st:{padding:"10px 12px",fontWeight:"700",fontSize:".74rem",textTransform:"uppercase",color:"#6b7280",background:"#f8fafc"}},"Counsel"),
+      el("th",{st:{padding:"10px 12px",background:"#f8fafc"}})
+    )
+  );
+
+  const tbody=el("tbody",null,...rows.map((row,i)=>{
+    const ls=lvlStyle[row.level]||{bg:"#f1f5f9",fg:"#374151"};
+    const cVal=row.counselCount===null?"…":row.counselCount===0?"—":String(row.counselCount);
+    const cColor=row.counselCount>0?"#dc2626":"#6b7280";
+    return el("tr",{
+      st:{borderBottom:"1px solid #f1f5f9",cursor:"pointer",transition:"background .12s"},
+      onMouseover:e=>e.currentTarget.style.background="#f8fafc",
+      onMouseout:e=>e.currentTarget.style.background="",
+      onClick:()=>set({mod:"admin",adminProfile:row.id,adminResTab:"kpi"})
+    },
+      el("td",{st:{padding:"8px 12px"}},
+        el("div",{st:{display:"flex",alignItems:"center",gap:"8px"}},
+          el("div",{cls:"av",st:{width:"32px",height:"32px",fontSize:".7rem",flexShrink:"0"}},row.ph),
+          el("div",null,
+            el("div",{st:{fontWeight:"700",fontSize:".86rem",color:"#111827"}},
+              row.name,
+              row.atRisk?el("span",{st:{marginLeft:"6px",fontSize:".7rem",color:"#dc2626",fontWeight:"800"}},"⚠ At Risk"):null
+            ),
+            el("div",{cls:"sh",st:{fontSize:".72rem"}},"Mentor: "+mentorName(row.id))
+          )
+        )
+      ),
+      el("td",{st:{padding:"8px 10px",textAlign:"center"}},
+        el("span",{cls:"bdg",st:{background:ls.bg,color:ls.fg,fontSize:".75rem"}},row.level)
+      ),
+      el("td",{st:{padding:"8px 10px",textAlign:"center"}},
+        el("div",{st:{display:"flex",flexDirection:"column",alignItems:"center",gap:"3px"}},
+          el("span",{st:{fontWeight:"900",fontSize:".95rem",color:kpiColor(row.k.overall)}},row.k.overall+"%"),
+          el("div",{st:{width:"54px",height:"6px",background:"#e5e7eb",borderRadius:"3px"}},
+            el("div",{st:{width:Math.min(row.k.overall,100)+"%",height:"100%",background:kpiColor(row.k.overall),borderRadius:"3px"}})
+          )
+        )
+      ),
+      pctCell(row.k.mmPct),
+      pctCell(row.k.tPct),
+      pctCell(row.k.qAvg),
+      el("td",{st:{padding:"8px 10px",textAlign:"center",fontWeight:"700",color:cColor,fontSize:".88rem"}},cVal),
+      el("td",{st:{padding:"8px 10px",textAlign:"right"}},
+        el("span",{cls:"sh",st:{fontSize:".76rem"}},"View →")
+      )
+    );
+  }));
+
+  const table=el("table",{st:{width:"100%",borderCollapse:"collapse",fontSize:".84rem"}},thead,tbody);
+
+  // ── At-risk highlight box ─────────────────────────────────────────────────
+  const atRiskBox=atRiskCount>0?el("div",{cls:"alert-red",st:{marginBottom:"16px"}},
+    el("div",{st:{fontWeight:"700",marginBottom:"4px"}},"⚠️ "+atRiskCount+" resident"+(atRiskCount>1?"s":"")+" at risk"),
+    ...rows.filter(r=>r.atRisk).map(r=>{
+      const flags=[];
+      if(r.k.overall<60)flags.push("KPI "+r.k.overall+"%");
+      if(r.k.mmPct<60)flags.push("MM "+r.k.mmPct+"%");
+      if(r.k.tPct<60)flags.push("Teaching "+r.k.tPct+"%");
+      return el("div",{st:{fontSize:".82rem",marginTop:"3px",cursor:"pointer"},onClick:()=>set({mod:"admin",adminProfile:r.id,adminResTab:"kpi"})},
+        "• "+r.name+" ("+r.level+") — "+flags.join(", ")+" → Click to view"
+      );
+    })
+  ):null;
+
+  return el("div",{cls:"content"},
+    el("div",{cls:"flex-gap",st:{marginBottom:"16px",flexWrap:"wrap",alignItems:"center"}},
+      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
+      el("h2",{st:{fontWeight:"800",color:"#111827"}},"Overview Dashboard")
+    ),
+    summary,
+    atRiskBox,
+    el("div",{cls:"card",st:{padding:"0",overflow:"hidden"}},
+      filters,
+      el("div",{st:{overflowX:"auto"}},table),
+      rows.length===0?el("div",{st:{padding:"24px",textAlign:"center",color:"#9ca3af"}},"No residents match the current filter."):null
+    )
+  );
+}
 // ─── PD ADMIN PANEL ──────────────────────────────────────────────────────────
 function renderAdmin(){
   if(!isPD())return el("div",{cls:"content"},el("p",null,"Access denied."));
@@ -4109,6 +4282,7 @@ function render(){
         case"counseling":content=renderCounseling();break;
         case"mentornotes":content=renderMentorNotes();break;
         case"admin":content=renderAdmin();break;
+        case"overview":content=renderPDOverview();break;
         default:content=renderModGrid();
       }
     }
