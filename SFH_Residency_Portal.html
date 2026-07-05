@@ -1551,7 +1551,7 @@ function getMyDuties(){
 }
 function renderModGrid(){
   const u=STATE.user;
-  const avail=MODS.filter(m=>m.roles.includes(u.role));
+  const avail=MODS.filter(m=>m.roles.includes(effectiveRole(u.role)));
   const myDuties=getMyDuties();
   const today=new Date();
   const hour=today.getHours();
