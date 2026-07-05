@@ -5474,13 +5474,19 @@ function renderKPIExecutive(){
     }).length;
   }
   const avgComm=Math.round(scored.reduce((s,r)=>{const ks=KPI_SCORES[r.id]||{};return s+(ks.commScore||0);},0)/total);
+  function perfTier(v){
+    if(v>=80)return{label:"Outstanding Performance",clr:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.35)"};
+    if(v>=60)return{label:"On Track",clr:"#2563eb",bg:"rgba(37,99,235,.09)",border:"rgba(37,99,235,.3)"};
+    if(v>=40)return{label:"Almost There",clr:"#d97706",bg:"rgba(217,119,6,.1)",border:"rgba(217,119,6,.35)"};
+    return{label:"Needs Improvement",clr:"#dc2626",bg:"rgba(220,38,38,.09)",border:"rgba(220,38,38,.3)"};
+  }
   function podCard(res,medal,medalIcon,ringColor,sz,padX,padY,fontSize,extraSt){
     if(!res)return el("div",{st:{width:(sz+padX*2+32)+"px"}});
     const k=res.k;
     return el("div",{cls:"kpix-card",st:{
       display:"flex",flexDirection:"column",alignItems:"center",gap:"10px",
-      padding:padY+"px "+padX+"px",minWidth:(sz+padX*2)+"px",...extraSt
-    }},
+      padding:padY+"px "+padX+"px",minWidth:(sz+padX*2)+"px",cursor:"pointer",...extraSt
+    },onClick:()=>{set({kpiExResident:res.id});setTimeout(()=>document.getElementById("kpix-s5")?.scrollIntoView({behavior:"smooth"}),80);}},
       el("div",{st:{fontSize:"1.6rem",marginTop:"-6px"}},medalIcon),
       el("div",{st:{position:"relative",width:sz+"px",height:sz+"px"}},
         el("div",{st:{position:"absolute",inset:"0"}},ring(k.overall,sz,sz>90?8:6,"rgba(0,0,0,.09)",ringColor)),
@@ -5753,19 +5759,24 @@ function renderKPIExecutive(){
             el("div",{st:{fontSize:".7rem",color:"#D4AF37",letterSpacing:".15em",fontWeight:"700",textTransform:"uppercase",marginBottom:"4px"}},res5.level+" \u00B7 KPI Profile"),
             el("h2",{st:{fontSize:"clamp(1.1rem,2.5vw,1.7rem)",fontWeight:"900",color:"#111827",margin:"0"}},res5.name)
           ),
-          el("div",{st:{marginLeft:"auto",display:"flex",flexDirection:"column",alignItems:"center",gap:"4px"}},
+          el("div",{st:{marginLeft:"auto",display:"flex",flexDirection:"column",alignItems:"center",gap:"6px"}},
             el("div",{st:{position:"relative",width:"76px",height:"76px"}},
               el("div",{st:{position:"absolute",inset:"0"}},ring(k.overall,76,6,"rgba(0,0,0,.09)",sc(k.overall))),
               el("div",{st:{position:"absolute",inset:"6px",borderRadius:"50%",background:"rgba(0,0,0,.04)",
                 display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1rem",fontWeight:"900",color:sc(k.overall)}},k.overall+"%")
             ),
-            el("div",{st:{color:"#475569",fontSize:".68rem",fontWeight:"600"}},"Overall KPI")
+            el("div",{st:{color:"#475569",fontSize:".68rem",fontWeight:"600"}},"Overall KPI"),
+            (()=>{const t=perfTier(k.overall);return el("div",{st:{
+              background:t.bg,border:"1px solid "+t.border,color:t.clr,
+              borderRadius:"20px",padding:"3px 10px",fontSize:".65rem",fontWeight:"700",
+              letterSpacing:".04em",textAlign:"center",whiteSpace:"nowrap"
+            }},t.label);})()
           )
         ),
         el("div",{st:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:"22px"}},
           el("div",{cls:"kpix-card",st:{padding:"24px",overflowY:"auto",maxHeight:"70vh"}},
             el("div",{st:{fontSize:".7rem",color:"#D4AF37",letterSpacing:".15em",fontWeight:"700",textTransform:"uppercase",marginBottom:"16px"}},"Score Breakdown"),
-            ...kRows.map(row=>el("div",{st:{marginBottom:"13px"}},
+            ...kRows.map(row=>{const barClr=row.val===0?"#d1d5db":sc(row.val);const txtClr=row.val===0?"#9ca3af":sc(row.val);return el("div",{st:{marginBottom:"13px"}},
               el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"4px"}},
                 el("div",null,
                   el("span",{st:{fontSize:".8rem",color:"#111827",fontWeight:"600"}},row.label),
@@ -5773,13 +5784,14 @@ function renderKPIExecutive(){
                 ),
                 el("div",{st:{display:"flex",alignItems:"center",gap:"5px"}},
                   el("span",{st:{fontSize:".68rem",color:"#9ca3af"}},"x"+row.w+"%"),
-                  el("span",{st:{fontSize:".8rem",fontWeight:"900",color:sc(row.val)}},row.val+"%")
+                  el("span",{st:{fontSize:".8rem",fontWeight:"900",color:txtClr}},row.val+"%")
                 )
               ),
               el("div",{st:{height:"5px",background:"rgba(0,0,0,.07)",borderRadius:"3px",overflow:"hidden"}},
-                el("div",{st:{width:row.val+"%",height:"100%",background:sc(row.val),borderRadius:"3px"}})
+                el("div",{st:{width:Math.max(row.val,row.val===0?0:2)+"%",height:"100%",background:barClr,borderRadius:"3px"}})
               )
-            ))
+            );})
+
           ),
           el("div",{cls:"kpix-card",st:{padding:"24px",overflowY:"auto",maxHeight:"70vh"}},
             el("div",{st:{fontSize:".7rem",color:"#60A5FA",letterSpacing:".15em",fontWeight:"700",textTransform:"uppercase",marginBottom:"16px"}},
