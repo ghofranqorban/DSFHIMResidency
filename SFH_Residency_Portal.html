@@ -1760,7 +1760,7 @@ function periodPills(cur,onChange){
 }
 function renderRotaBlock(resOverride){
   const p=STATE.rotaPeriod;
-  const vr=resOverride||visRes();
+  const vr=RESIDENTS;
   // group by rotation
   const groups={};
   vr.forEach(r=>{
@@ -1916,7 +1916,7 @@ function renderResidentOwnRota(rid){
   );
 }
 function renderRotaTable(resOverride){
-  const vr=resOverride||visRes();
+  const vr=RESIDENTS;
   const levels=["R4","R3","R2","R1"];
   let editVals={};
   async function saveTableEdit(){
