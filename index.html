@@ -1114,7 +1114,9 @@ function noteTypeInfo(t){
   return{label:"💬 Comment",bg:"#f1f5f9",fg:"#334155",accent:"#64748b"};
 }
 function getAccess(cid){return RESIDENTS.filter(r=>MENTORS[r.id]===cid).map(r=>r.id);}
-function isPdRole(r){return r==="pd"||r==="deputy_pd";}
+function isPdRole(r){return r==="pd"||r==="deputy_pd"||r==="dio";}
+function effectiveRole(r){return r==="dio"?"pd":r;}
+const ROLE_LABELS={pd:"Program Director",deputy_pd:"Deputy PD",chief:"Chief Resident",consultant:"Consultant",resident:"Resident",dio:"DIO"};
 function visRes(){
   const u=STATE.user;
   if(!u)return[];
@@ -1160,7 +1162,7 @@ function canEditAttSession(dateStr){
 // KPI edits (committee score, quiz marks for a resident): PD or that resident's assigned mentor
 function canEditKPI(resId){
   const u=STATE.user;if(!u)return false;
-  if(u.role==="pd")return true;
+  if(u.role==="pd"||u.role==="dio")return true;
   if(u.role==="consultant"&&MENTORS[resId]===u.cid)return true;
   return false;
 }
@@ -1366,10 +1368,9 @@ function renderBroadcastModal(){
 function renderNav(){return null;}// legacy — replaced by sidebar
 function renderSidebar(){
   const u=STATE.user;
-  const avail=MODS.filter(m=>m.roles.includes(u.role));
-  // User avatar initials (initials from display name, fallback)
+  const avail=MODS.filter(m=>m.roles.includes(effectiveRole(u.role)));
   const initials=(u.name||"").split(" ").map(w=>w[0]||"").slice(0,2).join("").toUpperCase();
-  const roleBg={pd:"#c96a4a",deputy_pd:"#c96a4a",chief:"#c9913a",consultant:"#7a5a3a",resident:"#4a6a8a"}[u.role]||"#c96a4a";
+  const roleBg={pd:"#c96a4a",deputy_pd:"#c96a4a",dio:"#c96a4a",chief:"#c9913a",consultant:"#7a5a3a",resident:"#4a6a8a"}[u.role]||"#c96a4a";
   return el("aside",{cls:"sidebar"},
     el("div",{cls:"sidebar-brand"},
       el("h1",null,"🏥 DSFH Residency"),
@@ -1379,7 +1380,7 @@ function renderSidebar(){
       el("div",{cls:"av",st:{background:roleBg,borderRadius:"10px",width:"34px",height:"34px",fontSize:".72rem",flexShrink:"0"}},initials),
       el("div",{cls:"sidebar-user-info"},
         el("div",{cls:"sidebar-user-name"},u.name),
-        el("div",{cls:"sidebar-user-role"},u.role)
+        el("div",{cls:"sidebar-user-role"},ROLE_LABELS[u.role]||u.role)
       )
     ),
     el("div",{st:{padding:"0 12px 10px"}},
@@ -1550,7 +1551,7 @@ function renderModGrid(){
   const timeStr=today.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true});
   const firstName=u.name.split(" ").length>1?u.name.split(" ")[1]:u.name.split(" ")[0];
   const periodLabel=ROTA_PERIODS[CURRENT_PERIOD-1]||"";
-  const roleLabel=u.role==="pd"?"Program Director":u.role==="chief"?"Chief Resident":u.role==="consultant"?"Consultant / Mentor":"Resident";
+  const roleLabel=ROLE_LABELS[u.role]||"Resident";
 
   // ── Decorative floating shapes ──────────────────────────────
   function shape(top,left,w,h,color,rot){
@@ -5830,7 +5831,7 @@ function render(){
     content=renderModGrid();
   } else {
     const modDef=MODS.find(m=>m.id===STATE.mod);
-    if(modDef&&!modDef.roles.includes(u.role)){
+    if(modDef&&!modDef.roles.includes(effectiveRole(u.role))){
       content=el("div",{cls:"content"},el("p",{cls:"alert-red"},"Access denied."));
     } else {
       switch(STATE.mod){
