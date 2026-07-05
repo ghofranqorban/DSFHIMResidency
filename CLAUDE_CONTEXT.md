@@ -198,6 +198,16 @@ PROMOTION_NEEDED // bool — set by checkPromotionNeeded() on PD login in Oct–
 
 ---
 
+## Known Bugs / Gotchas (avoid repeating these)
+
+- **CDN pinning:** Supabase JS is pinned to `@2.39.0` — do NOT change to `@2` (unpinned). Newer versions broke `window.supabase`.
+- **async callbacks:** Any callback that uses `await` must be declared `async`. Missing `async` on `reader.onload` caused a site-wide crash (fixed Jul 2026).
+- **init() has try-catch:** `(async function init(){...})()` is wrapped in try-catch so render() always runs.
+- **GitHub Actions:** Custom deploy workflow at `.github/workflows/deploy.yml` retries 3x — don't remove it.
+- **After every change:** `cp SFH_Residency_Portal.html index.html` then commit+push both files.
+
+---
+
 ## Features Pending (Build These Next)
 
 ### 1. Quiz Persistence Verification
