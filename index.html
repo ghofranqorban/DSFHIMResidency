@@ -1608,6 +1608,34 @@ function renderModGrid(){
       "📥 "+LEAVE_PENDING_COUNT+" leave request"+(LEAVE_PENDING_COUNT>1?"s":"")+" pending your review. Click to approve or reject."
     )
   );
+  if(isPD()){
+    const kpiPending=KPI_PROPOSALS.filter(p=>p.status==="pending"&&p.quarter==null);
+    if(kpiPending.length>0){
+      const fieldLabels_={publication:"Research Publication",oral:"Oral Presentation",poster:"Poster Presentation",qi:"QI Project",awards:"Award / Honor",volunteering:"Volunteering"};
+      alerts.push(
+        el("div",{cls:"alert-yellow",st:{marginTop:"16px"}},
+          el("div",{st:{fontWeight:"700",marginBottom:"8px"}},"⏳ "+kpiPending.length+" KPI Achievement Submission"+(kpiPending.length>1?"s":"")+" Pending Review"),
+          ...kpiPending.slice(0,5).map(p=>{
+            const r=resById(p.resident_id);
+            const label=fieldLabels_[p.field_key]||p.field_key;
+            const m=parseProposalNote(p.note);
+            return el("div",{st:{display:"flex",gap:"10px",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #fde68a",cursor:"pointer"},
+              onClick:()=>set({mod:"kpi",kpiSelRes:p.resident_id,kpiTab:"yearly"})},
+              el("div",{st:{flex:"1"}},
+                el("span",{st:{fontWeight:"700",fontSize:".85rem"}},(r?r.name:"Unknown")+" "),
+                el("span",{cls:"sh",st:{fontSize:".82rem"}},"submitted a "+label+(m.title?" — "+m.title:""))
+              ),
+              el("span",{cls:"sh",st:{fontSize:".75rem",whiteSpace:"nowrap"}},new Date(p.proposed_at).toLocaleDateString("en-GB",{day:"numeric",month:"short"})),
+              el("span",{st:{fontSize:".78rem",color:"#2563eb",fontWeight:"600"}},"Review →")
+            );
+          }),
+          kpiPending.length>5?el("div",{cls:"sh",st:{marginTop:"6px",fontSize:".78rem"}},
+            "+"+(kpiPending.length-5)+" more — go to KPI Dashboard to review all"
+          ):null
+        )
+      );
+    }
+  }
   // Upcoming deadlines for residents (next 30 days)
   if(u.role==="resident"&&u.rid){
     const today=new Date();today.setHours(0,0,0,0);
@@ -3305,9 +3333,8 @@ function renderKPI(){
       // Submit button (hidden if already approved or pending)
       !isApproved&&!pending.length&&(canEdit_||canSetMilestone||isMyRes)?
         el("button",{cls:"sbtn ghost",st:{fontSize:".76rem",marginTop:"6px"},onClick:()=>{
-          if(isPD()){submitKpiProposal(res.id,fieldKey,null,null);}
-          else{set({kpiPropModal:{resId:res.id,fieldKey},kpiPropFields:{},kpiPropUploading:false});}
-        }},isPD()?"✓ Mark as Achieved":"📤 Submit Achievement"):null,
+          set({kpiPropModal:{resId:res.id,fieldKey},kpiPropFields:{},kpiPropUploading:false});
+        }},{publication:"+ Submit Research Publication",oral:"+ Submit Oral Presentation",poster:"+ Submit Poster Presentation",qi:"+ Submit QI Project",awards:"+ Submit Award / Honor",volunteering:"+ Submit Volunteering Activity"}[fieldKey]||"+ Submit Achievement"):null,
       // Show rejection note if last submission was rejected
       !isApproved&&!pending.length&&rejected.length?
         el("div",{st:{fontSize:".74rem",color:"#dc2626",marginTop:"4px"}},"⚠ Previous submission was rejected"):null
