@@ -1072,6 +1072,7 @@ function calcKPI(id){
   let tAtt=0,tTotal=0;
   Object.values(TEACH_ATT).forEach(blk=>{Object.values(blk).forEach(day=>{tTotal++;if(day[id]==='P'||day[id]==='L'||day[id]==='E')tAtt++;});});
   if(tTotal===0){tAtt=0;tTotal=1;}
+  const tPct=Math.round(tAtt/tTotal*100);
   const rotPct=Math.round(((ROT_H[id]||[]).length/MANDATORY.length)*100);
   const pubQ=QUIZZES.filter(q=>q.published&&q.sc[id]!=null);
   const qAvg=pubQ.length?Math.round(pubQ.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/pubQ.length):0;
