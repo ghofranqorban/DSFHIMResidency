@@ -5891,6 +5891,7 @@ function renderKPIExecutive(){
 function render(){
   const app=document.getElementById("app");
   app.innerHTML="";
+  window.scrollTo(0,0);
   if(!STATE.user){app.appendChild(renderLogin());return;}
   const u=STATE.user;
   // Sidebar layout
