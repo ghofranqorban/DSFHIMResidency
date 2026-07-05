@@ -2586,7 +2586,7 @@ function renderQuiz(){
             el("input",{type:"file",accept:".xlsx,.xls",st:{display:"none"},onChange:e=>{
               const file=e.target.files[0];if(!file)return;
               const reader=new FileReader();
-              reader.onload=ev=>{
+              reader.onload=async ev=>{
                 const wb=XLSX.read(new Uint8Array(ev.target.result),{type:"array"});
                 const ws=wb.Sheets[wb.SheetNames[0]];
                 const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:""});
