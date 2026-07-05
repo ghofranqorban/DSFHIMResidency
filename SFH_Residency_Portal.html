@@ -682,61 +682,70 @@ async function uploadKpiFile(file,resId,fieldKey){
   const{data:urlData}=sb.storage.from("kpi-evidence").getPublicUrl(path);
   return urlData.publicUrl;
 }
+let _kpiPropLive={};
 function renderKpiProposalModal(){
   const s=STATE.kpiPropModal;
   if(!s)return null;
   const{resId,fieldKey}=s;
-  const fields=STATE.kpiPropFields||{};
   const uploading=STATE.kpiPropUploading||false;
-  const close=()=>set({kpiPropModal:null,kpiPropFields:{},kpiPropUploading:false});
+  const close=()=>{_kpiPropLive={};set({kpiPropModal:null,kpiPropUploading:false});};
 
-  const inp=(label,key,placeholder,type)=>el("div",{st:{marginBottom:"10px"}},
+  const inp=(label,key,placeholder,type,required)=>el("div",{st:{marginBottom:"10px"}},
     el("label",{st:{fontSize:".8rem",fontWeight:"600",display:"block",marginBottom:"3px"}},label),
-    el("input",{type:type||"text",placeholder:placeholder||"",value:fields[key]||"",
+    el("input",{type:type||"text",placeholder:placeholder||"",value:_kpiPropLive[key]||"",
       st:{width:"100%",padding:"7px 10px",border:"1px solid #d1d5db",borderRadius:"7px",fontSize:".85rem"},
-      onInput:e=>{const f={...fields};f[key]=e.target.value;set({kpiPropFields:f});}})
+      onInput:e=>{_kpiPropLive[key]=e.target.value;}})
   );
   const fileInp=(label,key)=>el("div",{st:{marginBottom:"10px"}},
     el("label",{st:{fontSize:".8rem",fontWeight:"600",display:"block",marginBottom:"3px"}},label),
-    fields[key+"_name"]?
+    _kpiPropLive[key+"_name"]?
       el("div",{st:{fontSize:".8rem",color:"#16a34a",padding:"6px 10px",background:"#f0fdf4",borderRadius:"6px",border:"1px solid #bbf7d0"}},
-        "📎 "+fields[key+"_name"]+" ",
-        el("span",{st:{cursor:"pointer",color:"#dc2626",fontWeight:"700"},onClick:()=>{const f={...fields};delete f[key];delete f[key+"_name"];set({kpiPropFields:f});}},"✕")
+        "📎 "+_kpiPropLive[key+"_name"]+" ",
+        el("span",{st:{cursor:"pointer",color:"#dc2626",fontWeight:"700"},onClick:()=>{delete _kpiPropLive[key+"_file"];delete _kpiPropLive[key+"_name"];render();}},"✕")
       ):
       el("input",{type:"file",accept:".pdf,.jpg,.jpeg,.png",
         st:{width:"100%",fontSize:".8rem"},
         onChange:async e=>{
           const file=e.target.files[0];if(!file)return;
-          const f={...fields};f[key+"_file"]=file;f[key+"_name"]=file.name;set({kpiPropFields:f});
+          _kpiPropLive[key+"_file"]=file;_kpiPropLive[key+"_name"]=file.name;render();
         }})
   );
 
   let formFields=[];
+  let requiredKeys=["title"];
   if(fieldKey==="publication"){
+    requiredKeys=["title","authors","year"];
     formFields=[inp("Title *","title","e.g. Efficacy of X in Y"),inp("Authors *","authors","e.g. Al-Harbi M, Smith J, ..."),inp("Year *","year","e.g. 2024","number"),inp("Journal / Publisher","journal","e.g. NEJM, BMJ"),inp("Link (DOI or URL)","link","https://..."),fileInp("Upload PDF (optional)","file")];
   }else if(fieldKey==="oral"){
+    requiredKeys=["title","event","date"];
     formFields=[inp("Presentation Title *","title","Title of your talk"),inp("Conference / Event *","event","e.g. Saudi IM Congress 2024"),inp("Date (Month/Year) *","date","e.g. March 2024"),fileInp("Upload Abstract / Certificate (optional)","file")];
   }else if(fieldKey==="poster"){
+    requiredKeys=["title","event","date"];
     formFields=[inp("Poster Title *","title","Title of your poster"),inp("Conference / Event *","event","e.g. KFSH Research Day 2024"),inp("Date (Month/Year) *","date","e.g. November 2024"),fileInp("Upload Poster / Certificate (optional)","file")];
   }else if(fieldKey==="qi"){
+    requiredKeys=["title"];
     formFields=[inp("Project Title *","title","e.g. Reducing CAUTI rates in Ward 5"),inp("Description","description","Brief summary of the project"),inp("Completion / Submission Date","date","e.g. June 2024"),inp("Supervisor Name","supervisor","e.g. Dr. Ahmed Al-Zahrani"),inp("Supervisor Email","supervisorEmail","e.g. ahmed@dsfh.com.sa","email"),fileInp("Upload Supporting Document (optional)","file")];
   }else if(fieldKey==="awards"){
+    requiredKeys=["title","issuer","date"];
     formFields=[inp("Award / Honor Title *","title","e.g. Best Resident of the Year"),inp("Issuing Body *","issuer","e.g. Saudi Board of IM"),inp("Date (Month/Year) *","date","e.g. September 2024"),fileInp("Upload Certificate (optional)","file")];
   }else if(fieldKey==="volunteering"){
-    formFields=[inp("Activity *","title","e.g. Community Health Screening"),inp("Organization *","organization","e.g. Saudi Red Crescent"),inp("Date","date","e.g. December 2024"),fileInp("Upload Evidence (optional)","file")];
+    requiredKeys=["title","organization"];
+    formFields=[inp("Activity *","title","e.g. Community Health Screening"),inp("Organization *","organization","e.g. Saudi Red Crescent"),inp("Date *","date","e.g. December 2024"),fileInp("Upload Evidence (optional)","file")];
+    requiredKeys=["title","organization","date"];
   }
 
   const fieldLabels={publication:"Research Publication",oral:"Oral Presentation",poster:"Poster Presentation",qi:"QI Project",awards:"Awards & Honors",volunteering:"Volunteering"};
 
   async function handleSubmit(){
-    if(!fields.title&&fieldKey!=="volunteering"){alert("Please fill in the required fields.");return;}
+    const missing=requiredKeys.filter(k=>!(_kpiPropLive[k]||"").trim());
+    if(missing.length){alert("Please fill in all required fields (marked with *).");return;}
     set({kpiPropUploading:true});
     let fileUrl=null;
-    if(fields.file_file){
-      fileUrl=await uploadKpiFile(fields.file_file,resId,fieldKey);
+    if(_kpiPropLive.file_file){
+      fileUrl=await uploadKpiFile(_kpiPropLive.file_file,resId,fieldKey);
       if(!fileUrl){set({kpiPropUploading:false});return;}
     }
-    const meta={...fields};
+    const meta={..._kpiPropLive};
     delete meta.file_file;delete meta.file_name;
     if(fileUrl)meta.fileUrl=fileUrl;
     const noteJson=JSON.stringify(meta);
@@ -3332,7 +3341,7 @@ function renderKPI(){
       // Submit button (hidden if already approved or pending)
       !isApproved&&!pending.length&&(canEdit_||canSetMilestone||isMyRes)?
         el("button",{cls:"sbtn ghost",st:{fontSize:".76rem",marginTop:"6px"},onClick:()=>{
-          set({kpiPropModal:{resId:res.id,fieldKey},kpiPropFields:{},kpiPropUploading:false});
+          _kpiPropLive={};set({kpiPropModal:{resId:res.id,fieldKey},kpiPropUploading:false});
         }},{publication:"+ Submit Research Publication",oral:"+ Submit Oral Presentation",poster:"+ Submit Poster Presentation",qi:"+ Submit QI Project",awards:"+ Submit Award / Honor",volunteering:"+ Submit Volunteering Activity"}[fieldKey]||"+ Submit Achievement"):null,
       // Show rejection note if last submission was rejected
       !isApproved&&!pending.length&&rejected.length?
