@@ -5552,62 +5552,128 @@ function renderKPIExecutive(){
     );
   }
   // ── Section 1 ──
+  const tier=perfTier(avgKPI);
+  const r1=top3[0],r2=top3[1],r3=top3[2];
+  function podClickNav(res){return ()=>{set({kpiExResident:res.id});setTimeout(()=>document.getElementById("kpix-s5")?.scrollIntoView({behavior:"smooth"}),80);};}
+  function podAvatarLg(res,color){
+    return el("div",{st:{width:"64px",height:"64px",borderRadius:"50%",display:"flex",alignItems:"center",
+      justifyContent:"center",fontSize:"1.6rem",fontWeight:"900",flexShrink:"0",
+      border:"2px solid "+color+"66",background:color+"22",color:color}},ini(res?res.name:""));
+  }
+  function podAvatarSm(res,color){
+    return el("div",{st:{width:"46px",height:"46px",borderRadius:"50%",flexShrink:"0",display:"flex",
+      alignItems:"center",justifyContent:"center",fontSize:"1.1rem",fontWeight:"900",
+      background:color+"22",color:color}},ini(res?res.name:""));
+  }
   const sec1=el("div",{cls:"kpix-section kpix-fade",id:"kpix-s1",st:{
-    background:"radial-gradient(ellipse at top,#fef8f0 0%,#f5ede0 100%)",
+    background:"radial-gradient(ellipse at 50% 0%,#fef8f0 0%,#f5ede0 70%)",
     borderBottom:"1px solid rgba(0,0,0,.07)",
-    position:"relative",overflow:"hidden"
+    position:"relative",overflow:"hidden",
+    justifyContent:"center",alignItems:"center",gap:"22px",padding:"36px 48px 24px"
   }},
-    el("div",{st:{textAlign:"center",marginBottom:"24px"}},
-      el("div",{st:{fontSize:".72rem",color:"#D4AF37",letterSpacing:".2em",fontWeight:"700",textTransform:"uppercase",marginBottom:"10px"}},
-        "Dr. Solaiman Fakeeh Hospital \u00B7 Internal Medicine"
-      ),
-      el("h1",{st:{fontSize:"clamp(1.4rem,4vw,2.5rem)",fontWeight:"900",color:"#111827",margin:"0 0 6px",letterSpacing:"-.02em"}},
-        "Residency Performance Report"
-      ),
-      el("div",{st:{color:"#475569",fontSize:".85rem",fontWeight:"600"}},"Academic Year "+selYear)
+    // Header
+    el("div",{st:{textAlign:"center"}},
+      el("div",{st:{fontSize:".68rem",color:"#D4AF37",letterSpacing:".22em",fontWeight:"700",textTransform:"uppercase",marginBottom:"10px"}},
+        "Dr. Solaiman Fakeeh Hospital \u00B7 Internal Medicine"),
+      el("h1",{st:{fontSize:"clamp(1.6rem,4.5vw,3rem)",fontWeight:"900",color:"#111827",letterSpacing:"-.03em",lineHeight:"1.05",margin:"0 0 10px"}},
+        "Residency Performance Report"),
+      el("div",{st:{display:"inline-block",padding:"4px 18px",borderRadius:"999px",
+        background:"rgba(212,175,55,.12)",border:"1px solid rgba(212,175,55,.3)",
+        fontSize:".75rem",color:"#D4AF37",fontWeight:"700",letterSpacing:".08em"}},
+        "AY "+selYear)
     ),
-    el("div",{st:{display:"flex",alignItems:"flex-end",justifyContent:"center",gap:"36px",flexWrap:"wrap",marginBottom:"28px"}},
-      el("div",{st:{display:"flex",flexDirection:"column",alignItems:"center",gap:"12px",marginBottom:"10px"}},
-        el("div",{st:{position:"relative",width:"148px",height:"148px"}},
-          el("div",{st:{position:"absolute",inset:"0"}},ring(avgKPI,148,11,"rgba(0,0,0,.09)",sc(avgKPI))),
-          el("div",{st:{position:"absolute",inset:"11px",borderRadius:"50%",background:"rgba(0,0,0,.03)",
-            display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"2px"}},
-            el("div",{st:{fontSize:"2.1rem",fontWeight:"900",color:sc(avgKPI),lineHeight:"1"}},avgKPI+"%"),
-            el("div",{st:{fontSize:".58rem",color:"#475569",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase"}},"Cohort KPI")
-          )
-        ),
-        el("div",{st:{textAlign:"center"}},
-          el("div",{st:{color:"#111827",fontWeight:"700",fontSize:".82rem"}},"Program Health"),
-          el("div",{st:{color:"#6b7280",fontSize:".72rem"}},total+" active residents")
+    // Program Health band
+    el("div",{st:{width:"100%",maxWidth:"680px",background:"rgba(255,255,255,.55)",
+      border:"1px solid rgba(0,0,0,.07)",borderRadius:"24px",padding:"24px 32px",
+      display:"flex",alignItems:"center",gap:"32px",boxShadow:"0 4px 24px rgba(0,0,0,.06)"}},
+      el("div",{st:{position:"relative",width:"120px",height:"120px",flexShrink:"0"}},
+        el("div",{st:{position:"absolute",inset:"0"}},ring(avgKPI,120,10,"rgba(0,0,0,.09)",sc(avgKPI))),
+        el("div",{st:{position:"absolute",inset:"10px",borderRadius:"50%",display:"flex",flexDirection:"column",
+          alignItems:"center",justifyContent:"center",gap:"1px"}},
+          el("div",{st:{fontSize:"1.8rem",fontWeight:"900",lineHeight:"1",color:sc(avgKPI)}},avgKPI+"%"),
+          el("div",{st:{fontSize:".52rem",color:"#6b7280",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase"}},"Cohort KPI")
         )
       ),
-      el("div",{st:{display:"flex",alignItems:"flex-end",gap:"10px"}},
-        podCard(top3[1],"2ND PLACE","🥈","#C0C0C0",82,16,18,1.1,{borderColor:"rgba(192,192,192,.25)"}),
-        podCard(top3[0],"1ST PLACE","🥇","#D4AF37",102,20,24,1.4,{
-          background:"rgba(212,175,55,.1)",borderColor:"rgba(212,175,55,.45)",
-          boxShadow:"0 0 50px rgba(212,175,55,.2),0 20px 60px rgba(0,0,0,.5)",
-          animation:"kpix-gold-pulse 3s ease-in-out infinite"
-        }),
-        podCard(top3[2],"3RD PLACE","🥉","#CD7F32",82,16,18,1.1,{borderColor:"rgba(205,127,50,.25)"})
+      el("div",{st:{flex:"1",display:"flex",flexDirection:"column",gap:"10px"}},
+        el("div",{st:{fontSize:".62rem",color:"#D4AF37",letterSpacing:".18em",fontWeight:"700",textTransform:"uppercase"}},"Program Health"),
+        el("div",null,
+          el("div",{st:{fontSize:"1.5rem",fontWeight:"900",color:sc(avgKPI),letterSpacing:"-.02em",lineHeight:"1"}},avgKPI+"%"),
+          el("div",{st:{fontSize:".76rem",color:"#6b7280",fontWeight:"500",marginTop:"2px"}},total+" active residents \u00B7 Academic Year "+selYear)
+        ),
+        el("div",{st:{display:"flex",alignItems:"center",gap:"10px",marginTop:"2px"}},
+          el("div",{st:{padding:"4px 14px",borderRadius:"999px",fontSize:".68rem",fontWeight:"700",
+            letterSpacing:".04em",background:tier.bg,color:tier.clr,border:"1px solid "+tier.border}},tier.label),
+          el("div",{st:{flex:"1",height:"5px",borderRadius:"999px",background:"rgba(0,0,0,.08)",overflow:"hidden"}},
+            el("div",{st:{width:Math.min(avgKPI,100)+"%",height:"100%",borderRadius:"999px",
+              background:"linear-gradient(90deg,#60A5FA,"+sc(avgKPI)+")"}})),
+          el("div",{st:{fontSize:".62rem",color:"#D4AF37",fontWeight:"700",whiteSpace:"nowrap"}},"80% Outstanding")
+        )
       )
     ),
-    el("div",{st:{display:"flex",gap:"10px",flexWrap:"wrap",justifyContent:"center"}},
-      ...[
-        {icon:"📄",label:"Research",val:achCount("publication"),clr:"#60A5FA"},
-        {icon:"🔬",label:"QI Projects",val:achCount("qi"),clr:"#34D399"},
-        {icon:"🎤",label:"Oral Pres.",val:achCount("oral"),clr:"#A78BFA"},
-        {icon:"\uD83D\uDDBC",label:"Poster Pres.",val:achCount("poster"),clr:"#F472B6"},
-        {icon:"🏆",label:"Awards",val:achCount("awards"),clr:"#D4AF37"},
-        {icon:"🤝",label:"Volunteering",val:achCount("volunteering"),clr:"#4ADE80"},
-      ].map(a=>el("div",{cls:"kpix-card",st:{
-        display:"flex",flexDirection:"column",alignItems:"center",gap:"4px",padding:"12px 14px",minWidth:"88px"
-      }},
-        el("div",{st:{fontSize:"1.2rem"}},a.icon),
-        el("div",{st:{fontSize:"1.4rem",fontWeight:"900",color:a.clr}},a.val+"/"+total),
-        el("div",{st:{fontSize:".68rem",color:"#475569",fontWeight:"600",textAlign:"center"}},a.label)
-      ))
+    // Top Performers
+    el("div",{st:{width:"100%",maxWidth:"680px",display:"flex",flexDirection:"column",gap:"10px"}},
+      el("div",{st:{fontSize:".62rem",color:"#D4AF37",letterSpacing:".18em",fontWeight:"700",textTransform:"uppercase",textAlign:"center",marginBottom:"2px"}},"Top Performers"),
+      // 1st place featured card
+      r1?el("div",{st:{width:"100%",borderRadius:"20px",padding:"20px 28px",cursor:"pointer",
+        background:"linear-gradient(135deg,rgba(212,175,55,.12) 0%,rgba(255,248,220,.6) 100%)",
+        border:"1.5px solid rgba(212,175,55,.4)",
+        boxShadow:"0 0 40px rgba(212,175,55,.15),0 4px 20px rgba(0,0,0,.06)",
+        display:"flex",alignItems:"center",gap:"20px",position:"relative",overflow:"hidden",
+        animation:"kpix-gold-pulse 3s ease-in-out infinite"},onClick:podClickNav(r1)},
+        el("div",{st:{position:"absolute",left:"0",top:"0",bottom:"0",width:"5px",
+          background:"linear-gradient(180deg,#D4AF37,#f0c84a)",borderRadius:"3px 0 0 3px"}}),
+        podAvatarLg(r1,"#D4AF37"),
+        el("div",{st:{flex:"1"}},
+          el("div",{st:{fontSize:".72rem",color:"#D4AF37",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",marginBottom:"2px"}},"🥇 1st Place"),
+          el("div",{st:{fontSize:"1.25rem",fontWeight:"900",color:"#111827",letterSpacing:"-.02em",marginBottom:"2px"}},dname(r1.name)),
+          el("div",{st:{fontSize:".72rem",color:"#9ca3af",fontWeight:"600"}},r1.level)
+        ),
+        el("div",{st:{textAlign:"right",flexShrink:"0"}},
+          el("div",{st:{fontSize:"2.2rem",fontWeight:"900",color:"#D4AF37",letterSpacing:"-.03em",lineHeight:"1"}},r1.k.overall+"%"),
+          el("div",{st:{fontSize:".6rem",color:"#9ca3af",fontWeight:"600",letterSpacing:".08em",textTransform:"uppercase"}},"Overall KPI")
+        )
+      ):null,
+      // 2nd & 3rd side by side
+      el("div",{st:{display:"flex",gap:"10px"}},
+        ...[{res:r2,medal:"🥈 2nd Place",color:"#C0C0C0"},{res:r3,medal:"🥉 3rd Place",color:"#CD7F32"}].map(({res,medal,color})=>
+          res?el("div",{st:{flex:"1",borderRadius:"16px",padding:"16px 20px",cursor:"pointer",
+            background:"rgba(255,255,255,.55)",border:"1px solid rgba(0,0,0,.08)",
+            boxShadow:"0 2px 12px rgba(0,0,0,.05)",display:"flex",alignItems:"center",gap:"14px"},
+            onClick:podClickNav(res)},
+            podAvatarSm(res,color),
+            el("div",{st:{flex:"1"}},
+              el("div",{st:{fontSize:".65rem",fontWeight:"700",letterSpacing:".06em",textTransform:"uppercase",color:color,marginBottom:"1px"}},medal),
+              el("div",{st:{fontSize:".9rem",fontWeight:"800",color:"#111827"}},dname(res.name)),
+              el("div",{st:{fontSize:".65rem",color:"#9ca3af",fontWeight:"600"}},res.level)
+            ),
+            el("div",{st:{fontSize:"1.5rem",fontWeight:"900",color:color,lineHeight:"1"}},res.k.overall+"%")
+          ):el("div",{st:{flex:"1"}})
+        )
+      )
     ),
-    el("div",{st:{textAlign:"center",marginTop:"24px",color:"#9ca3af",fontSize:".78rem",animation:"kpix-bounce 2.4s ease-in-out infinite"}},"↓ Scroll to explore")
+    // Academic Achievements grid
+    el("div",{st:{width:"100%",maxWidth:"680px"}},
+      el("div",{st:{fontSize:".62rem",color:"#D4AF37",letterSpacing:".18em",fontWeight:"700",textTransform:"uppercase",textAlign:"center",marginBottom:"10px"}},"Academic Achievements"),
+      el("div",{st:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"10px"}},
+        ...[
+          {icon:"📄",label:"Research Publications",val:achCount("publication"),clr:"#60A5FA"},
+          {icon:"🔬",label:"QI Projects",val:achCount("qi"),clr:"#34D399"},
+          {icon:"🎤",label:"Oral Presentations",val:achCount("oral"),clr:"#A78BFA"},
+          {icon:"\uD83D\uDDBC",label:"Poster Presentations",val:achCount("poster"),clr:"#F472B6"},
+          {icon:"🏆",label:"Awards & Honors",val:achCount("awards"),clr:"#D4AF37"},
+          {icon:"🤝",label:"Volunteering",val:achCount("volunteering"),clr:"#4ADE80"},
+        ].map(a=>el("div",{st:{
+          background:"rgba(255,255,255,.55)",border:"1px solid rgba(0,0,0,.07)",borderRadius:"16px",
+          padding:"14px 10px 12px",display:"flex",flexDirection:"column",alignItems:"center",gap:"4px",
+          boxShadow:"0 2px 8px rgba(0,0,0,.04)"}},
+          el("div",{st:{fontSize:"1.3rem"}},a.icon),
+          el("div",{st:{fontSize:"1.5rem",fontWeight:"900",color:a.clr,lineHeight:"1"}},String(a.val)),
+          el("div",{st:{fontSize:".65rem",color:"#9ca3af",fontWeight:"600"}},"/"+total+" residents"),
+          el("div",{st:{fontSize:".66rem",color:"#475569",fontWeight:"600",textAlign:"center"}},a.label)
+        ))
+      )
+    ),
+    el("div",{st:{textAlign:"center",color:"#9ca3af",fontSize:".72rem",animation:"kpix-bounce 2.4s ease-in-out infinite"}},"↓ Scroll to explore")
   );
   // ── Section 2 ──
   const YEARS=["2025-26","2024-25","2023-24","2022-23"];
