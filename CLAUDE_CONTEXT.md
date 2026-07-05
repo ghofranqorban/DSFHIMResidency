@@ -46,25 +46,28 @@ RLS helper functions in Supabase: `is_pd_or_chief()`, `app_role()`, `app_residen
 ## Key Global Data Structures
 
 ```js
-RESIDENTS       // [{id, name, user, level, ph, yearStarted, chiefRole}]
-CONSULTANTS     // [{id, name, user}]
-MENTORS         // {resident_id: consultant_id}
-FULL_ROTA       // {resident_id: {block_number: rotation_name}}
-MM_SESSIONS     // [{id, block_number, session_date, topic, presenter_resident_id, moderator_resident_id}]
-TEACH_SESSIONS  // [{id, block_number, session_date, topic, presenter_label}]
-MM_ATT          // {block: {date: {resident_id: status}}}   status = P|L|A|E|O
-MM_ATT_CMT      // {block: {date: {resident_id: comment}}}
-TEACH_ATT       // same shape as MM_ATT
-TEACH_ATT_CMT   // same shape as MM_ATT_CMT
-QUIZZES         // [{id, title, max, published, sc: {resident_id: score}}] — DB-backed via quizzes + quiz_scores tables
-KPI_SCORES      // {resident_id: {commScore, researchDone, qiDone, bonusPublished, bonusOral, bonusPoster}}
-LEAVE_DATA      // {resident_id: {rota:[], manual:[], absences:[], requests:[]}}
-LEAVE_PENDING_COUNT  // int — pending leave requests for PD home alert
-COUNSEL_CACHE   // {resident_id: [records] | null (loading) | undefined (not loaded yet)}
-MENTOR_NOTES    // {resident_id: [notes]}
-ANNOUNCEMENTS   // [{id, title, description, deadline_date, category, target_all, target_level, target_resident_id}]
-ACCOUNT_PRIVS   // {profile_id: Set(privilege_key)}
-PROMOTION_NEEDED // bool — set by checkPromotionNeeded() on PD login in Oct–Dec
+RESIDENTS        // [{id, name, user, level, ph, yearStarted, chiefRole}]
+CONSULTANTS      // [{id, name, user}]
+MENTORS          // {resident_id: consultant_id}
+FULL_ROTA        // {resident_id: {block_number: rotation_name}}
+MM_SESSIONS      // [{id, block_number, session_date, topic, presenter_resident_id, moderator_resident_id}]
+TEACH_SESSIONS   // [{id, block_number, session_date, topic, presenter_label}]
+MM_ATT           // {block: {date: {resident_id: status}}}   status = P|L|A|E|O
+MM_ATT_CMT       // {block: {date: {resident_id: comment}}}
+TEACH_ATT        // same shape as MM_ATT
+TEACH_ATT_CMT    // same shape as MM_ATT_CMT
+QUIZZES          // [{id, title, max, published, sc: {resident_id: score}}]
+KPI_SCORES       // {resident_id: {commScore, researchDone, qiDone, bonusPublished, bonusOral, bonusPoster, awardsHonors, volunteering}}
+KPI_QUARTERLY    // {resident_id: {quarter: {research_milestone, research_achieved, improvement_area, improvement_achieved, ...}}}
+KPI_PROPOSALS    // [{id, resident_id, field_key, quarter, note, proposed_by_role, status, ...}]
+LEAVE_DATA       // {resident_id: {rota:[], manual:[], absences:[], requests:[]}}
+LEAVE_PENDING_COUNT  // int
+COUNSEL_CACHE    // {resident_id: [records] | null | undefined}
+MENTOR_NOTES     // {resident_id: [notes]}
+ANNOUNCEMENTS    // [{id, title, description, deadline_date, category, target_all, target_level, target_resident_id}]
+ACCOUNT_PRIVS    // {profile_id: Set(privilege_key)}
+PROMOTION_NEEDED // bool
+QUIZZES_LOAD_ERR // string|null — set if quizzes table missing in Supabase
 ```
 
 ---
@@ -76,20 +79,22 @@ PROMOTION_NEEDED // bool — set by checkPromotionNeeded() on PD login in Oct–
 | `profiles` | Auth link, role, username, display_name |
 | `residents` | Resident records (name, level, mentor_id, active) |
 | `consultants` | Mentor records |
-| `account_privileges` | Per-profile privilege flags (e.g. `edit_mm_attendance`) |
+| `account_privileges` | Per-profile privilege flags |
 | `mm_sessions` | Morning meeting schedule |
-| `mm_attendance` | MM attendance per session per resident (`status`, `comment`) |
+| `mm_attendance` | MM attendance per session per resident |
 | `teaching_sessions` | Teaching session schedule |
-| `teaching_attendance` | Teaching attendance (`status`, `comment`) |
+| `teaching_attendance` | Teaching attendance |
 | `rotations` | Full rota grid (resident_id, block_number, rotation_name) |
-| `kpi_scores` | Manual KPI fields (committee score, research, QI, bonuses) |
-| `quizzes` | Quiz metadata (title, date, max_score, block_number, published, assigned_mentor_id) |
-| `quiz_scores` | Per-resident quiz marks (quiz_id, resident_id, score) |
-| `leave_records` | All leave types: `manual`, `unapproved_absence`, `leave_request`, `leave_rejected` |
-| `counseling` | Counseling records (includes countersign fields — see SQL migration below) |
-| `mentor_notes` | Mentor observations (type: strength/improvement/interest) |
+| `kpi_scores` | Yearly KPI fields (committee_score, research, QI, bonuses, awards_honors, volunteering) |
+| `kpi_quarterly` | Per-resident per-quarter milestones + improvement areas ⚠️ needs migration |
+| `kpi_proposals` | Achievement submissions pending PD approval ⚠️ needs migration |
+| `quizzes` | Quiz metadata |
+| `quiz_scores` | Per-resident quiz marks |
+| `leave_records` | All leave types |
+| `counseling` | Counseling records (countersign fields ⚠️ needs migration) |
+| `mentor_notes` | Mentor observations |
 | `announcements` | PD-set deadlines/tasks with targeting |
-| `promotion_log` | Annual promotion history — one row per academic year |
+| `promotion_log` | Annual promotion history ⚠️ needs migration |
 
 **Attendance status values:** `P` (Present) · `L` (Late) · `A` (Absent) · `E` (Excused) · `O` (On Leave)
 
@@ -99,89 +104,73 @@ PROMOTION_NEEDED // bool — set by checkPromotionNeeded() on PD login in Oct–
 
 ### Authentication & Accounts
 - Supabase Auth with synthetic emails (`username@dsfh.local`)
-- Real login replacing hardcoded passwords
-- Username change UI in account modal
-- Per-resident privilege system (`account_privileges` table)
+- Username + password change in account modal
+- Per-profile privilege system
 
 ### Rota
-- Full rota grid — imported from Excel via SheetJS
-- Block view, timeline view, full table view
-- Rotation tracker showing where each resident is
+- Full rota grid — Excel import via SheetJS
+- Block view, timeline view, full table view, rotation tracker
 
 ### Morning Meetings & Teaching
-- Schedule management (add/edit/delete sessions)
-- Attendance logging with 5 statuses (P/L/A/E/O)
-- Comment field per resident per session (for committee members)
-- MM overview table (all residents × all sessions)
-- **Export to Excel** — "⬇ Export Excel" button in Attendance Table card header (both MM and Teaching)
+- Schedule management (add/edit/delete)
+- Attendance logging (P/L/A/E/O) with comment field
+- MM overview table · Export to Excel
 
-### KPI Dashboard
-- Calculates: quiz avg, MM %, teaching %, presentation, committee, research, QI, bonus
-- Per-resident quarterly KPI card
-- PD/mentor can edit manual scores
+### KPI Dashboard (rebuilt Jul 2026)
+**3-tab structure per resident:**
+- **📊 Ongoing (60%):** Quiz 20% · MM Att 15% · Teaching 15% · Presenter/Moderator 10% — all auto-tracked
+- **📆 Quarterly (informational, not scored):** Mentor sets Research Milestone + Area of Improvement per quarter as text. Anyone can submit "achieved" → PD approves. Resident can see (read-only).
+- **🏆 Yearly (40%):** Committee 10% (PD scores 0–10) + 6 achievement cards: QI Project 5% · Research Publication 5% · Oral Presentation 5% · Poster Presentation 3% · Awards/Honors 4% · Volunteering 3%
+
+**Proposal/approval flow:** Resident, mentor, chief, or PD can submit any yearly achievement. PD entries are auto-approved. All others show as ⏳ Pending — PD sees inline Approve/Reject. Approved proposals update `kpi_scores` and `kpi_proposals`.
+
+**Summary card** shows Ongoing score/60 + Quarterly quarter + Yearly score/40 as clickable tiles.
+
+**All-residents table** adds Achievements column (X/6) with pending indicator.
+
+`exportKpiPDF(res, k)` generates a 3-section print report (Ongoing · Yearly · Quarterly).
+
+`renderProfileKPI` in admin panel shows compact version with link to full KPI tab.
 
 ### Quiz Marks
-- Add/edit/delete quizzes (with delete confirmation)
-- Publish/unpublish scores
-- Per-resident mark entry
-- **Bulk import from Excel** — "⬆ Import Excel" in Resident Marks header (PD/assessor only); Col A = name, Col B = score
+- Add/edit/delete/publish quizzes · Bulk Excel import
+- If `quizzes` table missing → shows red error banner with instructions (QUIZZES_LOAD_ERR)
 
 ### Annual Leave
-- Rota-detected leave blocks
-- Manual leave addition (Annual + Educational, 28d/7d quotas)
-- Leave Request Flow: residents submit → PD approves/rejects → status shown
-- Pending request count shown on PD home screen as alert
-- Unapproved absences tracking
-- **Date validation:** rejects requests where 'To' is before 'From'
+- Rota-detected leave · Manual addition · Leave request flow (resident → PD approval)
+- Pending count alert on PD home · Unapproved absences tracking
 
 ### Counseling
-- Add/edit/delete counseling records
-- **Countersign flow:** resident receives red banner → clicks → sees record → clicks "Countersign / Acknowledge" → record locks with timestamp
-- PD sees Pending/Countersigned badge per record
-- Alert levels: green/yellow/red based on record count
-- ⚠️ Requires SQL migration — see `supabase/add_counseling_countersign.sql`
+- Add/edit/delete · Countersign flow (resident acknowledges, locks record)
+- ⚠️ Requires `supabase/add_counseling_countersign.sql`
 
 ### Mentor Notes
-- Table view: rows = residents, columns = Strength / Improvement / Interest
-- Bulk loaded in one query
-- Only visible to PD + the writing mentor
+- Table view: Strength / Improvement / Interest columns
+- Only visible to PD + writing mentor
 
 ### Calendar (.ics Download)
-- Rotation blocks (4-week all-day events)
-- Approved leave blocks
-- MM presentations + moderator duties (timed 7–9am)
-- Announced deadlines (all-day on due date)
+- Rotation blocks · Approved leave · MM duties · Deadlines
 
 ### Announcements / Deadlines
-- PD creates: title, category, deadline, description, targeting (all/level/resident)
-- Resident home screen shows upcoming deadlines (next 30 days)
-- Included in .ics download
-- Admin Panel → "Deadlines & Tasks" tab
+- PD creates with targeting (all/level/resident) + deadline
+- Shown as alerts on resident home screen (next 30 days)
+- **📢 Broadcast button** on PD/chief home screen — quick modal to send to all or by level
+
+### Global Search
+- Search bar in sidebar — searches residents, quizzes, MM sessions, teaching sessions
+- Floating results overlay, click to navigate. Esc to close.
+- State key: `STATE.searchQ`
 
 ### PD Overview Dashboard
-- Summary cards: total residents, avg KPI, at-risk count, with-counseling count
-- Full resident table with KPI, MM%, Teaching%, Quiz%, counseling count
-- At-risk highlight box (any metric < 60%)
-- Filter by level, sort by any column
+- Summary cards · Full resident table · At-risk highlight · Filter/sort
 
 ### October Auto-Promotion
-- On PD login during Oct–Dec: checks `promotion_log` for current academic year
-- If not found, shows yellow alert on home screen
-- Modal: all residents with current → proposed level (R1→R2, R2→R3, R3→R4, R4→Archive)
-- Per-resident skip toggle; "Confirm" updates `residents.level`, inserts `promotion_log` row
-- ⚠️ Requires SQL migration — see `supabase/add_promotion_log.sql`
+- Triggers Oct–Dec on PD login · Modal with level changes · Per-resident skip
+- ⚠️ Requires `supabase/add_promotion_log.sql`
 
 ### Admin Panel
-- Residents: add/edit/archive/create login
-- Mentors: add/edit/assign/create login
-- Accounts: list all accounts, privilege grid
-- Deadlines & Tasks: manage announcements
-- Import Rota: Excel import wizard
-
-### UI / Design
-- Warm cream sidebar (`#ede5d8`) with terracotta accents (`#c96a4a`)
-- Mobile topbar for small screens
-- Account modal with username change + password change
+- Residents: add/edit/archive/login · Mentors: add/edit/assign/login
+- Accounts + privilege grid · Deadlines · Import Rota (Excel wizard)
 
 ---
 
@@ -193,46 +182,67 @@ PROMOTION_NEEDED // bool — set by checkPromotionNeeded() on PD login in Oct–
 | `add_attendance_comments.sql` | ✅ Run | Add comment column to attendance tables |
 | `fix_residents_attendance_rls.sql` | ✅ Run | RLS fix for privileged residents |
 | `add_announcements.sql` | ✅ Run | Announcements/deadlines table |
-| `add_counseling_countersign.sql` | ⏳ **NOT RUN YET** | Countersign columns + RPC on counseling table |
-| `add_promotion_log.sql` | ⏳ **NOT RUN YET** | promotion_log table for October auto-promotion |
+| `add_counseling_countersign.sql` | ⏳ **NOT RUN** | Countersign columns + RPC on counseling |
+| `add_promotion_log.sql` | ⏳ **NOT RUN** | promotion_log table |
+| `add_kpi_quarterly_proposals.sql` | ⏳ **NOT RUN** | kpi_quarterly + kpi_proposals tables; awards_honors + volunteering columns on kpi_scores |
 
 ---
 
-## Known Bugs / Gotchas (avoid repeating these)
+## Known Bugs / Gotchas — CRITICAL, read before every edit
 
-- **CDN pinning:** Supabase JS is pinned to `@2.39.0` — do NOT change to `@2` (unpinned). Newer versions broke `window.supabase`.
-- **async callbacks:** Any callback that uses `await` must be declared `async`. Missing `async` on `reader.onload` caused a site-wide crash (fixed Jul 2026).
-- **init() has try-catch:** `(async function init(){...})()` is wrapped in try-catch so render() always runs.
-- **GitHub Actions:** Custom deploy workflow at `.github/workflows/deploy.yml` retries 3x — don't remove it.
-- **After every change:** `cp SFH_Residency_Portal.html index.html` then commit+push both files.
+- **CDN pinning:** Supabase JS pinned to `@2.39.0` — do NOT change. Newer versions break `window.supabase`.
+- **async callbacks:** Any callback using `await` must be `async`. Missing it caused a site-wide crash (Jul 2026).
+- **Single script block = total failure:** One JS syntax error anywhere blanks the entire page with no visible error. Always validate before committing (see below).
+- **Curly/smart quotes in JS:** NEVER use `"` `"` `'` `'` inside JS strings or template expressions. They parse as separate tokens → "Unexpected string" crash. Use straight ASCII quotes only. This caused a blank-site incident Jul 2026.
+- **init() has try-catch:** So render() always runs even if data loading fails.
+- **GitHub Actions:** Custom deploy at `.github/workflows/deploy.yml` retries 3× — don't remove.
+- **After every change:** `cp SFH_Residency_Portal.html index.html` then commit+push both.
+
+---
+
+## MANDATORY: JS Syntax Check Before Every Commit
+
+```bash
+cd "/Users/drghof/Documents/Claude/Projects/Residents"
+node -e "
+const fs=require('fs');const html=fs.readFileSync('SFH_Residency_Portal.html','utf8');
+const re=/<script[^>]*>([\s\S]*?)<\/script>/g;let m,i=0;
+while((m=re.exec(html))!==null){i++;if(i===3)break;}
+fs.writeFileSync('/tmp/_portal_check.js',m[1]);
+" && node --check /tmp/_portal_check.js && echo "✅ JS syntax OK"
+```
+
+If this fails → fix before committing. Never commit a broken state to main.
 
 ---
 
 ## Features Pending (Build These Next)
 
-### 1. Quiz Persistence Verification
-Quizzes ARE DB-backed (`loadQuizzes()` fetches from `quizzes` + `quiz_scores`). The tables need to exist in Supabase. If they don't, run the relevant section of `schema.sql`.
+### 1. Cumulative KPI Page (planned, not built)
+Planned design:
+- Shows each resident's full training history (PGY-1 through PGY-4)
+- Grid of academic years — click a year → expands to: Yearly KPI achievements (visual badges/icons) → 4 quarters → click a quarter → Ongoing performance details (MM%, Teaching%, Quiz%)
+- Data sources: `kpi_scores` (yearly per academic_year) · `kpi_quarterly` (quarterly) · attendance/quiz (already in DB by block → map to academic year)
+- Add to MODS array with roles `["pd","deputy_pd","chief"]`
 
-### 2. KPI Report / PDF Export
-PD can export a resident's full KPI summary as a printable PDF or formatted report.
-
-### 3. Bulk Resident SMS/Email Notifications
-PD can push an announcement to all residents via a notification channel.
-
-### 4. Search / Global Filter
-Global search bar in sidebar to quickly jump to any resident, session, or quiz.
+### 2. ~~Quiz Persistence~~ ✅ Done (error banner added)
+### 3. ~~KPI PDF Export~~ ✅ Done
+### 4. ~~Global Search~~ ✅ Done
+### 5. ~~Bulk Broadcast~~ ✅ Done
 
 ---
 
 ## Workflow for New Sessions
 
 1. Read this file first
-2. Read `SFH_Residency_Portal.html` around the relevant function before editing
-3. Make changes to `SFH_Residency_Portal.html`
-4. `cp SFH_Residency_Portal.html index.html`
-5. `git add SFH_Residency_Portal.html index.html && git commit -m "..." && git push origin main`
-6. GitHub Pages auto-deploys in ~1 min
-7. **Update this file** if new features are added or status changes
+2. Run JS syntax check (above) to confirm current state is valid
+3. Read `SFH_Residency_Portal.html` around the relevant function before editing
+4. Make changes to `SFH_Residency_Portal.html`
+5. Run JS syntax check again
+6. `cp SFH_Residency_Portal.html index.html`
+7. `git add SFH_Residency_Portal.html index.html && git commit -m "..." && git push origin main`
+8. GitHub Pages auto-deploys in ~1 min
+9. **Update this file** if new features are added, SQL migrations run, or status changes
 
 ---
 
@@ -252,15 +262,20 @@ await sb.from("table").upsert({...}, { onConflict: "unique_col" });
 
 // Re-render after async:
 await loadSomething();
-render(); // or set({}) to trigger re-render
+render();
 
 // Color helpers:
-kpiColor(v) // v>=80 green, v>=60 amber, v<60 red (defined locally in functions)
+kpiColor(v) // v>=80 green, v>=60 amber, v<60 red (defined locally in functions that need it)
 
-// Modal overlay pattern (reuse existing CSS):
+// Modal overlay pattern:
 el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
   el("div",{cls:"modal-card",st:{width:"500px",maxWidth:"100%"}}, ...content...)
 )
-// Inject into render() before appendAccountModal(app):
+// Wire into render() before appendAccountModal(app):
 if(STATE.showMyModal) app.appendChild(renderMyModal());
+
+// KPI proposal flow:
+// submitKpiProposal(resId, fieldKey, quarter|null, note|null)
+// reviewProposal(proposalId, approve:bool)
+// getApprovedFields(resId) → Set of "fieldKey" strings
 ```
