@@ -25,6 +25,7 @@ A **single-page web app** for the Dr. Sulaiman Fakeeh Hospital Internal Medicine
 - **`render()`** — rebuilds the entire DOM from scratch on every state change. No diffing.
 - **Supabase client:** `const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)`
 - **After every change:** copy `SFH_Residency_Portal.html` → `index.html`, then commit and push to `main`.
+- **`.nojekyll` file is in repo root** — do not remove it (prevents GitHub Pages Jekyll errors).
 
 ---
 
@@ -55,7 +56,7 @@ MM_ATT          // {block: {date: {resident_id: status}}}   status = P|L|A|E|O
 MM_ATT_CMT      // {block: {date: {resident_id: comment}}}
 TEACH_ATT       // same shape as MM_ATT
 TEACH_ATT_CMT   // same shape as MM_ATT_CMT
-QUIZZES         // [{id, title, max, published, sc: {resident_id: score}}]
+QUIZZES         // [{id, title, max, published, sc: {resident_id: score}}] — DB-backed via quizzes + quiz_scores tables
 KPI_SCORES      // {resident_id: {commScore, researchDone, qiDone, bonusPublished, bonusOral, bonusPoster}}
 LEAVE_DATA      // {resident_id: {rota:[], manual:[], absences:[], requests:[]}}
 LEAVE_PENDING_COUNT  // int — pending leave requests for PD home alert
@@ -63,6 +64,7 @@ COUNSEL_CACHE   // {resident_id: [records] | null (loading) | undefined (not loa
 MENTOR_NOTES    // {resident_id: [notes]}
 ANNOUNCEMENTS   // [{id, title, description, deadline_date, category, target_all, target_level, target_resident_id}]
 ACCOUNT_PRIVS   // {profile_id: Set(privilege_key)}
+PROMOTION_NEEDED // bool — set by checkPromotionNeeded() on PD login in Oct–Dec
 ```
 
 ---
@@ -81,12 +83,13 @@ ACCOUNT_PRIVS   // {profile_id: Set(privilege_key)}
 | `teaching_attendance` | Teaching attendance (`status`, `comment`) |
 | `rotations` | Full rota grid (resident_id, block_number, rotation_name) |
 | `kpi_scores` | Manual KPI fields (committee score, research, QI, bonuses) |
-| `quizzes` | Quiz metadata |
-| `quiz_scores` | Per-resident quiz marks |
+| `quizzes` | Quiz metadata (title, date, max_score, block_number, published, assigned_mentor_id) |
+| `quiz_scores` | Per-resident quiz marks (quiz_id, resident_id, score) |
 | `leave_records` | All leave types: `manual`, `unapproved_absence`, `leave_request`, `leave_rejected` |
-| `counseling` | Counseling records |
+| `counseling` | Counseling records (includes countersign fields — see SQL migration below) |
 | `mentor_notes` | Mentor observations (type: strength/improvement/interest) |
 | `announcements` | PD-set deadlines/tasks with targeting |
+| `promotion_log` | Annual promotion history — one row per academic year |
 
 **Attendance status values:** `P` (Present) · `L` (Late) · `A` (Absent) · `E` (Excused) · `O` (On Leave)
 
@@ -108,8 +111,9 @@ ACCOUNT_PRIVS   // {profile_id: Set(privilege_key)}
 ### Morning Meetings & Teaching
 - Schedule management (add/edit/delete sessions)
 - Attendance logging with 5 statuses (P/L/A/E/O)
-- **Comment field per resident per session** (for committee members)
+- Comment field per resident per session (for committee members)
 - MM overview table (all residents × all sessions)
+- **Export to Excel** — "⬇ Export Excel" button in Attendance Table card header (both MM and Teaching)
 
 ### KPI Dashboard
 - Calculates: quiz avg, MM %, teaching %, presentation, committee, research, QI, bonus
@@ -117,21 +121,25 @@ ACCOUNT_PRIVS   // {profile_id: Set(privilege_key)}
 - PD/mentor can edit manual scores
 
 ### Quiz Marks
-- Add/edit/delete quizzes
+- Add/edit/delete quizzes (with delete confirmation)
 - Publish/unpublish scores
 - Per-resident mark entry
+- **Bulk import from Excel** — "⬆ Import Excel" in Resident Marks header (PD/assessor only); Col A = name, Col B = score
 
 ### Annual Leave
 - Rota-detected leave blocks
 - Manual leave addition (Annual + Educational, 28d/7d quotas)
-- **Leave Request Flow:** residents submit requests → PD approves/rejects → status shown to resident
+- Leave Request Flow: residents submit → PD approves/rejects → status shown
 - Pending request count shown on PD home screen as alert
 - Unapproved absences tracking
+- **Date validation:** rejects requests where 'To' is before 'From'
 
 ### Counseling
 - Add/edit/delete counseling records
-- Basic acknowledgement (acked boolean)
+- **Countersign flow:** resident receives red banner → clicks → sees record → clicks "Countersign / Acknowledge" → record locks with timestamp
+- PD sees Pending/Countersigned badge per record
 - Alert levels: green/yellow/red based on record count
+- ⚠️ Requires SQL migration — see `supabase/add_counseling_countersign.sql`
 
 ### Mentor Notes
 - Table view: rows = residents, columns = Strength / Improvement / Interest
@@ -143,7 +151,6 @@ ACCOUNT_PRIVS   // {profile_id: Set(privilege_key)}
 - Approved leave blocks
 - MM presentations + moderator duties (timed 7–9am)
 - Announced deadlines (all-day on due date)
-- Button: resident Rota view + Admin → Profile → Rota tab
 
 ### Announcements / Deadlines
 - PD creates: title, category, deadline, description, targeting (all/level/resident)
@@ -156,7 +163,13 @@ ACCOUNT_PRIVS   // {profile_id: Set(privilege_key)}
 - Full resident table with KPI, MM%, Teaching%, Quiz%, counseling count
 - At-risk highlight box (any metric < 60%)
 - Filter by level, sort by any column
-- Click row → jumps to resident's KPI tab
+
+### October Auto-Promotion
+- On PD login during Oct–Dec: checks `promotion_log` for current academic year
+- If not found, shows yellow alert on home screen
+- Modal: all residents with current → proposed level (R1→R2, R2→R3, R3→R4, R4→Archive)
+- Per-resident skip toggle; "Confirm" updates `residents.level`, inserts `promotion_log` row
+- ⚠️ Requires SQL migration — see `supabase/add_promotion_log.sql`
 
 ### Admin Panel
 - Residents: add/edit/archive/create login
@@ -172,32 +185,7 @@ ACCOUNT_PRIVS   // {profile_id: Set(privilege_key)}
 
 ---
 
-## Features Pending (Build These Next)
-
-### 1. Counseling Countersign Flow ← **RECOMMENDED NEXT**
-When PD issues a counseling record, the resident must formally acknowledge it (not just the current `acked` boolean). The countersign should:
-- Add `acknowledged_by` (profile_id) and `acknowledged_at` (timestamp) fields to `counseling` table
-- Resident sees a red banner on their home screen: "You have a counseling record requiring your signature"
-- Clicking it shows the record and an "I Acknowledge" button
-- Once signed: locked (can't be edited), shows timestamp + who signed
-- PD sees signed/unsigned status in the counseling view
-- SQL needed: `ALTER TABLE counseling ADD COLUMN acknowledged_by uuid REFERENCES auth.users(id); ALTER TABLE counseling ADD COLUMN acknowledged_at timestamptz;`
-
-### 2. October Auto-Promotion Review
-- On PD login after Oct 1 of a new academic year, show a promotion review screen
-- R1→R2, R2→R3, R3→R4, R4→archived
-- Add incoming R1 class
-- Log in `promotion_log` table so it doesn't re-prompt
-
-### 3. Quiz Bulk Import
-- Import quiz marks from Excel in the Quiz Marks module
-
-### 4. Attendance Export
-- Export attendance sheet to Excel per block
-
----
-
-## SQL Migration Files (in `supabase/` folder)
+## SQL Migrations (in `supabase/` folder)
 
 | File | Status | Purpose |
 |---|---|---|
@@ -205,6 +193,24 @@ When PD issues a counseling record, the resident must formally acknowledge it (n
 | `add_attendance_comments.sql` | ✅ Run | Add comment column to attendance tables |
 | `fix_residents_attendance_rls.sql` | ✅ Run | RLS fix for privileged residents |
 | `add_announcements.sql` | ✅ Run | Announcements/deadlines table |
+| `add_counseling_countersign.sql` | ⏳ **NOT RUN YET** | Countersign columns + RPC on counseling table |
+| `add_promotion_log.sql` | ⏳ **NOT RUN YET** | promotion_log table for October auto-promotion |
+
+---
+
+## Features Pending (Build These Next)
+
+### 1. Quiz Persistence Verification
+Quizzes ARE DB-backed (`loadQuizzes()` fetches from `quizzes` + `quiz_scores`). The tables need to exist in Supabase. If they don't, run the relevant section of `schema.sql`.
+
+### 2. KPI Report / PDF Export
+PD can export a resident's full KPI summary as a printable PDF or formatted report.
+
+### 3. Bulk Resident SMS/Email Notifications
+PD can push an announcement to all residents via a notification channel.
+
+### 4. Search / Global Filter
+Global search bar in sidebar to quickly jump to any resident, session, or quiz.
 
 ---
 
@@ -216,7 +222,7 @@ When PD issues a counseling record, the resident must formally acknowledge it (n
 4. `cp SFH_Residency_Portal.html index.html`
 5. `git add SFH_Residency_Portal.html index.html && git commit -m "..." && git push origin main`
 6. GitHub Pages auto-deploys in ~1 min
-7. Update this file if new features are added or status changes
+7. **Update this file** if new features are added or status changes
 
 ---
 
@@ -240,4 +246,11 @@ render(); // or set({}) to trigger re-render
 
 // Color helpers:
 kpiColor(v) // v>=80 green, v>=60 amber, v<60 red (defined locally in functions)
+
+// Modal overlay pattern (reuse existing CSS):
+el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
+  el("div",{cls:"modal-card",st:{width:"500px",maxWidth:"100%"}}, ...content...)
+)
+// Inject into render() before appendAccountModal(app):
+if(STATE.showMyModal) app.appendChild(renderMyModal());
 ```
