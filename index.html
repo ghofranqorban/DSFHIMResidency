@@ -1712,17 +1712,24 @@ function renderRota(){
   const u=STATE.user;
   const tabs=["block","timeline","table"];
   const tabLabels={"block":"Block View","timeline":"Resident Timeline","table":"Full Table"};
-  // For residents: show only their own timeline + calendar download
+  // For residents: 3-tab view — Distribution, My Rota, Full Table
   const isResident=u.role==="resident";
   if(isResident){
-    const res=resById(u.rid);
+    const resTab=STATE.rotaResTab||"my";
     return el("div",{cls:"content"},
       el("div",{cls:"flex-gap",st:{marginBottom:"16px",flexWrap:"wrap",alignItems:"center"}},
         el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
-        el("h2",{st:{fontWeight:"800",color:"#111827"}},"My Rotation Schedule"),
-        el("button",{cls:"sbtn ghost",st:{fontSize:".8rem"},onClick:()=>downloadRotationICS(u.rid)},"📅 Download .ics")
+        el("h2",{st:{fontWeight:"800",color:"#111827"}},"Rota Schedule"),
+        resTab==="my"?el("button",{cls:"sbtn ghost",st:{fontSize:".8rem"},onClick:()=>downloadRotationICS(u.rid)},"📅 Download .ics"):null
       ),
-      renderRotaTimeline()
+      el("div",{cls:"tab-bar"},
+        el("span",{cls:"tab"+(resTab==="dist"?" on":""),onClick:()=>set({rotaResTab:"dist"})},"📋 Distribution"),
+        el("span",{cls:"tab"+(resTab==="my"?" on":""),onClick:()=>set({rotaResTab:"my"})},"🗓️ My Rota"),
+        el("span",{cls:"tab"+(resTab==="full"?" on":""),onClick:()=>set({rotaResTab:"full"})},"📊 Full Table")
+      ),
+      resTab==="dist"?renderRotaBlock():
+      resTab==="full"?renderRotaTable():
+      renderResidentOwnRota(u.rid)
     );
   }
   return el("div",{cls:"content"},
@@ -1870,6 +1877,40 @@ function renderRotaTimeline(){
             );
           })
         )
+      )
+    )
+  );
+}
+function renderResidentOwnRota(rid){
+  const res=resById(rid);
+  if(!res)return el("div",null,"Not found");
+  return el("div",{cls:"card"},
+    el("div",{cls:"flex-gap",st:{marginBottom:"14px"}},
+      avEl(res),
+      el("div",null,
+        el("div",{cls:"name"},res.name),
+        el("div",{cls:"sub"},"Mentor: "+mentorName(res.id))
+      ),
+      levelBadge(res.level)
+    ),
+    el("div",{st:{overflowX:"auto"}},
+      el("div",{st:{display:"flex",gap:"6px",minWidth:"max-content",paddingBottom:"6px"}},
+        ...ROTA_PERIODS.map((lbl,i)=>{
+          const n=i+1;
+          const info=rotCellInfo(res.id,n);
+          const rot=info.rot||"—";
+          const c=rotColor(rot);
+          const isCur=n===CURRENT_PERIOD;
+          return el("div",{
+            st:{background:c.bg,color:c.tx,borderRadius:"8px",padding:"8px 10px",minWidth:"70px",textAlign:"center",
+              border:isCur?"2px solid #f59e0b":"2px solid transparent"},
+            title:rot+(info.split?" (+ "+info.weeks+"wk AL)":"")
+          },
+            el("div",{st:{fontSize:".7rem",fontWeight:"700",color:"#94a3b8"}},"B"+n),
+            el("div",{st:{fontSize:".78rem",fontWeight:"700",marginTop:"4px"}},ROT_ABBR[rot]||rot),
+            info.split?el("div",{st:{fontSize:".6rem",fontWeight:"700",color:"#c2410c",background:"#fff7ed",borderRadius:"3px",marginTop:"3px",padding:"1px 4px"}},info.splitLabel):null
+          );
+        })
       )
     )
   );
