@@ -1727,8 +1727,8 @@ function renderRota(){
         el("span",{cls:"tab"+(resTab==="my"?" on":""),onClick:()=>set({rotaResTab:"my"})},"🗓️ My Rota"),
         el("span",{cls:"tab"+(resTab==="full"?" on":""),onClick:()=>set({rotaResTab:"full"})},"📊 Full Table")
       ),
-      resTab==="dist"?renderRotaBlock():
-      resTab==="full"?renderRotaTable():
+      resTab==="dist"?renderRotaBlock(RESIDENTS):
+      resTab==="full"?renderRotaTable(RESIDENTS):
       renderResidentOwnRota(u.rid)
     );
   }
@@ -1758,9 +1758,9 @@ function periodPills(cur,onChange){
     })
   );
 }
-function renderRotaBlock(){
+function renderRotaBlock(resOverride){
   const p=STATE.rotaPeriod;
-  const vr=visRes();
+  const vr=resOverride||visRes();
   // group by rotation
   const groups={};
   vr.forEach(r=>{
@@ -1915,8 +1915,8 @@ function renderResidentOwnRota(rid){
     )
   );
 }
-function renderRotaTable(){
-  const vr=visRes();
+function renderRotaTable(resOverride){
+  const vr=resOverride||visRes();
   const levels=["R4","R3","R2","R1"];
   let editVals={};
   async function saveTableEdit(){
