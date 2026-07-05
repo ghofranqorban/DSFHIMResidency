@@ -1977,10 +1977,8 @@ function renderMMAttendance(){
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
         el("span",{cls:"card-title",st:{margin:"0"}},"Attendance Table"),
-        el("div",{cls:"flex-gap",st:{marginLeft:"auto",gap:"8px"}},
-          sessions.length?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem"},onClick:()=>exportAttendance("mm",blk)},"⬇ Export Excel"):null,
-          canLogMMAttendance()&&(isPD()||sessions.some(s=>canEditAttSession(s.session_date)))?el("button",{cls:"sbtn primary",onClick:()=>set({mmShowEntry:!STATE.mmShowEntry,mmEntrySession:null})},STATE.mmShowEntry?"Hide Form":"Log Attendance"):null
-        )
+        sessions.length?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem",marginLeft:"auto"},onClick:()=>exportAttendance("mm",blk)},"⬇ Export Excel"):null,
+        canLogMMAttendance()&&(isPD()||sessions.some(s=>canEditAttSession(s.session_date)))?el("button",{cls:"sbtn primary",onClick:()=>set({mmShowEntry:!STATE.mmShowEntry,mmEntrySession:null})},STATE.mmShowEntry?"Hide Form":"Log Attendance"):null
       ),
       STATE.mmShowEntry?renderMMEntryForm(blk,sessions):null,
       el("div",{cls:"tbl-wrap"},
@@ -2276,10 +2274,8 @@ function renderTeachAttendance(){
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
         el("span",{cls:"card-title",st:{margin:"0"}},"Attendance Table"),
-        el("div",{cls:"flex-gap",st:{marginLeft:"auto",gap:"8px"}},
-          sessions.length?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem"},onClick:()=>exportAttendance("teach",blk)},"⬇ Export Excel"):null,
-          canLogTeachAttendance()&&(isPD()||sessions.some(s=>canEditAttSession(s.session_date)))?el("button",{cls:"sbtn primary",onClick:()=>set({teachShowEntry:!STATE.teachShowEntry,teachEntrySession:null})},STATE.teachShowEntry?"Hide Form":"Log Attendance"):null
-        )
+        sessions.length?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem",marginLeft:"auto"},onClick:()=>exportAttendance("teach",blk)},"⬇ Export Excel"):null,
+        canLogTeachAttendance()&&(isPD()||sessions.some(s=>canEditAttSession(s.session_date)))?el("button",{cls:"sbtn primary",onClick:()=>set({teachShowEntry:!STATE.teachShowEntry,teachEntrySession:null})},STATE.teachShowEntry?"Hide Form":"Log Attendance"):null
       ),
       STATE.teachShowEntry?renderTeachEntryForm(blk,sessions):null,
       sessions.length===0?el("p",{cls:"sh"},"No sessions."):
