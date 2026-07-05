@@ -1275,6 +1275,7 @@ const MODS=[
   {id:"mentornotes",label:"Mentor Notes",icon:"🗒️",desc:"Private observations for mentors",color:"#4a5e7a",roles:["pd","chief","consultant"]},
   {id:"admin",label:"PD Admin Panel",icon:"⚙️",desc:"Accounts, privileges & settings",color:"#2e3a4e",roles:["pd","deputy_pd"]},
   {id:"overview",label:"Overview Dashboard",icon:"🏠",desc:"Bird's-eye view of all residents' performance",color:"#c96a4a",roles:["pd","deputy_pd","chief"]},
+  {id:"kpi_exec",label:"Performance Report",icon:"🏆",desc:"Executive KPI — program health, top performers & resident drill-down",color:"#1a2a4a",roles:["pd","deputy_pd","chief"]},
 ];
 function renderSearchOverlay(){
   const q=(STATE.searchQ||"").trim().toLowerCase();
@@ -5395,6 +5396,423 @@ function renderProfileCounsel(res){
     )
   );
 }
+// ─── KPI EXECUTIVE OVERVIEW ──────────────────────────────────────────────────
+function renderKPIExecutive(){
+  const selYear=STATE.kpiExYear||CURRENT_ACADEMIC_YEAR;
+  const selResId=STATE.kpiExResident||null;
+  if(!document.getElementById("kpix-css")){
+    const s=document.createElement("style");
+    s.id="kpix-css";
+    s.textContent=".kpix-wrap{background:#080D1A;color:#fff;font-family:inherit;overflow-x:hidden}"+
+".kpix-section{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:40px 48px;box-sizing:border-box}"+
+".kpix-fade{opacity:0;transform:translateY(28px);transition:opacity .7s ease,transform .7s ease}"+
+".kpix-fade.kpix-vis{opacity:1;transform:none}"+
+".kpix-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:20px}"+
+".kpix-res-card:hover{background:rgba(255,255,255,.08)!important;transform:translateY(-3px)}"+
+".kpix-res-card{transition:background .2s,transform .2s}"+
+".kpix-year-card{transition:transform .25s,border-color .25s,box-shadow .25s}"+
+".kpix-year-card:hover{transform:translateY(-5px)}"+
+".kpix-yr-active:hover{box-shadow:0 0 40px rgba(212,175,55,.3)!important}"+
+"@keyframes kpix-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(7px)}}"+
+"@keyframes kpix-gold-pulse{0%,100%{box-shadow:0 0 0 rgba(212,175,55,0)}50%{box-shadow:0 0 28px rgba(212,175,55,.45)}}"+
+"@media(max-width:768px){.kpix-section{padding:28px 18px;min-height:auto;padding-top:48px;padding-bottom:48px}}";
+    document.head.appendChild(s);
+  }
+  function ring(score,sz,w,track,fill){
+    const r=(sz-w)/2,circ=2*Math.PI*r,pct=Math.min(Math.max(score,0),100)/100;
+    return el("svg",{width:sz,height:sz,viewBox:"0 0 "+sz+" "+sz,st:{display:"block",flexShrink:"0"}},
+      el("circle",{cx:sz/2,cy:sz/2,r,fill:"none",stroke:track||"rgba(255,255,255,.09)",strokeWidth:w}),
+      el("circle",{cx:sz/2,cy:sz/2,r,fill:"none",stroke:fill||"#D4AF37",strokeWidth:w,
+        strokeDasharray:(circ*pct)+" "+(circ*(1-pct)),strokeLinecap:"round",
+        transform:"rotate(-90 "+(sz/2)+" "+(sz/2)+")"})
+    );
+  }
+  function sc(v){return v>=80?"#D4AF37":v>=60?"#60A5FA":"#F87171";}
+  function ini(name){return(name||"").split(" ").slice(0,2).map(w=>w[0]||"").join("").toUpperCase();}
+  function sbar(label,val,max,color){
+    const pct=max!=null?Math.round(val/max*100):val;
+    const display=max!=null?(val+"/"+max):(val+"%");
+    return el("div",{st:{marginBottom:"13px"}},
+      el("div",{st:{display:"flex",justifyContent:"space-between",marginBottom:"4px"}},
+        el("span",{st:{fontSize:".8rem",color:"#94a3b8",fontWeight:"600"}},label),
+        el("span",{st:{fontSize:".8rem",color:color,fontWeight:"800"}},display)
+      ),
+      el("div",{st:{height:"6px",background:"rgba(255,255,255,.07)",borderRadius:"3px",overflow:"hidden"}},
+        el("div",{st:{width:Math.min(pct,100)+"%",height:"100%",background:color,borderRadius:"3px"}})
+      )
+    );
+  }
+  const active=RESIDENTS.filter(r=>r.active!==false);
+  const scored=active.map(r=>({...r,k:calcKPI(r.id)})).sort((a,b)=>b.k.overall-a.k.overall);
+  const total=scored.length||1;
+  const avgKPI=Math.round(scored.reduce((s,r)=>s+r.k.overall,0)/total);
+  const avgMM=Math.round(scored.reduce((s,r)=>s+r.k.mmPct,0)/total);
+  const avgTeach=Math.round(scored.reduce((s,r)=>s+r.k.tPct,0)/total);
+  const avgQuiz=Math.round(scored.reduce((s,r)=>s+r.k.qAvg,0)/total);
+  const top3=scored.slice(0,3);
+  function achCount(field){
+    return active.filter(r=>{
+      const af=getApprovedFields(r.id);const ks=KPI_SCORES[r.id]||{};
+      if(field==="publication")return af.has("publication")||ks.bonusPublished;
+      if(field==="qi")return af.has("qi")||ks.qiDone;
+      if(field==="oral")return af.has("oral")||ks.bonusOral;
+      if(field==="poster")return af.has("poster")||ks.bonusPoster;
+      if(field==="awards")return af.has("awards")||ks.awardsHonors;
+      if(field==="volunteering")return af.has("volunteering")||ks.volunteering;
+      return false;
+    }).length;
+  }
+  const avgComm=Math.round(scored.reduce((s,r)=>{const ks=KPI_SCORES[r.id]||{};return s+(ks.commScore||0);},0)/total);
+  function podCard(res,medal,medalIcon,ringColor,sz,padX,padY,fontSize,extraSt){
+    if(!res)return el("div",{st:{width:(sz+padX*2+32)+"px"}});
+    const k=res.k;
+    return el("div",{cls:"kpix-card",st:{
+      display:"flex",flexDirection:"column",alignItems:"center",gap:"10px",
+      padding:padY+"px "+padX+"px",minWidth:(sz+padX*2)+"px",...extraSt
+    }},
+      el("div",{st:{fontSize:"1.6rem",marginTop:"-6px"}},medalIcon),
+      el("div",{st:{position:"relative",width:sz+"px",height:sz+"px"}},
+        el("div",{st:{position:"absolute",inset:"0"}},ring(k.overall,sz,sz>90?8:6,"rgba(255,255,255,.08)",ringColor)),
+        el("div",{st:{position:"absolute",inset:(sz>90?8:6)+"px",borderRadius:"50%",
+          background:"rgba(255,255,255,.04)",display:"flex",alignItems:"center",justifyContent:"center",
+          fontSize:fontSize+"rem",fontWeight:"900",color:ringColor}},ini(res.name))
+      ),
+      el("div",{st:{color:"#fff",fontWeight:"700",fontSize:".85rem",textAlign:"center",lineHeight:"1.3"}},res.name),
+      el("div",{st:{color:"#94a3b8",fontSize:".72rem"}},res.level),
+      el("div",{st:{color:ringColor,fontWeight:"900",fontSize:"1.3rem"}},k.overall+"%"),
+      el("div",{st:{color:"rgba(255,255,255,.25)",fontSize:".68rem",fontWeight:"700",letterSpacing:".1em"}},medal)
+    );
+  }
+  // ── Section 1 ──
+  const sec1=el("div",{cls:"kpix-section kpix-fade",id:"kpix-s1",st:{
+    background:"radial-gradient(ellipse at top center,#0f172a 0%,#080D1A 70%)",
+    borderBottom:"1px solid rgba(255,255,255,.05)"
+  }},
+    el("div",{st:{textAlign:"center",marginBottom:"24px"}},
+      el("div",{st:{fontSize:".72rem",color:"#D4AF37",letterSpacing:".2em",fontWeight:"700",textTransform:"uppercase",marginBottom:"10px"}},
+        "Dr. Solaiman Fakeeh Hospital \u00B7 Internal Medicine"
+      ),
+      el("h1",{st:{fontSize:"clamp(1.4rem,4vw,2.5rem)",fontWeight:"900",color:"#fff",margin:"0 0 6px",letterSpacing:"-.02em"}},
+        "Residency Performance Report"
+      ),
+      el("div",{st:{color:"#475569",fontSize:".85rem",fontWeight:"600"}},"Academic Year "+selYear)
+    ),
+    el("div",{st:{display:"flex",alignItems:"flex-end",justifyContent:"center",gap:"36px",flexWrap:"wrap",marginBottom:"28px"}},
+      el("div",{st:{display:"flex",flexDirection:"column",alignItems:"center",gap:"12px",marginBottom:"10px"}},
+        el("div",{st:{position:"relative",width:"148px",height:"148px"}},
+          el("div",{st:{position:"absolute",inset:"0"}},ring(avgKPI,148,11,"rgba(255,255,255,.07)",sc(avgKPI))),
+          el("div",{st:{position:"absolute",inset:"11px",borderRadius:"50%",background:"rgba(255,255,255,.03)",
+            display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"2px"}},
+            el("div",{st:{fontSize:"2.1rem",fontWeight:"900",color:sc(avgKPI),lineHeight:"1"}},avgKPI+"%"),
+            el("div",{st:{fontSize:".58rem",color:"#475569",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase"}},"Cohort KPI")
+          )
+        ),
+        el("div",{st:{textAlign:"center"}},
+          el("div",{st:{color:"#fff",fontWeight:"700",fontSize:".82rem"}},"Program Health"),
+          el("div",{st:{color:"#334155",fontSize:".72rem"}},total+" active residents")
+        )
+      ),
+      el("div",{st:{display:"flex",alignItems:"flex-end",gap:"10px"}},
+        podCard(top3[1],"2ND PLACE","🥈","#C0C0C0",82,16,18,1.1,{borderColor:"rgba(192,192,192,.25)"}),
+        podCard(top3[0],"1ST PLACE","🥇","#D4AF37",102,20,24,1.4,{
+          background:"rgba(212,175,55,.1)",borderColor:"rgba(212,175,55,.45)",
+          boxShadow:"0 0 50px rgba(212,175,55,.2),0 20px 60px rgba(0,0,0,.5)",
+          animation:"kpix-gold-pulse 3s ease-in-out infinite"
+        }),
+        podCard(top3[2],"3RD PLACE","🥉","#CD7F32",82,16,18,1.1,{borderColor:"rgba(205,127,50,.25)"})
+      )
+    ),
+    el("div",{st:{display:"flex",gap:"10px",flexWrap:"wrap",justifyContent:"center"}},
+      ...[
+        {icon:"📄",label:"Research",val:achCount("publication"),clr:"#60A5FA"},
+        {icon:"🔬",label:"QI Projects",val:achCount("qi"),clr:"#34D399"},
+        {icon:"🎤",label:"Oral Pres.",val:achCount("oral"),clr:"#A78BFA"},
+        {icon:"\uD83D\uDDBC",label:"Poster Pres.",val:achCount("poster"),clr:"#F472B6"},
+        {icon:"🏆",label:"Awards",val:achCount("awards"),clr:"#D4AF37"},
+        {icon:"🤝",label:"Volunteering",val:achCount("volunteering"),clr:"#4ADE80"},
+      ].map(a=>el("div",{cls:"kpix-card",st:{
+        display:"flex",flexDirection:"column",alignItems:"center",gap:"4px",padding:"12px 14px",minWidth:"88px"
+      }},
+        el("div",{st:{fontSize:"1.2rem"}},a.icon),
+        el("div",{st:{fontSize:"1.4rem",fontWeight:"900",color:a.clr}},a.val+"/"+total),
+        el("div",{st:{fontSize:".68rem",color:"#475569",fontWeight:"600",textAlign:"center"}},a.label)
+      ))
+    ),
+    el("div",{st:{textAlign:"center",marginTop:"24px",color:"#1e293b",fontSize:".78rem",animation:"kpix-bounce 2.4s ease-in-out infinite"}},"↓ Scroll to explore")
+  );
+  // ── Section 2 ──
+  const YEARS=["2025-26","2024-25","2023-24","2022-23"];
+  const sec2=el("div",{cls:"kpix-section kpix-fade",id:"kpix-s2",st:{
+    background:"#080D1A",borderBottom:"1px solid rgba(255,255,255,.05)"
+  }},
+    el("div",{st:{textAlign:"center",marginBottom:"36px"}},
+      el("div",{st:{fontSize:".72rem",color:"#D4AF37",letterSpacing:".2em",fontWeight:"700",textTransform:"uppercase",marginBottom:"10px"}},"Program History"),
+      el("h2",{st:{fontSize:"clamp(1.3rem,3vw,2rem)",fontWeight:"900",color:"#fff",margin:"0 0 8px"}},"Academic Years"),
+      el("div",{st:{color:"#475569",fontSize:".82rem"}},"Select a year to explore detailed performance")
+    ),
+    el("div",{st:{display:"flex",gap:"18px",justifyContent:"center",flexWrap:"wrap"}},
+      ...YEARS.map(yr=>{
+        const isActive=yr==="2025-26";
+        const isSel=selYear===yr;
+        return el("div",{
+          cls:"kpix-card kpix-year-card"+(isActive?" kpix-yr-active":""),
+          st:{
+            padding:"26px 20px",minWidth:"165px",flex:"1",maxWidth:"215px",
+            cursor:isActive?"pointer":"default",display:"flex",flexDirection:"column",gap:"14px",
+            background:isSel?"rgba(212,175,55,.12)":isActive?"rgba(255,255,255,.04)":"rgba(255,255,255,.015)",
+            borderColor:isSel?"rgba(212,175,55,.5)":isActive?"rgba(255,255,255,.09)":"rgba(255,255,255,.04)",
+            boxShadow:isSel?"0 0 36px rgba(212,175,55,.18)":"none",
+            opacity:isActive?"1":".4"
+          },
+          onClick:isActive?()=>{
+            set({kpiExYear:yr,kpiExResident:null});
+            setTimeout(()=>document.getElementById("kpix-s3")?.scrollIntoView({behavior:"smooth"}),60);
+          }:undefined
+        },
+          el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
+            el("div",{st:{fontSize:"1.05rem",fontWeight:"900",color:isActive?"#fff":"#475569"}},"AY "+yr),
+            isSel?el("div",{st:{color:"#D4AF37",fontSize:".75rem",fontWeight:"700"}},"● Active"):null
+          ),
+          isActive?el("div",null,
+            el("div",{st:{fontSize:"2.1rem",fontWeight:"900",color:sc(avgKPI),lineHeight:"1"}},avgKPI+"%"),
+            el("div",{st:{color:"#334155",fontSize:".72rem",marginTop:"2px"}},"Cohort Average"),
+            el("div",{st:{height:"1px",background:"rgba(255,255,255,.06)",margin:"12px 0"}}),
+            el("div",{st:{display:"flex",flexDirection:"column",gap:"6px"}},
+              el("div",{st:{display:"flex",justifyContent:"space-between",fontSize:".76rem"}},
+                el("span",{st:{color:"#475569"}},"Research"),el("span",{st:{color:"#60A5FA",fontWeight:"700"}},achCount("publication")+"/"+total)
+              ),
+              el("div",{st:{display:"flex",justifyContent:"space-between",fontSize:".76rem"}},
+                el("span",{st:{color:"#475569"}},"QI Projects"),el("span",{st:{color:"#34D399",fontWeight:"700"}},achCount("qi")+"/"+total)
+              ),
+              el("div",{st:{display:"flex",justifyContent:"space-between",fontSize:".76rem"}},
+                el("span",{st:{color:"#475569"}},"Avg MM Att."),el("span",{st:{color:sc(avgMM),fontWeight:"700"}},avgMM+"%")
+              )
+            ),
+            el("div",{st:{marginTop:"12px",padding:"9px 12px",background:"rgba(212,175,55,.1)",borderRadius:"10px",textAlign:"center",color:"#D4AF37",fontSize:".76rem",fontWeight:"700"}},
+              "Tap to view details →"
+            )
+          ):el("div",{st:{display:"flex",flexDirection:"column",alignItems:"center",gap:"10px",paddingTop:"12px"}},
+            el("div",{st:{fontSize:"1.8rem"}},"🔒"),
+            el("div",{st:{color:"#334155",fontSize:".76rem",fontWeight:"600",textAlign:"center"}},"Under Progress"),
+            el("div",{st:{color:"#1e293b",fontSize:".7rem",textAlign:"center"}},"Data import pending")
+          )
+        );
+      })
+    )
+  );
+  // ── Section 3 ──
+  const mmTotalSessions=Object.values(MM_ATT).reduce((s,b)=>s+Object.keys(b).length,0);
+  const teachTotalSessions=Object.values(TEACH_ATT).reduce((s,b)=>s+Object.keys(b).length,0);
+  const sec3=el("div",{cls:"kpix-section kpix-fade",id:"kpix-s3",st:{
+    background:"radial-gradient(ellipse at bottom right,#0f1a2e 0%,#080D1A 70%)",
+    borderBottom:"1px solid rgba(255,255,255,.05)"
+  }},
+    el("div",{st:{marginBottom:"28px"}},
+      el("div",{st:{fontSize:".72rem",color:"#D4AF37",letterSpacing:".2em",fontWeight:"700",textTransform:"uppercase",marginBottom:"8px"}},"Year Breakdown \u00B7 "+selYear),
+      el("h2",{st:{fontSize:"clamp(1.3rem,3vw,2rem)",fontWeight:"900",color:"#fff",margin:"0"}},"Cohort KPI Summary")
+    ),
+    el("div",{st:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:"22px"}},
+      el("div",{cls:"kpix-card",st:{padding:"26px"}},
+        el("div",{st:{fontSize:".7rem",color:"#D4AF37",letterSpacing:".15em",fontWeight:"700",textTransform:"uppercase",marginBottom:"18px"}},"🏆 Yearly Achievements"),
+        sbar("Committee Score (avg)",avgComm,10,"#A78BFA"),
+        sbar("Research Publications",achCount("publication"),total,"#60A5FA"),
+        sbar("QI Projects",achCount("qi"),total,"#34D399"),
+        sbar("Oral Presentations",achCount("oral"),total,"#F472B6"),
+        sbar("Poster Presentations",achCount("poster"),total,"#FB923C"),
+        sbar("Awards & Honors",achCount("awards"),total,"#D4AF37"),
+        sbar("Volunteering",achCount("volunteering"),total,"#4ADE80")
+      ),
+      el("div",{cls:"kpix-card",st:{padding:"26px"}},
+        el("div",{st:{fontSize:".7rem",color:"#60A5FA",letterSpacing:".15em",fontWeight:"700",textTransform:"uppercase",marginBottom:"18px"}},"📊 Continuous KPI (Cohort Avg.)"),
+        sbar("MM Attendance",avgMM,null,sc(avgMM)),
+        sbar("Teaching Attendance",avgTeach,null,sc(avgTeach)),
+        sbar("Quiz Average",avgQuiz,null,sc(avgQuiz)),
+        el("div",{st:{height:"1px",background:"rgba(255,255,255,.06)",margin:"16px 0"}}),
+        el("div",{st:{fontSize:".7rem",color:"#475569",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",marginBottom:"12px"}},"Session Count"),
+        el("div",{st:{display:"flex",gap:"10px",flexWrap:"wrap"}},
+          ...[
+            {label:"MM Sessions",val:mmTotalSessions,clr:"#94a3b8"},
+            {label:"Teaching Sessions",val:teachTotalSessions,clr:"#94a3b8"},
+            {label:"MM Presenters",val:MM_SESSIONS.filter(m=>m.presenter_resident_id).length,clr:"#60A5FA"},
+          ].map(x=>el("div",{st:{flex:"1",padding:"12px 10px",background:"rgba(255,255,255,.04)",borderRadius:"10px",textAlign:"center",minWidth:"80px"}},
+            el("div",{st:{fontSize:"1.4rem",fontWeight:"900",color:x.clr}},x.val),
+            el("div",{st:{fontSize:".68rem",color:"#334155",marginTop:"2px"}},x.label)
+          ))
+        )
+      )
+    ),
+    el("div",{st:{textAlign:"center",marginTop:"22px",color:"#1e293b",fontSize:".78rem"}},"↓ Scroll to see individual residents")
+  );
+  // ── Section 4 ──
+  const LEVELS=["R4","R3","R2","R1"];
+  const sec4=el("div",{cls:"kpix-section kpix-fade",id:"kpix-s4",st:{
+    background:"#080D1A",
+    borderBottom:selResId?"1px solid rgba(255,255,255,.05)":"none"
+  }},
+    el("div",{st:{marginBottom:"24px"}},
+      el("div",{st:{fontSize:".72rem",color:"#D4AF37",letterSpacing:".2em",fontWeight:"700",textTransform:"uppercase",marginBottom:"8px"}},"Residents \u00B7 "+selYear),
+      el("h2",{st:{fontSize:"clamp(1.3rem,3vw,2rem)",fontWeight:"900",color:"#fff",margin:"0 0 6px"}},"Individual Performance"),
+      el("div",{st:{color:"#475569",fontSize:".8rem"}},"Tap a resident to view their full KPI profile \u00B7 \u2605 = Outstanding (\u226580%)")
+    ),
+    el("div",{st:{display:"flex",flexDirection:"column",gap:"26px"}},
+      ...LEVELS.map(lvl=>{
+        const grp=scored.filter(r=>r.level===lvl);
+        if(!grp.length)return null;
+        return el("div",null,
+          el("div",{st:{fontSize:".7rem",color:"#60A5FA",letterSpacing:".15em",fontWeight:"700",textTransform:"uppercase",marginBottom:"14px"}},
+            lvl+" \u00B7 "+grp.length+" resident"+(grp.length>1?"s":"")
+          ),
+          el("div",{st:{display:"flex",flexWrap:"wrap",gap:"10px"}},
+            ...grp.map(r=>{
+              const isGold=r.k.overall>=80;
+              const isSel=selResId===r.id;
+              const clr=sc(r.k.overall);
+              return el("div",{
+                cls:"kpix-card kpix-res-card",
+                st:{
+                  display:"flex",flexDirection:"column",alignItems:"center",gap:"7px",
+                  padding:"14px 12px",width:"112px",cursor:"pointer",
+                  background:isSel?"rgba(212,175,55,.15)":isGold?"rgba(212,175,55,.06)":"rgba(255,255,255,.03)",
+                  borderColor:isSel?"rgba(212,175,55,.55)":isGold?"rgba(212,175,55,.28)":"rgba(255,255,255,.06)",
+                  boxShadow:isGold?"0 0 18px rgba(212,175,55,.14)":"none"
+                },
+                onClick:()=>{
+                  set({kpiExResident:r.id});
+                  setTimeout(()=>document.getElementById("kpix-s5")?.scrollIntoView({behavior:"smooth"}),60);
+                }
+              },
+                el("div",{st:{position:"relative",width:"68px",height:"68px"}},
+                  el("div",{st:{position:"absolute",inset:"0"}},ring(r.k.overall,68,5,"rgba(255,255,255,.08)",clr)),
+                  el("div",{st:{position:"absolute",inset:"5px",borderRadius:"50%",
+                    background:isGold?"rgba(212,175,55,.12)":"rgba(255,255,255,.04)",
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    fontSize:".85rem",fontWeight:"800",color:clr}},ini(r.name)),
+                  isGold?el("div",{st:{position:"absolute",top:"-5px",right:"-5px",
+                    background:"#D4AF37",borderRadius:"50%",width:"17px",height:"17px",
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    fontSize:"9px",boxShadow:"0 0 8px rgba(212,175,55,.7)"}},"★"):null
+                ),
+                el("div",{st:{color:"#e2e8f0",fontWeight:"600",fontSize:".74rem",textAlign:"center",
+                  maxWidth:"100px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},
+                  r.name.split(" ")[0]
+                ),
+                el("div",{st:{color:clr,fontWeight:"900",fontSize:".85rem"}},r.k.overall+"%")
+              );
+            })
+          )
+        );
+      }).filter(Boolean)
+    )
+  );
+  // ── Section 5 ──
+  let sec5=null;
+  if(selResId){
+    const res5=scored.find(r=>r.id===selResId);
+    if(res5){
+      const k=res5.k;
+      const ks=KPI_SCORES[selResId]||{};
+      const approvedProps=KPI_PROPOSALS.filter(p=>p.resident_id===selResId&&p.status==="approved");
+      const FIELD_LABELS={publication:"Research Publication",qi:"QI Project",oral:"Oral Presentation",poster:"Poster Presentation",awards:"Award / Honor",volunteering:"Volunteering"};
+      const FIELD_CLR={publication:"#60A5FA",qi:"#34D399",oral:"#A78BFA",poster:"#F472B6",awards:"#D4AF37",volunteering:"#4ADE80"};
+      function parseNote(note){if(!note)return{};try{return JSON.parse(note);}catch(e){return{raw:note};}}
+      const kRows=[
+        {label:"MM Attendance",val:k.mmPct,sub:k.mmAtt+"/"+k.mmTotal+" sessions",w:KPI_W.mm},
+        {label:"Teaching Attendance",val:k.tPct,sub:k.tAtt+"/"+k.tTotal+" sessions",w:KPI_W.teach},
+        {label:"Quiz Average",val:k.qAvg,sub:QUIZZES.filter(q=>q.published&&q.sc[selResId]!=null).length+" quizzes",w:KPI_W.quiz},
+        {label:"Presenter / Moderator",val:k.pres?100:0,sub:k.presCount+" MM sessions",w:KPI_W.pres},
+        {label:"Committee Score",val:k.commPct,sub:"Score "+(ks.commScore||0)+"/10",w:KPI_W.comm},
+        {label:"QI Project",val:k.qiPct,sub:k.qiPct?"Completed":"Not completed",w:KPI_W.qi},
+        {label:"Research Publication",val:k.pubPct,sub:k.pubPct?"Submitted":"Not submitted",w:KPI_W.pub},
+        {label:"Oral Presentation",val:k.oralPct,sub:"",w:KPI_W.oral},
+        {label:"Poster Presentation",val:k.posterPct,sub:"",w:KPI_W.poster},
+        {label:"Awards / Honors",val:k.awardsPct,sub:"",w:KPI_W.awards},
+        {label:"Volunteering",val:k.volunteeringPct,sub:"",w:KPI_W.volunteering},
+      ];
+      sec5=el("div",{cls:"kpix-section kpix-fade",id:"kpix-s5",st:{
+        background:"radial-gradient(ellipse at top left,#0f1a2e 0%,#080D1A 70%)"
+      }},
+        el("div",{st:{display:"flex",alignItems:"center",gap:"16px",marginBottom:"26px",flexWrap:"wrap"}},
+          el("button",{st:{background:"rgba(255,255,255,.07)",border:"1px solid rgba(255,255,255,.12)",
+            color:"#94a3b8",padding:"8px 16px",borderRadius:"10px",cursor:"pointer",fontSize:".8rem",fontWeight:"600"},
+            onClick:()=>{
+              set({kpiExResident:null});
+              setTimeout(()=>document.getElementById("kpix-s4")?.scrollIntoView({behavior:"smooth"}),60);
+            }},"← Back to Roster"),
+          el("div",null,
+            el("div",{st:{fontSize:".7rem",color:"#D4AF37",letterSpacing:".15em",fontWeight:"700",textTransform:"uppercase",marginBottom:"4px"}},res5.level+" \u00B7 KPI Profile"),
+            el("h2",{st:{fontSize:"clamp(1.1rem,2.5vw,1.7rem)",fontWeight:"900",color:"#fff",margin:"0"}},res5.name)
+          ),
+          el("div",{st:{marginLeft:"auto",display:"flex",flexDirection:"column",alignItems:"center",gap:"4px"}},
+            el("div",{st:{position:"relative",width:"76px",height:"76px"}},
+              el("div",{st:{position:"absolute",inset:"0"}},ring(k.overall,76,6,"rgba(255,255,255,.08)",sc(k.overall))),
+              el("div",{st:{position:"absolute",inset:"6px",borderRadius:"50%",background:"rgba(255,255,255,.04)",
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1rem",fontWeight:"900",color:sc(k.overall)}},k.overall+"%")
+            ),
+            el("div",{st:{color:"#475569",fontSize:".68rem",fontWeight:"600"}},"Overall KPI")
+          )
+        ),
+        el("div",{st:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:"22px"}},
+          el("div",{cls:"kpix-card",st:{padding:"24px",overflowY:"auto",maxHeight:"70vh"}},
+            el("div",{st:{fontSize:".7rem",color:"#D4AF37",letterSpacing:".15em",fontWeight:"700",textTransform:"uppercase",marginBottom:"16px"}},"Score Breakdown"),
+            ...kRows.map(row=>el("div",{st:{marginBottom:"13px"}},
+              el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"4px"}},
+                el("div",null,
+                  el("span",{st:{fontSize:".8rem",color:"#e2e8f0",fontWeight:"600"}},row.label),
+                  row.sub?el("span",{st:{fontSize:".7rem",color:"#334155",marginLeft:"8px"}},row.sub):null
+                ),
+                el("div",{st:{display:"flex",alignItems:"center",gap:"5px"}},
+                  el("span",{st:{fontSize:".68rem",color:"#334155"}},"x"+row.w+"%"),
+                  el("span",{st:{fontSize:".8rem",fontWeight:"900",color:sc(row.val)}},row.val+"%")
+                )
+              ),
+              el("div",{st:{height:"5px",background:"rgba(255,255,255,.06)",borderRadius:"3px",overflow:"hidden"}},
+                el("div",{st:{width:row.val+"%",height:"100%",background:sc(row.val),borderRadius:"3px"}})
+              )
+            ))
+          ),
+          el("div",{cls:"kpix-card",st:{padding:"24px",overflowY:"auto",maxHeight:"70vh"}},
+            el("div",{st:{fontSize:".7rem",color:"#60A5FA",letterSpacing:".15em",fontWeight:"700",textTransform:"uppercase",marginBottom:"16px"}},
+              "Approved Achievements ("+approvedProps.length+")"
+            ),
+            approvedProps.length===0?
+              el("div",{st:{color:"#334155",fontSize:".82rem",textAlign:"center",padding:"40px 0"}},"No approved achievements yet"):
+              el("div",{st:{display:"flex",flexDirection:"column",gap:"12px"}},
+                ...approvedProps.map(p=>{
+                  const d=parseNote(p.note);
+                  const label=FIELD_LABELS[p.field_key]||p.field_key;
+                  const clr=FIELD_CLR[p.field_key]||"#94a3b8";
+                  return el("div",{st:{
+                    background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",
+                    borderLeft:"3px solid "+clr,borderRadius:"10px",padding:"14px 16px"
+                  }},
+                    el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}},
+                      el("div",{st:{color:clr,fontWeight:"700",fontSize:".76rem",textTransform:"uppercase",letterSpacing:".08em"}},label),
+                      p.reviewed_at?el("div",{st:{color:"#334155",fontSize:".7rem"}},fmtDate(p.reviewed_at.slice(0,10))):null
+                    ),
+                    d.title?el("div",{st:{color:"#e2e8f0",fontWeight:"600",fontSize:".85rem",marginBottom:"3px"}},d.title):null,
+                    d.journal?el("div",{st:{color:"#64748b",fontSize:".77rem"}},d.journal+(d.year?" \u00B7 "+d.year:"")):null,
+                    d.authors?el("div",{st:{color:"#475569",fontSize:".74rem",marginTop:"2px"}},"Authors: "+d.authors):null,
+                    d.event?el("div",{st:{color:"#64748b",fontSize:".77rem"}},d.event+(d.date?" \u00B7 "+d.date:"")):null,
+                    d.org?el("div",{st:{color:"#64748b",fontSize:".77rem"}},d.org):null,
+                    d.supervisor_name?el("div",{st:{color:"#64748b",fontSize:".77rem"}},"Supervisor: "+d.supervisor_name):null,
+                    d.raw?el("div",{st:{color:"#64748b",fontSize:".77rem"}},d.raw):null
+                  );
+                })
+              )
+          )
+        )
+      );
+    }
+  }
+  const wrap=el("div",{cls:"kpix-wrap"},sec1,sec2,sec3,sec4,sec5);
+  setTimeout(()=>{
+    const obs=new IntersectionObserver(entries=>{
+      entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add("kpix-vis");});
+    },{threshold:0.06});
+    wrap.querySelectorAll(".kpix-fade").forEach(s=>obs.observe(s));
+  },0);
+  return wrap;
+}
 // ─── MAIN RENDER ─────────────────────────────────────────────────────────────
 function render(){
   const app=document.getElementById("app");
@@ -5426,6 +5844,7 @@ function render(){
         case"mentornotes":content=renderMentorNotes();break;
         case"admin":content=renderAdmin();break;
         case"overview":content=renderPDOverview();break;
+        case"kpi_exec":content=renderKPIExecutive();break;
         default:content=renderModGrid();
       }
     }
