@@ -544,11 +544,20 @@ function rotCellInfo(resId,block){
   const splitLabel=split?(meta.position==="end"?"AL: Wk 3-4":"AL: Wk 1-2"):"";
   return{rot,split,weeks:meta?.weeks||0,position:meta?.position||"none",splitLabel};
 }
-let QUIZZES=[
-  {id:1,title:"Cardiology Quiz",date:"2026-04-10",block:7,max:20,published:false,assigned_mentor_id:null,sc:{}},
-  {id:2,title:"Nephrology Quiz",date:"2026-05-10",block:8,max:20,published:false,assigned_mentor_id:null,sc:{}},
-  {id:3,title:"GI Quiz",date:"2026-06-10",block:9,max:20,published:false,assigned_mentor_id:null,sc:{}}
-];
+let QUIZZES=[];
+async function loadQuizzes(){
+  const[{data:qdata,error:qerr},{data:scdata,error:scerr}]=await Promise.all([
+    sb.from("quizzes").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("date"),
+    sb.from("quiz_scores").select("*")
+  ]);
+  if(qerr){console.warn("quizzes load error (table may not exist yet)",qerr.message);return;}
+  const scByQuiz={};
+  (scdata||[]).forEach(s=>{
+    if(!scByQuiz[s.quiz_id])scByQuiz[s.quiz_id]={};
+    scByQuiz[s.quiz_id][s.resident_id]=s.score;
+  });
+  QUIZZES=(qdata||[]).map(q=>({id:q.id,title:q.title,date:q.date,block:q.block_number,max:q.max_score,published:q.published,assigned_mentor_id:q.assigned_mentor_id,sc:scByQuiz[q.id]||{}}));
+}
 let LEAVE_DATA={};
 function buildLeaveData(){
   RESIDENTS.forEach(r=>{
@@ -591,7 +600,7 @@ async function saveKpiScore(resId,patch){
   if(error)console.error("saveKpiScore error",error);
   render();
 }
-let nextQuizId=4;
+// quiz IDs are now DB-generated; no local counter needed
 // ─── LEAVE RECORDS (DB-backed: table `leave_records` — manual approved leave +
 // unapproved absences; rota-derived leave lives in the `rotations` table above
 // via leave_weeks/leave_position and is merged in by buildLeaveData()) ───────
@@ -743,6 +752,7 @@ let STATE={
   rotaImportStep:1,rotaImportSheet:null,
   annShowForm:false,annEditId:null,annTargetType:"all",
   ovLevel:"all",ovSort:"name",
+  showPromoModal:false,promoSkip:{},
 };
 // In-memory scratch state for the rota-import wizard (not part of STATE/render diffing
 // since it holds large parsed workbook data + per-row user picks; wizard steps are
@@ -1059,6 +1069,7 @@ function renderLogin(){
     loadRotations();
     loadLeaveRecords();
     loadAnnouncements();
+    loadQuizzes().then(render);
     render();
   }
   return el("div",{cls:"login-wrap"},
@@ -1322,6 +1333,11 @@ function renderModGrid(){
   if(PENDING_COUNSEL_COUNT>0) alerts.push(
     el("div",{cls:"alert-red",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({mod:"counseling"})},
       "🚨 You have "+PENDING_COUNSEL_COUNT+" counseling record"+(PENDING_COUNSEL_COUNT>1?"s":"")+" awaiting your countersignature. Click to review."
+    )
+  );
+  if(isPD()&&PROMOTION_NEEDED) alerts.push(
+    el("div",{cls:"alert-yellow",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({showPromoModal:true})},
+      "🎓 Annual promotion review due — AY "+(CURRENT_ACADEMIC_YEAR+1)+"–"+(CURRENT_ACADEMIC_YEAR+2)+" level changes pending. Click to review."
     )
   );
   if((isPD()||u.role==="chief")&&LEAVE_PENDING_COUNT>0) alerts.push(
@@ -2412,6 +2428,84 @@ function renderTeachOverview(){
     )
   );
 }
+// ─── OCTOBER PROMOTION ───────────────────────────────────────────────────────
+let PROMOTION_NEEDED=false;
+async function checkPromotionNeeded(){
+  const m=new Date().getMonth(); // 0-based; 9=Oct,10=Nov,11=Dec
+  if(m<9||m>11)return; // only Oct–Dec
+  const{data,error}=await sb.from("promotion_log").select("id").eq("academic_year",CURRENT_ACADEMIC_YEAR).maybeSingle();
+  if(!error&&!data){PROMOTION_NEEDED=true;render();}
+}
+function renderPromoModal(){
+  const nextLvl={R1:"R2",R2:"R3",R3:"R4"};
+  const lvlOrd={R4:0,R3:1,R2:2,R1:3};
+  const sorted=RESIDENTS.slice().sort((a,b)=>(lvlOrd[a.level]||9)-(lvlOrd[b.level]||9)||a.name.localeCompare(b.name));
+  async function confirmPromo(){
+    const btn=document.getElementById("promo_confirm_btn");
+    if(btn){btn.disabled=true;btn.textContent="Saving…";}
+    const changes=[];
+    for(const r of sorted){
+      if(STATE.promoSkip[r.id])continue;
+      if(r.level==="R4"){
+        await sb.from("residents").update({active:false}).eq("id",r.id);
+        changes.push({id:r.id,name:r.name,from:"R4",to:"archived"});
+      }else if(nextLvl[r.level]){
+        await sb.from("residents").update({level:nextLvl[r.level]}).eq("id",r.id);
+        changes.push({id:r.id,name:r.name,from:r.level,to:nextLvl[r.level]});
+      }
+    }
+    await sb.from("promotion_log").insert({academic_year:CURRENT_ACADEMIC_YEAR,promoted_by:STATE.user.profileId,changes:JSON.stringify(changes)});
+    PROMOTION_NEEDED=false;
+    await loadCoreData();
+    await loadRotations();
+    set({showPromoModal:false,promoSkip:{}});
+  }
+  return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)set({showPromoModal:false});}},
+    el("div",{cls:"modal-card",st:{width:"620px",maxWidth:"100%"}},
+      el("h3",null,"🎓 Promotion Review — AY "+(CURRENT_ACADEMIC_YEAR+1)+"–"+(CURRENT_ACADEMIC_YEAR+2)),
+      el("p",{cls:"sh",st:{margin:"6px 0 16px"}},"Review proposed level changes for the new academic year. Uncheck anyone to skip them. R4 graduates will be archived and removed from active view."),
+      el("div",{cls:"tbl-wrap"},
+        el("table",null,
+          el("thead",null,
+            el("tr",null,
+              el("th",null,"Resident"),el("th",null,"Current"),el("th",null,"Proposed"),
+              el("th",{st:{textAlign:"center"}},"Include")
+            )
+          ),
+          el("tbody",null,
+            ...sorted.map(r=>{
+              const skip=!!STATE.promoSkip[r.id];
+              const proposed=r.level==="R4"
+                ?el("span",{cls:"bdg",st:{background:"#fee2e2",color:"#b91c1c"}},"Archive")
+                :nextLvl[r.level]?el("span",{cls:"bdg",st:{background:"#dcfce7",color:"#166534"}},nextLvl[r.level])
+                :el("span",{cls:"sh"},"—");
+              return el("tr",{st:{opacity:skip?"0.4":"1",transition:"opacity .15s"}},
+                el("td",null,el("div",{cls:"flex-gap"},avEl(r),el("span",{cls:"name",st:{fontSize:".84rem"}},r.name))),
+                el("td",null,levelBadge(r.level)),
+                el("td",null,proposed),
+                el("td",{st:{textAlign:"center"}},
+                  el("input",{type:"checkbox",...(!skip?{checked:""}:{}),
+                    onChange:e=>{
+                      const sk={...STATE.promoSkip};
+                      if(e.target.checked)delete sk[r.id];else sk[r.id]=true;
+                      set({promoSkip:sk});
+                    }
+                  })
+                )
+              );
+            })
+          )
+        )
+      ),
+      el("p",{cls:"sh",st:{fontSize:".75rem",marginTop:"10px"}},"⚠️ R4 residents marked as archived will no longer appear in the portal. Use Admin Panel → Residents to add incoming R1s."),
+      el("div",{cls:"flex-gap",st:{marginTop:"16px",justifyContent:"flex-end",gap:"10px"}},
+        el("button",{cls:"sbtn ghost",onClick:()=>set({showPromoModal:false})},"Remind Me Later"),
+        el("button",{id:"promo_confirm_btn",cls:"sbtn success",onClick:confirmPromo},"✓ Confirm Promotions")
+      )
+    )
+  );
+}
+
 // ─── ATTENDANCE EXPORT ───────────────────────────────────────────────────────
 function exportAttendance(type, blk){
   const isMM = type === "mm";
@@ -2466,17 +2560,20 @@ function renderQuiz(){
             el("div",{cls:"sub"},fmtDate(selQ.date)+" · Max score: "+selQ.max+" · "+enteredCount+"/"+vr.length+" entered")
           ),
           canEdit()?el("label",{cls:"flex-gap",st:{cursor:"pointer",fontSize:".84rem",alignItems:"center"}},
-            el("input",{type:"checkbox",...(selQ.published?{checked:""}:{}),onChange:e=>{selQ.published=e.target.checked;render();}}),
+            el("input",{type:"checkbox",...(selQ.published?{checked:""}:{}),onChange:async e=>{selQ.published=e.target.checked;render();await sb.from("quizzes").update({published:selQ.published}).eq("id",selQ.id);}}),
             "Published"
           ):null,
           canEdit()?el("div",null,
             el("div",{cls:"lbl",st:{marginBottom:"4px"}},"Assessor"),
-            el("select",{st:{fontSize:".82rem"},onChange:e=>{selQ.assigned_mentor_id=e.target.value?parseInt(e.target.value):null;render();}},
+            el("select",{st:{fontSize:".82rem"},onChange:async e=>{selQ.assigned_mentor_id=e.target.value?parseInt(e.target.value):null;render();await sb.from("quizzes").update({assigned_mentor_id:selQ.assigned_mentor_id}).eq("id",selQ.id);}},
               el("option",{value:"",...(!selQ.assigned_mentor_id?{selected:""}:{})},"— PD/Chief only —"),
               ...CONSULTANTS.map(c=>el("option",{value:c.id,...(selQ.assigned_mentor_id===c.id?{selected:""}:{})},c.name))
             )
           ):assignedMentor?el("div",{cls:"sub"},"Assessor: "+assignedMentor.name):null,
-          canEdit()?el("button",{cls:"sbtn danger",st:{fontSize:".78rem"},onClick:()=>{
+          canEdit()?el("button",{cls:"sbtn danger",st:{fontSize:".78rem"},onClick:async()=>{
+            if(!confirm('Delete "'+selQ.title+'" and all its scores? This cannot be undone.'))return;
+            const{error}=await sb.from("quizzes").delete().eq("id",selQ.id);
+            if(error){alert("Could not delete: "+error.message);return;}
             const idx=QUIZZES.indexOf(selQ);if(idx>-1)QUIZZES.splice(idx,1);set({quizSelQuiz:null});
           }},"Delete Quiz"):null
         )
@@ -2500,7 +2597,7 @@ function renderQuiz(){
                   const looksLikeHeader=["name","resident","student"].some(k=>firstCell.includes(k));
                   if(looksLikeHeader) dataRows=dataRows.slice(1);
                 }
-                let matched=0,skipped=[];
+                let matched=0,skipped=[],toSave=[];
                 dataRows.forEach(row=>{
                   const rawName=(row[0]||"").trim();
                   const rawScore=row[1];
@@ -2508,11 +2605,12 @@ function renderQuiz(){
                   const score=parseFloat(rawScore);
                   if(isNaN(score))return;
                   const res=RESIDENTS.find(r=>r.name.toLowerCase().includes(rawName.toLowerCase())||rawName.toLowerCase().includes(r.name.toLowerCase().split(" ").pop()));
-                  if(res){selQ.sc[res.id]=Math.min(score,selQ.max);matched++;}
+                  if(res){selQ.sc[res.id]=Math.min(score,selQ.max);toSave.push({quiz_id:selQ.id,resident_id:res.id,score:Math.min(score,selQ.max),entered_by:STATE.user?.profileId||null});matched++;}
                   else skipped.push(rawName);
                 });
                 e.target.value="";
                 render();
+                if(toSave.length)await sb.from("quiz_scores").upsert(toSave,{onConflict:"quiz_id,resident_id"});
                 const msg=matched+" score"+(matched!==1?"s":"")+" imported."+( skipped.length?" Could not match: "+skipped.join(", "):"");
                 alert(msg);
               };
@@ -2543,7 +2641,13 @@ function renderQuiz(){
                     canEditRow
                       ?el("input",{type:"number",cls:"input-sm",st:{width:"70px",textAlign:"center"},min:"0",max:selQ.max,
                           value:sc!=null?sc:"",placeholder:"—",
-                          onChange:e=>{const v=e.target.value;selQ.sc[r.id]=v===""?undefined:Math.min(parseInt(v)||0,selQ.max);render();}
+                          onChange:async e=>{
+                            const v=e.target.value;
+                            const score=v===""?undefined:Math.min(parseInt(v)||0,selQ.max);
+                            selQ.sc[r.id]=score;render();
+                            if(score===undefined){await sb.from("quiz_scores").delete().eq("quiz_id",selQ.id).eq("resident_id",r.id);}
+                            else{await sb.from("quiz_scores").upsert({quiz_id:selQ.id,resident_id:r.id,score,entered_by:STATE.user?.profileId||null},{onConflict:"quiz_id,resident_id"});}
+                          }
                         })
                       :(sc!=null?el("b",null,sc):el("span",{cls:"sh"},"—"))
                   ),
@@ -2582,13 +2686,15 @@ function renderQuiz(){
         )
       ),
       el("div",{cls:"flex-gap"},
-        el("button",{cls:"sbtn success",onClick:()=>{
+        el("button",{cls:"sbtn success",onClick:async()=>{
           const t=document.getElementById("qz_title").value.trim();
           const d=document.getElementById("qz_date").value;
           const m=parseInt(document.getElementById("qz_max").value)||20;
           const mid=document.getElementById("qz_mentor").value;
           if(!t||!d)return;
-          QUIZZES.push({id:nextQuizId++,title:t,date:d,block:CURRENT_PERIOD,max:m,published:false,assigned_mentor_id:mid?parseInt(mid):null,sc:{}});
+          const{data,error}=await sb.from("quizzes").insert({title:t,date:d,block_number:CURRENT_PERIOD,max_score:m,published:false,assigned_mentor_id:mid?parseInt(mid):null,academic_year:CURRENT_ACADEMIC_YEAR}).select().single();
+          if(error){alert("Could not save quiz: "+error.message);return;}
+          QUIZZES.push({id:data.id,title:t,date:d,block:CURRENT_PERIOD,max:m,published:false,assigned_mentor_id:mid?parseInt(mid):null,sc:{}});
           set({quizShowAdd:false});
         }},"Save Quiz"),
         el("button",{cls:"sbtn ghost",onClick:()=>set({quizShowAdd:false})},"Cancel")
@@ -3291,6 +3397,7 @@ function renderLeaveDetail(rid,onBack){
               const reason=document.getElementById("req_reason").value.trim();
               const ltype=document.getElementById("req_type").value;
               if(!from||!to){alert("Please select both from and to dates.");return;}
+              if(to<from){alert("'To' date must be on or after 'From' date.");return;}
               if(!reason){alert("Please enter a reason.");return;}
               await submitLeaveRequest(rid,from,to,diffDays(from,to),ltype,reason);
               set({leaveShowReq:false});
@@ -4805,6 +4912,7 @@ function render(){
   main.appendChild(content);
   layout.appendChild(main);
   app.appendChild(layout);
+  if(STATE.showPromoModal&&isPD())app.appendChild(renderPromoModal());
   appendAccountModal(app);
 }
 function appendAccountModal(app){
@@ -4895,6 +5003,7 @@ function renderProfileTeach(res){
     if(profile){
       STATE.user=mapProfileToUser(profile);
       await loadCoreData();
+      if(profile.role==="pd")checkPromotionNeeded();
       loadPendingCounselCount();
       loadSchedules();
       loadRotations();
