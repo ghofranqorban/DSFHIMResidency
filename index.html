@@ -307,9 +307,10 @@ let ROTA_LEAVE_META={};
 let CHIEF_RES_ID=null;
 let CO_CHIEF_RES_ID=null;
 const MANDATORY=["GIM/CTU","Cardiology","Pulmonology","Nephrology","Gastroenterology","Endocrinology","Hematology","Rheumatology","Neurology","Infectious Disease","ICU","Emergency Medicine","Oncology"];
-// Quiz 30% | MM att 15% + Teaching att 15% = 30% | Pres 10% + Committee 10% = 20% | Research 10% + QI 10% = 20%
-// Bonus on top: Published +3, Oral presentation +3, Poster +2 (overall can exceed 100)
-const KPI_W={quiz:30,mm:15,teach:15,pres:10,comm:10,research:10,qi:10};
+// Ongoing 60%: Quiz 20 | MM 15 | Teaching 15 | Presentations 10
+// Yearly 40%: Committee 10 | QI 5 | Publication 5 | Oral 5 | Poster 3 | Awards 4 | Volunteering 3 (bonus system removed)
+// Quarterly: informational only — not scored
+const KPI_W={quiz:20,mm:15,teach:15,pres:10,comm:10,qi:5,pub:5,oral:5,poster:3,awards:4,volunteering:3};
 const LC={R1:"#4a6a8a",R2:"#5a8a6a",R3:"#c9913a",R4:"#8a4a2a"};
 const ROT_COLORS={"GIM/CTU":{bg:"#ede9fe",tx:"#5b21b6"},"Night Duty":{bg:"#fef2f2",tx:"#991b1b"},"ICU":{bg:"#dbeafe",tx:"#1e40af"},"Cardiology":{bg:"#fce7f3",tx:"#9d174d"},"Pulmonology":{bg:"#e0f2fe",tx:"#0c4a6e"},"Nephrology":{bg:"#d1fae5",tx:"#065f46"},"Gastroenterology":{bg:"#fef3c7",tx:"#92400e"},"Endocrinology":{bg:"#f0fdf4",tx:"#166534"},"Hematology":{bg:"#ffe4e6",tx:"#9f1239"},"Rheumatology":{bg:"#f5f3ff",tx:"#4c1d95"},"Neurology":{bg:"#fdf4ff",tx:"#7e22ce"},"Infectious Disease":{bg:"#fff7ed",tx:"#c2410c"},"Emergency Medicine":{bg:"#fee2e2",tx:"#7f1d1d"},"Oncology":{bg:"#f0f9ff",tx:"#0369a1"},"Outpatient Clinic":{bg:"#f8fafc",tx:"#475569"},"Elective":{bg:"#f0fdf4",tx:"#166534"},"Annual Leave":{bg:"#fefce8",tx:"#854d0e"},"Maternity Leave":{bg:"#fdf4ff",tx:"#701a75"},"Medical Consult":{bg:"#eff6ff",tx:"#1e40af"}};
 const ROT_ABBR={"GIM/CTU":"CTU","Night Duty":"Night","ICU":"ICU","Cardiology":"Cardio","Pulmonology":"Pulmo","Nephrology":"Nephro","Gastroenterology":"Gastro","Endocrinology":"Endo","Hematology":"Hema","Rheumatology":"Rheuma","Neurology":"Neuro","Infectious Disease":"ID","Emergency Medicine":"ER","Oncology":"Onco","Outpatient Clinic":"Clinic","Elective":"Elect","Annual Leave":"Leave","Maternity Leave":"Matern","Medical Consult":"M.Cons"};
@@ -584,22 +585,77 @@ let COMM_MEM={};
 let COMM_SC={};
 RESIDENTS.forEach(r=>{COMM_MEM[r.id]=[];COMM_SC[r.id]=0;});
 // KPI manual scores (DB-backed via kpi_scores table, keyed by resident_id)
-// commScore:0-10 | researchDone | qiDone | bonusPublished | bonusOral | bonusPoster
+// commScore:0-10 | researchDone | qiDone | bonusPublished | bonusOral | bonusPoster | awards_honors | volunteering
 let KPI_SCORES={};
-const KPI_BONUS={published:3,oral:3,poster:2};
+let KPI_QUARTERLY={}; // {resident_id: {quarter: row}}
+let KPI_PROPOSALS=[]; // [{id,resident_id,field_key,quarter,note,proposed_by,proposed_by_role,proposed_at,status,...}]
+async function loadKpiQuarterly(){
+  const{data,error}=await sb.from("kpi_quarterly").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR);
+  if(error){console.warn("kpi_quarterly load error",error.message);return;}
+  KPI_QUARTERLY={};
+  (data||[]).forEach(r=>{if(!KPI_QUARTERLY[r.resident_id])KPI_QUARTERLY[r.resident_id]={};KPI_QUARTERLY[r.resident_id][r.quarter]=r;});
+}
+async function loadKpiProposals(){
+  const{data,error}=await sb.from("kpi_proposals").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("proposed_at",{ascending:false});
+  if(error){console.warn("kpi_proposals load error",error.message);return;}
+  KPI_PROPOSALS=data||[];
+}
+function getApprovedFields(resId){
+  const s=new Set();
+  KPI_PROPOSALS.filter(p=>p.resident_id===resId&&p.status==="approved").forEach(p=>s.add((p.quarter?p.quarter+"_":"")+p.field_key));
+  return s;
+}
 async function saveKpiScore(resId,patch){
   const cur=KPI_SCORES[resId]||{};
   KPI_SCORES[resId]={...cur,...patch};
   const ks=KPI_SCORES[resId];
-  COMM_SC[resId]=ks.commScore||0; // keep COMM_SC in sync
+  COMM_SC[resId]=ks.commScore||0;
   const{error}=await sb.from("kpi_scores").upsert({
     resident_id:resId,academic_year:CURRENT_ACADEMIC_YEAR,
     committee_score:ks.commScore||0,
     research_participated:!!ks.researchDone,qi_participated:!!ks.qiDone,
     bonus_published:!!ks.bonusPublished,bonus_oral:!!ks.bonusOral,bonus_poster:!!ks.bonusPoster,
+    awards_honors:!!ks.awardsHonors,volunteering:!!ks.volunteering,
     updated_by:STATE.user?.profileId||null,updated_at:new Date().toISOString()
   },{onConflict:"resident_id,academic_year"});
   if(error)console.error("saveKpiScore error",error);
+  render();
+}
+async function saveKpiQuarterly(resId,quarter,patch){
+  const cur=(KPI_QUARTERLY[resId]||{})[quarter]||{};
+  const row={...cur,...patch,resident_id:resId,academic_year:CURRENT_ACADEMIC_YEAR,quarter,set_by:STATE.user?.profileId||null,updated_at:new Date().toISOString()};
+  if(!KPI_QUARTERLY[resId])KPI_QUARTERLY[resId]={};
+  KPI_QUARTERLY[resId][quarter]=row;
+  const{error}=await sb.from("kpi_quarterly").upsert(row,{onConflict:"resident_id,academic_year,quarter"});
+  if(error)console.error("saveKpiQuarterly error",error);
+  render();
+}
+async function submitKpiProposal(resId,fieldKey,quarter,note){
+  const u=STATE.user;
+  const isPdRole_=isPD();
+  const prop={resident_id:resId,academic_year:CURRENT_ACADEMIC_YEAR,field_key:fieldKey,quarter:quarter||null,note:note||null,proposed_by:u.profileId,proposed_by_role:u.role,status:isPdRole_?"approved":"pending",reviewed_by:isPdRole_?u.profileId:null,reviewed_at:isPdRole_?new Date().toISOString():null};
+  const{data,error}=await sb.from("kpi_proposals").insert(prop).select().single();
+  if(error){alert("Could not submit: "+error.message);return;}
+  KPI_PROPOSALS.unshift(data);
+  if(isPdRole_){
+    // also update kpi_scores directly so calcKPI reflects it
+    const fieldMap={publication:"bonusPublished",oral:"bonusOral",poster:"bonusPoster",qi:"qiDone",awards:"awardsHonors",volunteering:"volunteering"};
+    if(fieldMap[fieldKey])await saveKpiScore(resId,{[fieldMap[fieldKey]]:true});
+  }
+  render();
+}
+async function reviewProposal(proposalId,approve){
+  const u=STATE.user;
+  const{error}=await sb.from("kpi_proposals").update({status:approve?"approved":"rejected",reviewed_by:u.profileId,reviewed_at:new Date().toISOString()}).eq("id",proposalId);
+  if(error){alert("Error: "+error.message);return;}
+  const p=KPI_PROPOSALS.find(x=>x.id===proposalId);
+  if(p){
+    p.status=approve?"approved":"rejected";
+    if(approve){
+      const fieldMap={publication:"bonusPublished",oral:"bonusOral",poster:"bonusPoster",qi:"qiDone",awards:"awardsHonors",volunteering:"volunteering"};
+      if(fieldMap[p.field_key])await saveKpiScore(p.resident_id,{[fieldMap[p.field_key]]:true});
+    }
+  }
   render();
 }
 // quiz IDs are now DB-generated; no local counter needed
@@ -750,7 +806,7 @@ let STATE={
   quizSelRes:null,quizShowAdd:false,quizSelQuiz:null,
   leaveSelRes:null,leaveShowAdd:false,leaveShowAbsAdd:false,leaveShowReq:false,leaveTab:"overview",
   counselSelRes:1,counselShowForm:false,counselEditId:null,
-  kpiSelRes:1,rotTrackRes:1,
+  kpiSelRes:1,kpiTab:"ongoing",rotTrackRes:1,
   mentorQ:null,
   rotaImportStep:1,rotaImportSheet:null,
   annShowForm:false,annEditId:null,annTargetType:"all",
@@ -870,7 +926,7 @@ async function loadCoreData(){
   });
   KPI_SCORES={};
   (kpisc||[]).forEach(k=>{
-    KPI_SCORES[k.resident_id]={commScore:k.committee_score||0,researchDone:!!k.research_participated,qiDone:!!k.qi_participated,bonusPublished:!!k.bonus_published,bonusOral:!!k.bonus_oral,bonusPoster:!!k.bonus_poster};
+    KPI_SCORES[k.resident_id]={commScore:k.committee_score||0,researchDone:!!k.research_participated,qiDone:!!k.qi_participated,bonusPublished:!!k.bonus_published,bonusOral:!!k.bonus_oral,bonusPoster:!!k.bonus_poster,awardsHonors:!!k.awards_honors,volunteering:!!k.volunteering};
     COMM_SC[k.resident_id]=k.committee_score||0;
   });
   ensureResidentAuxData();
@@ -1016,20 +1072,28 @@ function calcKPI(id){
   let tAtt=0,tTotal=0;
   Object.values(TEACH_ATT).forEach(blk=>{Object.values(blk).forEach(day=>{tTotal++;if(day[id]==='P'||day[id]==='L'||day[id]==='E')tAtt++;});});
   if(tTotal===0){tAtt=0;tTotal=1;}
-  const tPct=Math.round(tAtt/tTotal*100);
-  const rotPct=Math.round(((ROT_H[id]||[]).length/MANDATORY.length)*100); // kept for tracker, not in KPI
+  const rotPct=Math.round(((ROT_H[id]||[]).length/MANDATORY.length)*100);
   const pubQ=QUIZZES.filter(q=>q.published&&q.sc[id]!=null);
   const qAvg=pubQ.length?Math.round(pubQ.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/pubQ.length):0;
-  const pres=MM_SESSIONS.some(m=>m.presenter_resident_id===id);
-  const presCount=MM_SESSIONS.filter(m=>m.presenter_resident_id===id).length;
+  const pres=MM_SESSIONS.some(m=>m.presenter_resident_id===id)||MM_SESSIONS.some(m=>m.moderator_resident_id===id);
+  const presCount=MM_SESSIONS.filter(m=>m.presenter_resident_id===id||m.moderator_resident_id===id).length;
   const commPct=Math.round(((COMM_SC[id]||0)/10)*100);
   const ks=KPI_SCORES[id]||{};
-  const researchPct=ks.researchDone?100:0;
-  const qiPct=ks.qiDone?100:0;
-  const bonus=(ks.bonusPublished?KPI_BONUS.published:0)+(ks.bonusOral?KPI_BONUS.oral:0)+(ks.bonusPoster?KPI_BONUS.poster:0);
-  const baseScore=Math.round(qAvg*KPI_W.quiz/100+mmPct*KPI_W.mm/100+tPct*KPI_W.teach/100+(pres?100:0)*KPI_W.pres/100+commPct*KPI_W.comm/100+researchPct*KPI_W.research/100+qiPct*KPI_W.qi/100);
-  const overall=baseScore+bonus;
-  return{mmPct,mmAtt,mmTotal,tPct,tAtt,tTotal,rotPct,qAvg,pres,presCount,commPct,researchPct,qiPct,bonus,baseScore,overall};
+  const af=getApprovedFields(id);
+  const qiPct=(ks.qiDone||af.has("qi"))?100:0;
+  const pubPct=(ks.bonusPublished||af.has("publication"))?100:0;
+  const oralPct=(ks.bonusOral||af.has("oral"))?100:0;
+  const posterPct=(ks.bonusPoster||af.has("poster"))?100:0;
+  const awardsPct=(ks.awardsHonors||af.has("awards"))?100:0;
+  const volunteeringPct=(ks.volunteering||af.has("volunteering"))?100:0;
+  const overall=Math.round(
+    qAvg*KPI_W.quiz/100+mmPct*KPI_W.mm/100+tPct*KPI_W.teach/100+
+    (pres?100:0)*KPI_W.pres/100+commPct*KPI_W.comm/100+
+    qiPct*KPI_W.qi/100+pubPct*KPI_W.pub/100+oralPct*KPI_W.oral/100+
+    posterPct*KPI_W.poster/100+awardsPct*KPI_W.awards/100+volunteeringPct*KPI_W.volunteering/100
+  );
+  return{mmPct,mmAtt,mmTotal,tPct,tAtt,tTotal,rotPct,qAvg,pres,presCount,commPct,
+    qiPct,pubPct,oralPct,posterPct,awardsPct,volunteeringPct,overall};
 }
 function pbar(pct,color){
   return el("div",{cls:"flex-gap",st:{width:"100%"}},
@@ -1073,6 +1137,8 @@ function renderLogin(){
     loadLeaveRecords();
     loadAnnouncements();
     loadQuizzes().then(render);
+    loadKpiQuarterly();
+    loadKpiProposals();
     render();
   }
   return el("div",{cls:"login-wrap"},
@@ -3028,29 +3094,39 @@ function renderMentorHome(){
 // ─── KPI DASHBOARD ───────────────────────────────────────────────────────────
 function exportKpiPDF(res,k){
   const kpiColor=v=>v>=80?"#16a34a":v>=60?"#d97706":"#dc2626";
-  const ks=KPI_SCORES[res.id]||{};
   const row=(label,val,weight,detail)=>`<tr><td>${label}</td><td style="text-align:center;font-weight:700;color:${kpiColor(val)}">${val}%</td><td style="text-align:center">${weight}%</td><td style="color:#6b7280;font-size:.85rem">${detail||""}</td></tr>`;
+  const ach=(icon,label,done)=>`<div style="display:inline-flex;align-items:center;gap:6px;background:${done?"#dcfce7":"#f1f5f9"};border-radius:8px;padding:6px 12px;margin:4px;font-size:.84rem;font-weight:600;color:${done?"#166534":"#64748b"}">${icon} ${label}: ${done?"✓ Yes":"— No"}</div>`;
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>KPI Report – ${res.name}</title>
   <style>body{font-family:Arial,sans-serif;margin:32px;color:#111827}h1{color:#c96a4a;margin-bottom:4px}
   .sub{color:#6b7280;font-size:.9rem;margin-bottom:20px}.score{font-size:2.5rem;font-weight:900;color:${kpiColor(k.overall)}}
-  table{width:100%;border-collapse:collapse;margin-top:16px}th{background:#f3f4f6;padding:10px 12px;text-align:left;font-size:.85rem}
-  td{padding:9px 12px;border-bottom:1px solid #e5e7eb;font-size:.9rem}.bonus{background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-top:16px;font-size:.9rem}
+  h2{font-size:1rem;color:#374151;margin:20px 0 8px;border-bottom:2px solid #e5e7eb;padding-bottom:4px}
+  table{width:100%;border-collapse:collapse;margin-top:8px}th{background:#f3f4f6;padding:8px 12px;text-align:left;font-size:.82rem}
+  td{padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:.88rem}
   .footer{margin-top:32px;font-size:.75rem;color:#9ca3af}@media print{body{margin:16px}}</style></head>
   <body>
   <h1>KPI Report — ${res.name}</h1>
   <div class="sub">${res.level} · Mentor: ${mentorName(res.id)} · AY ${CURRENT_ACADEMIC_YEAR}–${CURRENT_ACADEMIC_YEAR+1}</div>
   <div class="score">${k.overall}%</div><div style="color:#6b7280;margin-bottom:8px">Overall KPI Score</div>
-  <div style="background:#e5e7eb;border-radius:4px;height:12px"><div style="background:${kpiColor(k.overall)};width:${Math.min(k.overall,100)}%;height:12px;border-radius:4px"></div></div>
+  <div style="background:#e5e7eb;border-radius:4px;height:10px"><div style="background:${kpiColor(k.overall)};width:${Math.min(k.overall,100)}%;height:10px;border-radius:4px"></div></div>
+  <h2>📊 Ongoing Performance (60%)</h2>
   <table><thead><tr><th>Component</th><th style="text-align:center">Score</th><th style="text-align:center">Weight</th><th>Detail</th></tr></thead><tbody>
   ${row("Quiz Average",k.qAvg,KPI_W.quiz,QUIZZES.filter(q=>q.published&&q.sc[res.id]!=null).length+" quizzes")}
-  ${row("Morning Meetings",k.mmPct,KPI_W.mm,k.mmAtt+"/"+k.mmTotal+" sessions")}
-  ${row("Teaching Sessions",k.tPct,KPI_W.teach,k.tAtt+"/"+k.tTotal+" sessions")}
-  ${row("MM Presentation",k.pres?100:0,KPI_W.pres,k.presCount+" presentation"+(k.presCount!==1?"s":""))}
-  ${row("Committee Work",k.commPct,KPI_W.comm,"Score: "+(COMM_SC[res.id]||0)+"/10")}
-  ${row("Research Participation",k.researchPct,KPI_W.research,k.researchPct?"✓ Participated":"Not recorded")}
-  ${row("QI Project",k.qiPct,KPI_W.qi,k.qiPct?"✓ Participated":"Not recorded")}
+  ${row("Morning Meeting Attendance",k.mmPct,KPI_W.mm,k.mmAtt+"/"+k.mmTotal+" sessions")}
+  ${row("Teaching Attendance",k.tPct,KPI_W.teach,k.tAtt+"/"+k.tTotal+" sessions")}
+  ${row("Presenter / Moderator",k.pres?100:0,KPI_W.pres,k.presCount+" session"+(k.presCount!==1?"s":""))}
   </tbody></table>
-  ${k.bonus>0?`<div class="bonus">🏆 Bonus points: +${k.bonus} (${ks.bonusPublished?"📄 Published ":""}${ks.bonusOral?"🎤 Oral ":""}${ks.bonusPoster?"🪧 Poster ":""})</div>`:""}
+  <h2>🏆 Yearly Achievements (40%)</h2>
+  <table><thead><tr><th>Component</th><th style="text-align:center">Score</th><th style="text-align:center">Weight</th><th>Status</th></tr></thead><tbody>
+  ${row("Committee Participation",k.commPct,KPI_W.comm,"Score: "+(COMM_SC[res.id]||0)+"/10")}
+  ${row("QI Project",k.qiPct,KPI_W.qi,k.qiPct?"✓ Achieved":"—")}
+  ${row("Research Publication",k.pubPct,KPI_W.pub,k.pubPct?"✓ Published":"—")}
+  ${row("Oral Presentation",k.oralPct,KPI_W.oral,k.oralPct?"✓ Presented":"—")}
+  ${row("Poster Presentation",k.posterPct,KPI_W.poster,k.posterPct?"✓ Presented":"—")}
+  ${row("Award / Honor",k.awardsPct,KPI_W.awards,k.awardsPct?"✓ Received":"—")}
+  ${row("Volunteering",k.volunteeringPct,KPI_W.volunteering,k.volunteeringPct?"✓ Participated":"—")}
+  </tbody></table>
+  <h2>📆 Quarterly Review (informational)</h2>
+  ${[1,2,3,4].map(q=>{const qd=(KPI_QUARTERLY[res.id]||{})[q]||{};return`<div style="margin-bottom:10px;background:#f8fafc;border-radius:8px;padding:10px 14px"><b>${QUARTER_LABELS[q]}</b><br>${qd.research_milestone?`Research: ${qd.research_milestone} <b style="color:${qd.research_achieved?"#16a34a":"#d97706"}">[${qd.research_achieved?"Achieved":"Pending"}]</b>`:"Research milestone: not set"}<br>${qd.improvement_area?`Improvement: ${qd.improvement_area} <b style="color:${qd.improvement_achieved?"#16a34a":"#d97706"}">[${qd.improvement_achieved?"Achieved":"Pending"}]</b>`:"Improvement area: not set"}</div>`;}).join("")}
   <div class="footer">Generated ${new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})} · DSFH Internal Medicine Residency Portal</div>
   </body></html>`;
   const w=window.open("","_blank");w.document.write(html);w.document.close();w.focus();setTimeout(()=>w.print(),400);
@@ -3058,113 +3134,286 @@ function exportKpiPDF(res,k){
 function renderKPI(){
   const vr=visRes();
   const u=STATE.user;
-  // Consultants go to the dedicated "My Residents" quarterly view
   if(isConsultant())return renderMentorHome();
   let selId=isResident()?u.rid:(STATE.kpiSelRes||vr[0]?.id);
   const res=resById(selId)||vr[0];
   if(!res)return el("div",null,"No residents");
   const k=calcKPI(res.id);
   const kpiColor=v=>v>=80?"#16a34a":v>=60?"#d97706":"#dc2626";
+  const tab=STATE.kpiTab||"ongoing";
+  const canEdit_=canEditKPI(res.id);
+  const isMyRes=isResident()&&u.rid===res.id;
+  const isMentor=isConsultant()&&MENTORS[res.id]===u.cid;
+  const canSetMilestone=isPD()||STATE.user?.role==="chief"||isMentor;
+
+  // ── Achievement card with proposal/approval flow ──────────────
+  function renderAchievement(fieldKey,icon,label,weight,isApproved){
+    const pending=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.field_key===fieldKey&&p.quarter==null&&p.status==="pending");
+    const rejected=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.field_key===fieldKey&&p.quarter==null&&p.status==="rejected");
+    const border=isApproved?"#bbf7d0":pending.length?"#fde68a":"#e2e8f0";
+    const bg=isApproved?"#f0fdf4":pending.length?"#fefce8":"#f8fafc";
+    return el("div",{st:{background:bg,borderRadius:"12px",padding:"14px 16px",border:"1px solid "+border}},
+      el("div",{cls:"flex-gap",st:{marginBottom:"8px"}},
+        el("span",{st:{fontSize:"1.3rem"}},icon),
+        el("div",{st:{flex:"1"}},
+          el("div",{st:{fontWeight:"700",fontSize:".88rem",color:"#111827"}},label),
+          el("div",{cls:"sh"},weight+"% weight")
+        ),
+        isApproved?el("span",{st:{background:"#dcfce7",color:"#166534",borderRadius:"6px",padding:"2px 8px",fontSize:".74rem",fontWeight:"700"}},"✅ Verified"):
+        pending.length?el("span",{st:{background:"#fef3c7",color:"#92400e",borderRadius:"6px",padding:"2px 8px",fontSize:".74rem",fontWeight:"700"}},"⏳ Pending"):
+        el("span",{st:{background:"#f1f5f9",color:"#64748b",borderRadius:"6px",padding:"2px 8px",fontSize:".74rem"}},"— Not yet")
+      ),
+      // PD review panel for pending proposals
+      isPD()&&pending.length?el("div",{st:{marginTop:"6px"}},
+        ...pending.map(p=>el("div",{st:{background:"#fff",border:"1px solid #fde68a",borderRadius:"8px",padding:"8px 10px",marginBottom:"4px"}},
+          el("div",{st:{fontSize:".78rem",fontWeight:"600",marginBottom:"4px"}},
+            "Submitted by "+(p.proposed_by_role==="resident"?"the resident":p.proposed_by_role==="consultant"?"the mentor":p.proposed_by_role==="chief"?"Chief Resident":p.proposed_by_role)+
+            " · "+new Date(p.proposed_at).toLocaleDateString("en-GB",{day:"numeric",month:"short"})
+          ),
+          p.note?el("div",{cls:"sh",st:{marginBottom:"6px",fontStyle:"italic"}},"\""+p.note+"\""):null,
+          el("div",{cls:"flex-gap",st:{gap:"6px"}},
+            el("button",{cls:"sbtn primary",st:{fontSize:".74rem",padding:"3px 10px"},onClick:()=>reviewProposal(p.id,true)},"✓ Approve"),
+            el("button",{cls:"sbtn ghost",st:{fontSize:".74rem",padding:"3px 10px",color:"#dc2626",borderColor:"#dc2626"},onClick:()=>reviewProposal(p.id,false)},"✗ Reject")
+          )
+        ))
+      ):null,
+      // Submit button (hidden if already approved or pending)
+      !isApproved&&!pending.length&&(canEdit_||canSetMilestone||isMyRes)?
+        el("button",{cls:"sbtn ghost",st:{fontSize:".76rem",marginTop:"6px"},onClick:async()=>{
+          if(isPD()){await submitKpiProposal(res.id,fieldKey,null,null);}
+          else{
+            const note=window.prompt("Optional note or evidence (or press OK to skip):","");
+            if(note===null)return;
+            await submitKpiProposal(res.id,fieldKey,null,note||null);
+          }
+        }},isPD()?"✓ Mark as Achieved":"📤 Submit Achievement"):null,
+      // Show rejection note if last submission was rejected
+      !isApproved&&!pending.length&&rejected.length?
+        el("div",{st:{fontSize:".74rem",color:"#dc2626",marginTop:"4px"}},"⚠ Previous submission was rejected"):null
+    );
+  }
+
+  // ── Quarterly milestone card ──────────────────────────────────
+  function milestoneCard(type,icon,textKey,achievedKey,placeholder){
+    const q=STATE.mentorQ||currentQuarter();
+    const qd=(KPI_QUARTERLY[res.id]||{})[q]||{};
+    const text=qd[textKey]||"";
+    const achieved=!!qd[achievedKey];
+    const pendingProp=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.field_key===achievedKey&&p.quarter===q&&p.status==="pending");
+    return el("div",{cls:"card",st:{marginTop:"12px"}},
+      el("div",{cls:"flex-gap",st:{marginBottom:"10px"}},
+        el("span",{st:{fontSize:"1.2rem"}},icon),
+        el("div",{st:{flex:"1"}},
+          el("div",{cls:"card-title",st:{margin:"0"}},type==="research"?"Research Project Milestone":"Area of Improvement"),
+          el("div",{cls:"sh"},"Set by mentor or PD · Visible to resident")
+        ),
+        achieved?el("span",{st:{background:"#dcfce7",color:"#166534",borderRadius:"8px",padding:"4px 10px",fontSize:".76rem",fontWeight:"700"}},"✅ Achieved"):
+        pendingProp.length?el("span",{st:{background:"#fef3c7",color:"#92400e",borderRadius:"8px",padding:"4px 10px",fontSize:".76rem",fontWeight:"700"}},"⏳ Pending Review"):null
+      ),
+      canSetMilestone?el("div",null,
+        el("div",{cls:"lbl",st:{marginBottom:"4px"}},"Define the goal for this quarter"),
+        el("div",{cls:"flex-gap",st:{gap:"8px",alignItems:"flex-start"}},
+          el("textarea",{id:"q_"+type+"_"+q,cls:"input",rows:"2",st:{flex:"1",resize:"vertical"},placeholder},text),
+          el("button",{cls:"sbtn primary",st:{fontSize:".8rem",whiteSpace:"nowrap"},onClick:async()=>{
+            const val=document.getElementById("q_"+type+"_"+q).value.trim();
+            await saveKpiQuarterly(res.id,q,{[textKey]:val});
+          }},"Save")
+        )
+      ):text?el("div",{st:{background:"#f8fafc",borderRadius:"8px",padding:"10px 12px",fontSize:".88rem",color:"#374151",border:"1px solid #e2e8f0",fontStyle:"italic"}},text):
+      el("div",{cls:"sh"},"No milestone defined yet for this quarter."),
+      text?el("div",{st:{marginTop:"12px"}},
+        el("div",{cls:"lbl",st:{marginBottom:"6px"}},"Achievement Status"),
+        achieved?el("div",{cls:"flex-gap",st:{gap:"8px"}},
+          el("span",{st:{background:"#dcfce7",color:"#166534",borderRadius:"8px",padding:"6px 12px",fontWeight:"700",fontSize:".84rem"}},"✅ Achieved this quarter"),
+          canSetMilestone||isPD()?el("button",{cls:"sbtn ghost",st:{fontSize:".74rem"},onClick:()=>saveKpiQuarterly(res.id,q,{[achievedKey]:false})},"Undo"):null
+        ):pendingProp.length?el("div",null,
+          isPD()?el("div",null,...pendingProp.map(p=>el("div",{st:{background:"#fefce8",border:"1px solid #fde68a",borderRadius:"8px",padding:"8px 12px",marginBottom:"6px"}},
+            el("div",{st:{fontSize:".8rem",fontWeight:"600",marginBottom:"4px"}},
+              "Claimed by "+(p.proposed_by_role==="resident"?"the resident":p.proposed_by_role==="consultant"?"the mentor":"Chief Resident")+
+              " · "+new Date(p.proposed_at).toLocaleDateString("en-GB",{day:"numeric",month:"short"})
+            ),
+            p.note?el("div",{cls:"sh",st:{marginBottom:"6px",fontStyle:"italic"}},"\""+p.note+"\""):null,
+            el("div",{cls:"flex-gap",st:{gap:"6px"}},
+              el("button",{cls:"sbtn primary",st:{fontSize:".74rem"},onClick:async()=>{await reviewProposal(p.id,true);await saveKpiQuarterly(res.id,q,{[achievedKey]:true});}},"✓ Approve"),
+              el("button",{cls:"sbtn ghost",st:{fontSize:".74rem",color:"#dc2626",borderColor:"#dc2626"},onClick:()=>reviewProposal(p.id,false)},"✗ Reject")
+            )
+          ))):el("div",{cls:"sh",st:{color:"#92400e"}},"⏳ Submitted — awaiting PD review")
+        ):el("div",{cls:"flex-gap",st:{gap:"8px",flexWrap:"wrap"}},
+          isPD()||canSetMilestone?el("button",{cls:"sbtn primary",st:{fontSize:".8rem"},onClick:async()=>{
+            if(isPD()){await saveKpiQuarterly(res.id,q,{[achievedKey]:true});}
+            else{const note=window.prompt("Optional note:","");if(note===null)return;await submitKpiProposal(res.id,achievedKey,q,note||null);}
+          }},isPD()?"✅ Mark Achieved":"📤 Submit as Achieved"):null,
+          isMyRes&&!canSetMilestone?el("button",{cls:"sbtn ghost",st:{fontSize:".8rem"},onClick:async()=>{
+            const note=window.prompt("Optional supporting note:","");if(note===null)return;
+            await submitKpiProposal(res.id,achievedKey,q,note||null);
+          }},"📤 I achieved this"):null
+        )
+      ):null
+    );
+  }
+
+  // ── Ongoing tab ───────────────────────────────────────────────
+  function renderOngoing(){
+    return el("div",null,
+      el("div",{cls:"card"},
+        el("div",{cls:"card-title"},"📊 Ongoing Performance"),
+        el("div",{cls:"sh",st:{marginBottom:"14px"}},"Auto-tracked throughout the year · "+QUIZZES.filter(q=>q.published&&q.sc[res.id]!=null).length+" quizzes recorded"),
+        el("div",{cls:"grid-2",st:{gap:"12px"}},
+          kpiRow("Quiz Average","📝",k.qAvg,KPI_W.quiz,kpiColor(k.qAvg),QUIZZES.filter(q=>q.published&&q.sc[res.id]!=null).length+" published quizzes"),
+          kpiRow("Morning Meeting Att.","🌅",k.mmPct,KPI_W.mm,kpiColor(k.mmPct),k.mmAtt+"/"+k.mmTotal+" sessions"),
+          kpiRow("Teaching Sessions","📚",k.tPct,KPI_W.teach,kpiColor(k.tPct),k.tAtt+"/"+k.tTotal+" sessions"),
+          kpiRow("Presenter / Moderator","🎤",k.pres?100:0,KPI_W.pres,k.pres?"#059669":"#dc2626",k.presCount+" session"+(k.presCount!==1?"s":""))
+        )
+      ),
+      renderQuarterlyKPICard(res.id)
+    );
+  }
+
+  // ── Quarterly tab ─────────────────────────────────────────────
+  function renderQuarterlyTab(){
+    const q=STATE.mentorQ||currentQuarter();
+    const qBlocks=QUARTER_BLOCKS[q];
+    const kq=calcKPIQ(res.id,qBlocks);
+    return el("div",null,
+      el("div",{cls:"card"},
+        el("div",{cls:"lbl",st:{marginBottom:"8px"}},"Select Quarter"),
+        el("div",{cls:"flex-wrap",st:{gap:"4px"}},
+          [1,2,3,4].map(n=>el("span",{cls:"pill"+(q===n?" on":""),onClick:()=>set({mentorQ:n})},QUARTER_LABELS[n]))
+        ),
+        el("div",{cls:"sh",st:{marginTop:"8px"}},"Blocks "+qBlocks.join(", ")+" · Quarterly tracking is informational — not included in KPI score")
+      ),
+      el("div",{cls:"grid-3",st:{gap:"10px"}},
+        el("div",{cls:"card",st:{background:"#f0f9ff",border:"1px solid #bae6fd",padding:"12px"}},
+          el("div",{cls:"lbl",st:{marginBottom:"4px"}},"🌅 Morning Meeting"),
+          kq.mmPct!=null?el("div",null,
+            el("div",{st:{fontSize:"1.4rem",fontWeight:"900",color:kpiColor(kq.mmPct)}},kq.mmPct+"%"),
+            el("div",{cls:"sh"},kq.mmAtt+"/"+kq.mmTotal+" sessions"),
+            el("div",{cls:"sh",st:{color:"#7c3aed"}},kq.presCount+" pres/mod")
+          ):el("div",{cls:"sh"},"No data yet")
+        ),
+        el("div",{cls:"card",st:{background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"12px"}},
+          el("div",{cls:"lbl",st:{marginBottom:"4px"}},"📚 Teaching"),
+          kq.tPct!=null?el("div",null,
+            el("div",{st:{fontSize:"1.4rem",fontWeight:"900",color:kpiColor(kq.tPct)}},kq.tPct+"%"),
+            el("div",{cls:"sh"},kq.tAtt+"/"+kq.tTotal+" sessions")
+          ):el("div",{cls:"sh"},"No data yet")
+        ),
+        el("div",{cls:"card",st:{background:"#fefce8",border:"1px solid #fef08a",padding:"12px"}},
+          el("div",{cls:"lbl",st:{marginBottom:"4px"}},"📝 Quiz Average"),
+          kq.qAvg!=null?el("div",null,
+            el("div",{st:{fontSize:"1.4rem",fontWeight:"900",color:kpiColor(kq.qAvg)}},kq.qAvg+"%"),
+            el("div",{cls:"sh"},kq.quizCount+" quiz"+(kq.quizCount!==1?"zes":""))
+          ):el("div",{cls:"sh"},"No quizzes this quarter")
+        )
+      ),
+      milestoneCard("research","🔬","research_milestone","research_achieved","e.g. Complete literature review and submit protocol to IRB by end of quarter"),
+      milestoneCard("improvement","📈","improvement_area","improvement_achieved","e.g. Improve documentation of discharge summaries — target: 100% completion rate")
+    );
+  }
+
+  // ── Yearly tab ────────────────────────────────────────────────
+  function renderYearlyTab(){
+    const pendingCount=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.quarter==null&&p.status==="pending").length;
+    return el("div",null,
+      isPD()&&pendingCount>0?el("div",{cls:"alert-yellow",st:{marginBottom:"12px"}},
+        "⏳ "+pendingCount+" achievement submission"+(pendingCount>1?"s":"")+" pending your review."
+      ):null,
+      el("div",{cls:"card"},
+        el("div",{cls:"card-title"},"🏛️ Committee Participation — Active"),
+        el("div",{cls:"sh",st:{marginBottom:"10px"}},"Score set by PD only · "+KPI_W.comm+"% of total KPI"),
+        canEdit_?el("div",{cls:"flex-gap",st:{alignItems:"center",gap:"10px"}},
+          el("input",{type:"number",cls:"input-sm",st:{width:"70px"},min:"0",max:"10",value:COMM_SC[res.id]||0,
+            onChange:e=>{const v=Math.min(10,Math.max(0,parseInt(e.target.value)||0));saveKpiScore(res.id,{commScore:v});}}),
+          el("span",{cls:"sh"},"/10 → "+k.commPct+"% contribution")
+        ):el("div",{st:{fontSize:"1.4rem",fontWeight:"900",color:kpiColor(k.commPct)}},k.commPct+"%")
+      ),
+      el("div",{cls:"card",st:{marginTop:"12px"}},
+        el("div",{cls:"card-title"},"🏆 Yearly Achievements"),
+        el("div",{cls:"sh",st:{marginBottom:"14px"}},"Resident, mentor, or chief can submit — PD approves before it counts toward KPI score."),
+        el("div",{cls:"grid-2",st:{gap:"10px"}},
+          renderAchievement("qi","📈","Quality Improvement Project",KPI_W.qi,k.qiPct>0),
+          renderAchievement("publication","📄","Research Publication",KPI_W.pub,k.pubPct>0),
+          renderAchievement("oral","🎤","Oral Presentation at Conference",KPI_W.oral,k.oralPct>0),
+          renderAchievement("poster","🪧","Poster Presentation at Conference",KPI_W.poster,k.posterPct>0),
+          renderAchievement("awards","🏅","Award / Honor",KPI_W.awards,k.awardsPct>0),
+          renderAchievement("volunteering","🤝","Volunteering",KPI_W.volunteering,k.volunteeringPct>0)
+        )
+      )
+    );
+  }
+
+  // ── Overall score tier summary ────────────────────────────────
+  const ongoingRaw=k.qAvg*KPI_W.quiz/100+k.mmPct*KPI_W.mm/100+k.tPct*KPI_W.teach/100+(k.pres?KPI_W.pres:0);
+  const yearlyRaw=k.commPct*KPI_W.comm/100+k.qiPct*KPI_W.qi/100+k.pubPct*KPI_W.pub/100+k.oralPct*KPI_W.oral/100+k.posterPct*KPI_W.poster/100+k.awardsPct*KPI_W.awards/100+k.volunteeringPct*KPI_W.volunteering/100;
+
   return el("div",{cls:"content"},
     el("div",{cls:"flex-gap",st:{marginBottom:"16px",flexWrap:"wrap"}},
       el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
       el("h2",{st:{fontWeight:"800",color:"#111827",flex:"1"}},"KPI Dashboard"),
-      el("button",{cls:"sbtn ghost",st:{fontSize:".82rem"},onClick:()=>{const r=res||vr[0];if(r)exportKpiPDF(r,k);}},"📄 Export PDF")
+      el("button",{cls:"sbtn ghost",st:{fontSize:".82rem"},onClick:()=>exportKpiPDF(res,k)},"📄 Export PDF")
     ),
     !isResident()?el("div",{cls:"card"},
       el("div",{cls:"lbl"},"Select Resident"),
-      el("select",{onChange:e=>set({kpiSelRes:parseInt(e.target.value)})},
+      el("select",{onChange:e=>set({kpiSelRes:parseInt(e.target.value),kpiTab:"ongoing"})},
         ...vr.map(r=>el("option",{value:r.id,...(r.id===selId?{selected:""}:{})},r.name+" ("+r.level+")"))
       )
     ):null,
     el("div",{cls:"card"},
-      el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
+      el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
         avEl(res),
         el("div",{st:{flex:"1"}},
           el("div",{cls:"flex-gap"},el("div",{cls:"name"},res.name),chiefBadge(res.id)),
-          el("div",{cls:"sub"},res.level+" · Mentor: "+mentorName(res.id))
+          el("div",{cls:"sub"},res.level+" · Mentor: "+mentorName(res.id)+" · AY "+CURRENT_ACADEMIC_YEAR+"–"+(CURRENT_ACADEMIC_YEAR+1))
         ),
-        el("div",{st:{textAlign:"center"}},
+        el("div",{st:{textAlign:"center",minWidth:"70px"}},
           el("div",{st:{fontSize:"2rem",fontWeight:"900",color:kpiColor(k.overall)}},k.overall+"%"),
           el("div",{cls:"sh"},"Overall KPI")
         )
       ),
-      el("div",{cls:"pbar-bg",st:{height:"14px",marginBottom:"20px"}},
-        el("div",{cls:"pbar",st:{width:k.overall+"%",background:kpiColor(k.overall)}})
+      el("div",{cls:"pbar-bg",st:{height:"10px",marginBottom:"14px"}},
+        el("div",{cls:"pbar",st:{width:Math.min(k.overall,100)+"%",background:kpiColor(k.overall)}})
       ),
-      el("div",{cls:"grid-2",st:{gap:"12px"}},
-        kpiRow("Quiz Average","📝",k.qAvg,KPI_W.quiz,kpiColor(k.qAvg)),
-        kpiRow("Morning Meetings","🌅",k.mmPct,KPI_W.mm,kpiColor(k.mmPct),k.mmAtt+"/"+k.mmTotal+" sessions"),
-        kpiRow("Teaching Sessions","📚",k.tPct,KPI_W.teach,kpiColor(k.tPct),k.tAtt+"/"+k.tTotal+" sessions"),
-        kpiRow("MM Presentation","🎤",k.pres?100:0,KPI_W.pres,k.pres?"#059669":"#dc2626",k.presCount+" presentation"+(k.presCount!==1?"s":"")),
-        kpiRow("Committee Work","🏛️",k.commPct,KPI_W.comm,kpiColor(k.commPct),"Score: "+(COMM_SC[res.id]||0)+"/10"),
-        kpiRow("Research Participation","🔬",k.researchPct,KPI_W.research,k.researchPct?"#059669":"#dc2626",k.researchPct?"✅ Participated":"❌ Not recorded"),
-        kpiRow("QI Project","📈",k.qiPct,KPI_W.qi,k.qiPct?"#059669":"#dc2626",k.qiPct?"✅ Participated":"❌ Not recorded")
-      ),
-      k.bonus>0?el("div",{st:{marginTop:"14px",padding:"10px 14px",background:"#fefce8",border:"1px solid #fde68a",borderRadius:"10px",display:"flex",alignItems:"center",gap:"8px"}},
-        el("span",{st:{fontSize:"1.1rem"}},"🏆"),
-        el("span",{st:{fontWeight:"700",color:"#92400e"}},"Bonus: +"+k.bonus+" points"),
-        el("span",{cls:"sh"},"("+(KPI_SCORES[res.id]?.bonusPublished?"📄 Published ":"")+
-          (KPI_SCORES[res.id]?.bonusOral?"🎤 Oral ":"")+
-          (KPI_SCORES[res.id]?.bonusPoster?"🪧 Poster ":"")+")")
-      ):null
-    ),
-    canEditKPI(res.id)?el("div",{cls:"card"},
-      el("div",{cls:"card-title"},"Manual KPI Scores"),
-      el("div",{cls:"sh",st:{marginBottom:"14px"}},"Only you (PD) or this resident's mentor can edit these."),
-      el("div",{cls:"grid-2",st:{gap:"14px"}},
-        el("div",null,
-          el("div",{cls:"lbl"},"Committee Participation (0–10)"),
-          el("div",{cls:"flex-gap"},
-            el("input",{type:"number",cls:"input-sm",st:{width:"70px"},min:"0",max:"10",value:COMM_SC[res.id]||0,
-              onChange:e=>{const v=Math.min(10,Math.max(0,parseInt(e.target.value)||0));saveKpiScore(res.id,{commScore:v});}}),
-            el("span",{cls:"sh"},"/10 → "+Math.round(((COMM_SC[res.id]||0)/10)*100)+"% (×"+KPI_W.comm+"%)")
-          )
+      el("div",{cls:"grid-3",st:{gap:"8px",cursor:"pointer"}},
+        el("div",{st:{background:"#f0f9ff",borderRadius:"10px",padding:"10px 12px",textAlign:"center",border:"2px solid "+(tab==="ongoing"?"#3b82f6":"transparent")},onClick:()=>set({kpiTab:"ongoing"})},
+          el("div",{st:{fontWeight:"800",fontSize:"1.1rem",color:kpiColor(Math.round(ongoingRaw))}},Math.round(ongoingRaw)+"/60"),
+          el("div",{cls:"sh",st:{fontSize:".72rem"}},"📊 Ongoing")
         ),
-        el("div",null,
-          el("div",{cls:"lbl"},"MM Presentations (auto-tracked)"),
-          el("div",{cls:"sh"},k.presCount+" session"+(k.presCount!==1?"s":"")+" as presenter → "+(k.pres?"100":"0")+"% (×"+KPI_W.pres+"%)")
+        el("div",{st:{background:"#fdf4ff",borderRadius:"10px",padding:"10px 12px",textAlign:"center",border:"2px solid "+(tab==="quarterly"?"#7c3aed":"transparent")},onClick:()=>set({kpiTab:"quarterly"})},
+          el("div",{st:{fontWeight:"800",fontSize:"1.1rem",color:"#7c3aed"}},"Q"+(STATE.mentorQ||currentQuarter())),
+          el("div",{cls:"sh",st:{fontSize:".72rem"}},"📆 Quarterly")
         ),
-        el("div",null,
-          el("div",{cls:"lbl"},"Research Participation"),
-          (()=>{const chk=document.createElement("input");chk.type="checkbox";chk.checked=!!(KPI_SCORES[res.id]?.researchDone);chk.style.cssText="width:auto;margin-right:6px;";chk.onchange=e=>saveKpiScore(res.id,{researchDone:e.target.checked});const lbl=document.createElement("label");lbl.style.cssText="display:flex;align-items:center;font-size:.84rem;color:#374151;margin:0;font-weight:600;cursor:pointer;width:auto;";lbl.appendChild(chk);lbl.appendChild(document.createTextNode("Participated in research this year"));return lbl;})()
-        ),
-        el("div",null,
-          el("div",{cls:"lbl"},"QI Project Participation"),
-          (()=>{const chk=document.createElement("input");chk.type="checkbox";chk.checked=!!(KPI_SCORES[res.id]?.qiDone);chk.style.cssText="width:auto;margin-right:6px;";chk.onchange=e=>saveKpiScore(res.id,{qiDone:e.target.checked});const lbl=document.createElement("label");lbl.style.cssText="display:flex;align-items:center;font-size:.84rem;color:#374151;margin:0;font-weight:600;cursor:pointer;width:auto;";lbl.appendChild(chk);lbl.appendChild(document.createTextNode("Participated in a QI project this year"));return lbl;})()
+        el("div",{st:{background:"#fefce8",borderRadius:"10px",padding:"10px 12px",textAlign:"center",border:"2px solid "+(tab==="yearly"?"#d97706":"transparent")},onClick:()=>set({kpiTab:"yearly"})},
+          el("div",{st:{fontWeight:"800",fontSize:"1.1rem",color:kpiColor(Math.round(yearlyRaw))}},Math.round(yearlyRaw)+"/40"),
+          el("div",{cls:"sh",st:{fontSize:".72rem"}},"🏆 Yearly")
         )
-      ),
-      el("div",{cls:"sep"}),
-      el("div",{cls:"lbl",st:{marginBottom:"10px"}},"🏆 Bonus Achievements"),
-      el("div",{cls:"flex-wrap",st:{gap:"14px"}},
-        ...[
-          ["bonusPublished","📄 Research Published",KPI_BONUS.published],
-          ["bonusOral","🎤 Oral Presentation at Conference",KPI_BONUS.oral],
-          ["bonusPoster","🪧 Poster Presentation at Conference",KPI_BONUS.poster]
-        ].map(([field,label,pts])=>{
-          const chk=document.createElement("input");chk.type="checkbox";chk.checked=!!(KPI_SCORES[res.id]?.[field]);chk.style.cssText="width:auto;margin-right:6px;";chk.onchange=e=>saveKpiScore(res.id,{[field]:e.target.checked});
-          const lbl=document.createElement("label");lbl.style.cssText="display:flex;align-items:center;font-size:.84rem;color:#374151;margin:0;font-weight:600;cursor:pointer;width:auto;background:#f9fafb;border:1.5px solid #e5e7eb;borderRadius:9px;padding:8px 12px;";
-          lbl.appendChild(chk);lbl.appendChild(document.createTextNode(label+" (+"+pts+" pts)"));return lbl;
-        })
       )
-    ):null,
-    renderQuarterlyKPICard(res.id),
-    !isResident()?el("div",{cls:"card"},
+    ),
+    el("div",{cls:"tab-bar"},
+      el("span",{cls:"tab"+(tab==="ongoing"?" on":""),onClick:()=>set({kpiTab:"ongoing"})},"📊 Ongoing"),
+      el("span",{cls:"tab"+(tab==="quarterly"?" on":""),onClick:()=>set({kpiTab:"quarterly"})},"📆 Quarterly"),
+      el("span",{cls:"tab"+(tab==="yearly"?" on":""),onClick:()=>set({kpiTab:"yearly"})},"🏆 Yearly")
+    ),
+    tab==="ongoing"?renderOngoing():tab==="quarterly"?renderQuarterlyTab():renderYearlyTab(),
+    !isResident()?el("div",{cls:"card",st:{marginTop:"12px"}},
       el("div",{cls:"card-title"},"All Residents KPI Summary"),
       el("div",{cls:"tbl-wrap"},
         el("table",null,
           el("thead",null,
             el("tr",null,
               el("th",null,"Resident"),el("th",null,"Level"),
-              el("th",{st:{textAlign:"center"}},"Quiz"),el("th",{st:{textAlign:"center"}},"MM Att"),
+              el("th",{st:{textAlign:"center"}},"Quiz"),el("th",{st:{textAlign:"center"}},"MM"),
               el("th",{st:{textAlign:"center"}},"Teach"),el("th",{st:{textAlign:"center"}},"Pres"),
-              el("th",{st:{textAlign:"center"}},"Committee"),el("th",{st:{textAlign:"center"}},"Overall")
+              el("th",{st:{textAlign:"center"}},"Comm."),
+              el("th",{st:{textAlign:"center"}},"Achiev."),
+              el("th",{st:{textAlign:"center"}},"Overall")
             )
           ),
           el("tbody",null,
             ...vr.map(r=>{
               const kk=calcKPI(r.id);
-              return el("tr",null,
+              const achCount=[kk.qiPct,kk.pubPct,kk.oralPct,kk.posterPct,kk.awardsPct,kk.volunteeringPct].filter(v=>v>0).length;
+              const pendRes=KPI_PROPOSALS.filter(p=>p.resident_id===r.id&&p.status==="pending").length;
+              return el("tr",{st:{cursor:"pointer"},onClick:()=>set({kpiSelRes:r.id,kpiTab:"ongoing"})},
                 el("td",null,el("div",{cls:"flex-gap"},avEl(r),el("span",{cls:"name",st:{fontSize:".82rem"}},r.name),chiefBadge(r.id))),
                 el("td",null,levelBadge(r.level)),
                 el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:"#dbeafe",color:"#1e40af"}},kk.qAvg+"%")),
@@ -3172,6 +3421,10 @@ function renderKPI(){
                 el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:"#fef9c3",color:"#854d0e"}},kk.tPct+"%")),
                 el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:kk.pres?"#dcfce7":"#fee2e2",color:kk.pres?"#166534":"#991b1b"}},kk.presCount+"x")),
                 el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:"#f5f3ff",color:"#4c1d95"}},(COMM_SC[r.id]||0)+"/10")),
+                el("td",{st:{textAlign:"center"}},
+                  el("span",{cls:"bdg",st:{background:achCount>0?"#fef3c7":"#f1f5f9",color:achCount>0?"#92400e":"#64748b"}},achCount+"/6"),
+                  pendRes?el("span",{st:{background:"#fef3c7",color:"#92400e",borderRadius:"6px",padding:"1px 5px",fontSize:".68rem",marginLeft:"3px",fontWeight:"700"}},pendRes+"⏳"):null
+                ),
                 el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:kpiColor(kk.overall),color:"#fff"}},kk.overall+"%"))
               );
             })
@@ -4801,9 +5054,11 @@ function renderAdminProfile(rid){
 function renderProfileKPI(res){
   const k=calcKPI(res.id);
   const kpiColor=v=>v>=80?"#16a34a":v>=60?"#d97706":"#dc2626";
+  const achCount=[k.qiPct,k.pubPct,k.oralPct,k.posterPct,k.awardsPct,k.volunteeringPct].filter(v=>v>0).length;
+  const pendingCount=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.status==="pending").length;
   return el("div",null,
     el("div",{cls:"card"},
-      el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
+      el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
         avEl(res),
         el("div",{st:{flex:"1"}},
           el("div",{cls:"flex-gap"},el("div",{cls:"name"},res.name),chiefBadge(res.id)),
@@ -4814,61 +5069,40 @@ function renderProfileKPI(res){
           el("div",{cls:"sh"},"Overall KPI")
         )
       ),
-      el("div",{cls:"pbar-bg",st:{height:"12px",marginBottom:"18px"}},
-        el("div",{cls:"pbar",st:{width:k.overall+"%",background:kpiColor(k.overall)}})
+      el("div",{cls:"pbar-bg",st:{height:"10px",marginBottom:"14px"}},
+        el("div",{cls:"pbar",st:{width:Math.min(k.overall,100)+"%",background:kpiColor(k.overall)}})
       ),
-      el("div",{cls:"grid-2",st:{gap:"10px"}},
-        kpiRow("Quiz Average","📝",k.qAvg,KPI_W.quiz,kpiColor(k.qAvg)),
-        kpiRow("Morning Meetings","🌅",k.mmPct,KPI_W.mm,kpiColor(k.mmPct),k.mmAtt+"/"+k.mmTotal+" sessions"),
-        kpiRow("Teaching Sessions","📚",k.tPct,KPI_W.teach,kpiColor(k.tPct),k.tAtt+"/"+k.tTotal+" sessions"),
-        kpiRow("MM Presentation","🎤",k.pres?100:0,KPI_W.pres,k.pres?"#059669":"#dc2626",k.presCount+" presentation"+(k.presCount!==1?"s":"")),
-        kpiRow("Committee Work","🏛️",k.commPct,KPI_W.comm,kpiColor(k.commPct),"Score: "+(COMM_SC[res.id]||0)+"/10"),
-        kpiRow("Research Participation","🔬",k.researchPct,KPI_W.research,k.researchPct?"#059669":"#dc2626",k.researchPct?"✅ Participated":"❌ Not recorded"),
-        kpiRow("QI Project","📈",k.qiPct,KPI_W.qi,k.qiPct?"#059669":"#dc2626",k.qiPct?"✅ Participated":"❌ Not recorded")
-      ),
-      k.bonus>0?el("div",{st:{marginTop:"12px",padding:"10px 14px",background:"#fefce8",border:"1px solid #fde68a",borderRadius:"10px",display:"flex",alignItems:"center",gap:"8px"}},
-        el("span",{st:{fontSize:"1.1rem"}},"🏆"),
-        el("span",{st:{fontWeight:"700",color:"#92400e"}},"Bonus: +"+k.bonus+" points"),
-        el("span",{cls:"sh"},"("+(KPI_SCORES[res.id]?.bonusPublished?"📄 Published ":"")+
-          (KPI_SCORES[res.id]?.bonusOral?"🎤 Oral ":"")+
-          (KPI_SCORES[res.id]?.bonusPoster?"🪧 Poster ":"")+")")
-      ):null
-    ),
-    canEditKPI(res.id)?el("div",{cls:"card"},
-      el("div",{cls:"card-title"},"Manual KPI Scores"),
-      el("div",{cls:"sh",st:{marginBottom:"14px"}},"Only PD or this resident's mentor can edit."),
-      el("div",{cls:"grid-2",st:{gap:"14px"}},
-        el("div",null,
-          el("div",{cls:"lbl"},"Committee Participation (0–10)"),
-          el("div",{cls:"flex-gap"},
-            el("input",{type:"number",cls:"input-sm",st:{width:"70px"},min:"0",max:"10",value:COMM_SC[res.id]||0,
-              onChange:e=>{const v=Math.min(10,Math.max(0,parseInt(e.target.value)||0));saveKpiScore(res.id,{commScore:v});}}),
-            el("span",{cls:"sh"},"/10 → "+Math.round(((COMM_SC[res.id]||0)/10)*100)+"% (×"+KPI_W.comm+"%)")
-          )
+      el("div",{cls:"grid-3",st:{gap:"8px",marginBottom:"14px"}},
+        el("div",{cls:"card",st:{background:"#f0f9ff",border:"1px solid #bae6fd",padding:"10px",textAlign:"center"}},
+          el("div",{st:{fontWeight:"800",color:kpiColor(k.qAvg)}},k.qAvg+"%"),
+          el("div",{cls:"sh",st:{fontSize:".72rem"}},"📝 Quiz")
         ),
-        el("div",null,
-          el("div",{cls:"lbl"},"MM Presentations (auto-tracked)"),
-          el("div",{cls:"sh"},k.presCount+" session"+(k.presCount!==1?"s":"")+" as presenter → "+(k.pres?"100":"0")+"% (×"+KPI_W.pres+"%)")
+        el("div",{cls:"card",st:{background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"10px",textAlign:"center"}},
+          el("div",{st:{fontWeight:"800",color:kpiColor(k.mmPct)}},k.mmPct+"%"),
+          el("div",{cls:"sh",st:{fontSize:".72rem"}},"🌅 MM Att")
         ),
-        el("div",null,
-          el("div",{cls:"lbl"},"Research Participation"),
-          (()=>{const chk=document.createElement("input");chk.type="checkbox";chk.checked=!!(KPI_SCORES[res.id]?.researchDone);chk.style.cssText="width:auto;margin-right:6px;";chk.onchange=e=>saveKpiScore(res.id,{researchDone:e.target.checked});const lbl=document.createElement("label");lbl.style.cssText="display:flex;align-items:center;font-size:.84rem;color:#374151;margin:0;font-weight:600;cursor:pointer;width:auto;";lbl.appendChild(chk);lbl.appendChild(document.createTextNode("Participated this year"));return lbl;})()
-        ),
-        el("div",null,
-          el("div",{cls:"lbl"},"QI Project Participation"),
-          (()=>{const chk=document.createElement("input");chk.type="checkbox";chk.checked=!!(KPI_SCORES[res.id]?.qiDone);chk.style.cssText="width:auto;margin-right:6px;";chk.onchange=e=>saveKpiScore(res.id,{qiDone:e.target.checked});const lbl=document.createElement("label");lbl.style.cssText="display:flex;align-items:center;font-size:.84rem;color:#374151;margin:0;font-weight:600;cursor:pointer;width:auto;";lbl.appendChild(chk);lbl.appendChild(document.createTextNode("Participated this year"));return lbl;})()
+        el("div",{cls:"card",st:{background:"#fefce8",border:"1px solid #fef08a",padding:"10px",textAlign:"center"}},
+          el("div",{st:{fontWeight:"800",color:kpiColor(k.tPct)}},k.tPct+"%"),
+          el("div",{cls:"sh",st:{fontSize:".72rem"}},"📚 Teaching")
         )
       ),
-      el("div",{cls:"sep"}),
-      el("div",{cls:"lbl",st:{marginBottom:"10px"}},"🏆 Bonus Achievements"),
-      el("div",{cls:"flex-wrap",st:{gap:"10px"}},
-        ...[["bonusPublished","📄 Research Published",KPI_BONUS.published],["bonusOral","🎤 Oral Presentation",KPI_BONUS.oral],["bonusPoster","🪧 Poster Presentation",KPI_BONUS.poster]].map(([field,label,pts])=>{
-          const chk=document.createElement("input");chk.type="checkbox";chk.checked=!!(KPI_SCORES[res.id]?.[field]);chk.style.cssText="width:auto;margin-right:6px;";chk.onchange=e=>saveKpiScore(res.id,{[field]:e.target.checked});
-          const lbl=document.createElement("label");lbl.style.cssText="display:flex;align-items:center;font-size:.84rem;color:#374151;margin:0;font-weight:600;cursor:pointer;width:auto;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:9px;padding:8px 12px;";
-          lbl.appendChild(chk);lbl.appendChild(document.createTextNode(label+" (+"+pts+" pts)"));return lbl;
-        })
-      )
-    ):null,
+      el("div",{cls:"grid-2",st:{gap:"8px"}},
+        el("div",{cls:"card",st:{background:"#f8fafc",border:"1px solid #e2e8f0",padding:"10px",textAlign:"center"}},
+          el("div",{st:{fontWeight:"800",color:kpiColor(k.commPct)}},k.commPct+"%"),
+          el("div",{cls:"sh",st:{fontSize:".72rem"}},"🏛️ Committee ("+COMM_SC[res.id]+"/10)")
+        ),
+        el("div",{cls:"card",st:{background:"#fef3c7",border:"1px solid #fde68a",padding:"10px",textAlign:"center"}},
+          el("div",{st:{fontWeight:"800",color:achCount>0?"#92400e":"#94a3b8"}},achCount+"/6"),
+          el("div",{cls:"sh",st:{fontSize:".72rem"}},"🏆 Yearly Achievements"+(pendingCount?" · ⏳"+pendingCount+" pending":""))
+        )
+      ),
+      isPD()?el("div",{cls:"lbl",st:{marginTop:"12px"}},
+        "Committee Score (0–10):",
+        el("input",{type:"number",cls:"input-sm",st:{width:"60px",marginLeft:"8px"},min:"0",max:"10",value:COMM_SC[res.id]||0,
+          onChange:e=>{const v=Math.min(10,Math.max(0,parseInt(e.target.value)||0));saveKpiScore(res.id,{commScore:v});}})
+      ):null,
+      el("button",{cls:"sbtn ghost",st:{marginTop:"12px",fontSize:".8rem"},onClick:()=>set({mod:"kpi",kpiSelRes:res.id,kpiTab:"yearly"})},"🏆 Manage Achievements & Proposals →")
+    ),
     renderQuarterlyKPICard(res.id)
   );
 }
