@@ -3105,9 +3105,9 @@ function calcKPIQ(id,qBlocks){
   let mmAtt=0,mmTotal=0,tAtt=0,tTotal=0;
   qBlocks.forEach(blk=>{
     const blkAtt=MM_ATT[blk]||{};
-    Object.values(blkAtt).forEach(day=>{mmTotal++;if(day[id]==="P"||day[id]==="L"||day[id]==="E")mmAtt++;});
+    Object.values(blkAtt).forEach(day=>{const s=day[id];if(s==='O')return;mmTotal++;if(s==='P'||s==='L'||s==='E')mmAtt++;});
     const tBlk=TEACH_ATT[blk]||{};
-    Object.values(tBlk).forEach(day=>{tTotal++;if(day[id]==="P"||day[id]==="L"||day[id]==="E")tAtt++;});
+    Object.values(tBlk).forEach(day=>{const s=day[id];if(s==='O')return;tTotal++;if(s==='P'||s==='L'||s==='E')tAtt++;});
   });
   const mmPct=mmTotal?Math.round(mmAtt/mmTotal*100):null;
   const tPct=tTotal?Math.round(tAtt/tTotal*100):null;
