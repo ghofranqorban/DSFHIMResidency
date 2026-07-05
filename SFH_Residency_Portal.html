@@ -1546,6 +1546,7 @@ function renderModGrid(){
   const hour=today.getHours();
   const greeting=hour<12?"Good morning":hour<17?"Good afternoon":"Good evening";
   const dateStr=today.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  const timeStr=today.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true});
   const firstName=u.name.split(" ").length>1?u.name.split(" ")[1]:u.name.split(" ")[0];
   const periodLabel=ROTA_PERIODS[CURRENT_PERIOD-1]||"";
   const roleLabel=u.role==="pd"?"Program Director":u.role==="chief"?"Chief Resident":u.role==="consultant"?"Consultant / Mentor":"Resident";
@@ -1583,9 +1584,10 @@ function renderModGrid(){
     shapes,
     el("div",{cls:"home-hero-inner"},
       el("div",{st:{flex:"1",minWidth:"180px"}},
-        el("p",{cls:"home-eyebrow"},greeting+" · "+dateStr),
+        el("p",{cls:"home-eyebrow"},greeting.toUpperCase()+" · "+dateStr.toUpperCase()+" · "+timeStr),
         el("h1",{cls:"home-title"},firstName),
-        el("p",{cls:"home-subtitle"},"Block "+CURRENT_PERIOD+" · "+periodLabel)
+        el("p",{cls:"home-subtitle"},"Block "+CURRENT_PERIOD+" · "+periodLabel),
+        (isPD()||STATE.user?.role==="chief")?el("button",{cls:"sbtn primary",st:{fontSize:".82rem",marginTop:"16px"},onClick:()=>set({showBroadcast:true})},"📢 Broadcast Announcement"):null
       ),
       infoCard
     )
@@ -1691,11 +1693,6 @@ function renderModGrid(){
   const wrap=el("div");
   wrap.appendChild(hero);
   if(alertsDiv)wrap.appendChild(alertsDiv);
-  if(isPD()||STATE.user?.role==="chief")wrap.appendChild(
-    el("div",{st:{padding:"0 0 4px"}},
-      el("button",{cls:"sbtn primary",st:{fontSize:".84rem",marginTop:"12px"},onClick:()=>set({showBroadcast:true})},"📢 Broadcast Announcement")
-    )
-  );
   wrap.appendChild(modules);
   return wrap;
 }
