@@ -3611,6 +3611,16 @@ function renderLeave(){
   const tab=STATE.leaveTab||"overview";
   const vr=visRes();
   const sel=STATE.leaveSelRes;
+  // Residents see only their own leave page directly
+  if(!canManage&&u.role==="resident"){
+    return el("div",{cls:"content"},
+      el("div",{cls:"flex-gap",st:{marginBottom:"12px",flexWrap:"wrap",alignItems:"center"}},
+        el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
+        el("h2",{st:{fontWeight:"800",color:"#111827"}},"My Annual Leave")
+      ),
+      renderLeaveDetail(u.rid,null)
+    );
+  }
   return el("div",{cls:"content"},
     el("div",{cls:"flex-gap",st:{marginBottom:"12px",flexWrap:"wrap",alignItems:"center"}},
       el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
@@ -3772,7 +3782,7 @@ function renderLeaveDetail(rid,onBack){
     await addManualLeave(rid,from,to,days,"Rota leave B"+l.period);
   }
   return el("div",null,
-    el("button",{cls:"back-btn",onClick:onBack},"← Back to List"),
+    onBack?el("button",{cls:"back-btn",onClick:onBack},"← Back to List"):null,
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"14px"}},
         avEl(res),
