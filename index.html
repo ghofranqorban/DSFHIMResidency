@@ -1977,7 +1977,10 @@ function renderMMAttendance(){
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
         el("span",{cls:"card-title",st:{margin:"0"}},"Attendance Table"),
-        canLogMMAttendance()&&(isPD()||sessions.some(s=>canEditAttSession(s.session_date)))?el("button",{cls:"sbtn primary",onClick:()=>set({mmShowEntry:!STATE.mmShowEntry,mmEntrySession:null})},STATE.mmShowEntry?"Hide Form":"Log Attendance"):null
+        el("div",{cls:"flex-gap",st:{marginLeft:"auto",gap:"8px"}},
+          sessions.length?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem"},onClick:()=>exportAttendance("mm",blk)},"⬇ Export Excel"):null,
+          canLogMMAttendance()&&(isPD()||sessions.some(s=>canEditAttSession(s.session_date)))?el("button",{cls:"sbtn primary",onClick:()=>set({mmShowEntry:!STATE.mmShowEntry,mmEntrySession:null})},STATE.mmShowEntry?"Hide Form":"Log Attendance"):null
+        )
       ),
       STATE.mmShowEntry?renderMMEntryForm(blk,sessions):null,
       el("div",{cls:"tbl-wrap"},
@@ -2273,7 +2276,10 @@ function renderTeachAttendance(){
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
         el("span",{cls:"card-title",st:{margin:"0"}},"Attendance Table"),
-        canLogTeachAttendance()&&(isPD()||sessions.some(s=>canEditAttSession(s.session_date)))?el("button",{cls:"sbtn primary",onClick:()=>set({teachShowEntry:!STATE.teachShowEntry,teachEntrySession:null})},STATE.teachShowEntry?"Hide Form":"Log Attendance"):null
+        el("div",{cls:"flex-gap",st:{marginLeft:"auto",gap:"8px"}},
+          sessions.length?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem"},onClick:()=>exportAttendance("teach",blk)},"⬇ Export Excel"):null,
+          canLogTeachAttendance()&&(isPD()||sessions.some(s=>canEditAttSession(s.session_date)))?el("button",{cls:"sbtn primary",onClick:()=>set({teachShowEntry:!STATE.teachShowEntry,teachEntrySession:null})},STATE.teachShowEntry?"Hide Form":"Log Attendance"):null
+        )
       ),
       STATE.teachShowEntry?renderTeachEntryForm(blk,sessions):null,
       sessions.length===0?el("p",{cls:"sh"},"No sessions."):
@@ -2410,6 +2416,33 @@ function renderTeachOverview(){
     )
   );
 }
+// ─── ATTENDANCE EXPORT ───────────────────────────────────────────────────────
+function exportAttendance(type, blk){
+  const isMM = type === "mm";
+  const sessions = (isMM ? MM_SESSIONS : TEACH_SESSIONS)
+    .filter(s => s.block_number === blk)
+    .slice().sort((a,b) => a.session_date.localeCompare(b.session_date));
+  const ATT = isMM ? MM_ATT : TEACH_ATT;
+  const vr = visRes();
+  const headers = ["Resident","Level", ...sessions.map(s => fmtDate(s.session_date)+"\n"+s.topic), "Att %"];
+  const rows = vr.map(r => {
+    let present = 0;
+    const cols = sessions.map(s => {
+      const st = ((ATT[blk]||{})[s.session_date]||{})[r.id] || "";
+      if(st==="P"||st==="L"||st==="E") present++;
+      return st || "—";
+    });
+    const pct = sessions.length ? Math.round(present/sessions.length*100)+"%" : "—";
+    return [r.name, r.level, ...cols, pct];
+  });
+  const aoa = [headers, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = [{wch:24},{wch:6},...sessions.map(()=>({wch:14})),{wch:7}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+  XLSX.writeFile(wb, (isMM?"MM":"Teaching")+"_Attendance_Block"+blk+".xlsx");
+}
+
 // ─── QUIZ MARKS ──────────────────────────────────────────────────────────────
 function renderQuiz(){
   const u=STATE.user;
@@ -2453,7 +2486,44 @@ function renderQuiz(){
         )
       ),
       el("div",{cls:"card"},
-        el("div",{cls:"card-title"},"Resident Marks"),
+        el("div",{cls:"flex-gap",st:{marginBottom:"12px",alignItems:"center"}},
+          el("span",{cls:"card-title",st:{margin:"0"}},"Resident Marks"),
+          canEditQuiz?el("label",{cls:"sbtn ghost",st:{fontSize:".78rem",cursor:"pointer",marginLeft:"auto"}},
+            "⬆ Import Excel",
+            el("input",{type:"file",accept:".xlsx,.xls",st:{display:"none"},onChange:e=>{
+              const file=e.target.files[0];if(!file)return;
+              const reader=new FileReader();
+              reader.onload=ev=>{
+                const wb=XLSX.read(new Uint8Array(ev.target.result),{type:"array"});
+                const ws=wb.Sheets[wb.SheetNames[0]];
+                const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:""});
+                // Skip header row if first cell looks like text (not a name match)
+                let dataRows=aoa;
+                if(dataRows.length&&typeof dataRows[0][0]==="string"&&isNaN(parseFloat(dataRows[0][1]))){
+                  const firstCell=(dataRows[0][0]||"").toLowerCase();
+                  const looksLikeHeader=["name","resident","student"].some(k=>firstCell.includes(k));
+                  if(looksLikeHeader) dataRows=dataRows.slice(1);
+                }
+                let matched=0,skipped=[];
+                dataRows.forEach(row=>{
+                  const rawName=(row[0]||"").trim();
+                  const rawScore=row[1];
+                  if(!rawName)return;
+                  const score=parseFloat(rawScore);
+                  if(isNaN(score))return;
+                  const res=RESIDENTS.find(r=>r.name.toLowerCase().includes(rawName.toLowerCase())||rawName.toLowerCase().includes(r.name.toLowerCase().split(" ").pop()));
+                  if(res){selQ.sc[res.id]=Math.min(score,selQ.max);matched++;}
+                  else skipped.push(rawName);
+                });
+                e.target.value="";
+                render();
+                const msg=matched+" score"+(matched!==1?"s":"")+" imported."+( skipped.length?" Could not match: "+skipped.join(", "):"");
+                alert(msg);
+              };
+              reader.readAsArrayBuffer(file);
+            }})
+          ):null
+        ),
         canEditQuiz?null:el("div",{cls:"sh",st:{marginBottom:"10px",color:"#d97706"}},"View only — marks are locked to the assigned assessor."),
         el("div",{cls:"tbl-wrap"},
           el("table",null,
