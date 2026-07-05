@@ -185,6 +185,7 @@ QUIZZES_LOAD_ERR // string|null — set if quizzes table missing in Supabase
 | `add_counseling_countersign.sql` | ✅ Run | Countersign columns + RPC on counseling |
 | `add_promotion_log.sql` | ✅ Partially run | promotion_log table exists (policy already existed error — table is present) |
 | `add_kpi_quarterly_proposals.sql` | ✅ Partially run | kpi_quarterly + kpi_proposals tables exist (policy already existed error — tables are present) |
+| `fix_attendance_rls_and_deputy_pd.sql` | ⛔ Do NOT run | Adds consultants to attendance write policy — not needed. Attendance committee = privileged residents only, already covered by `has_priv('edit_mm_attendance')` in the original migration_003 policy. |
 
 ---
 
