@@ -140,17 +140,17 @@ label{display:block;font-size:.8rem;font-weight:600;color:#4a3828;margin-bottom:
 .home-hero{position:relative;background:linear-gradient(135deg,#e0d4c4 0%,#ede5d8 55%,#d8cbb8 100%);padding:52px 48px 56px;overflow:hidden;flex-shrink:0;}
 .home-hero-shapes{position:absolute;inset:0;pointer-events:none;overflow:hidden;}
 .home-shape{position:absolute;border-radius:4px;opacity:.3;}
-.home-hero-inner{position:relative;display:flex;align-items:center;justify-content:space-between;gap:32px;}
+.home-hero-inner{position:relative;display:flex;align-items:center;min-height:180px;}
 .home-eyebrow{font-size:.68rem;letter-spacing:.15em;text-transform:uppercase;color:rgba(61,32,16,.45);font-weight:600;margin-bottom:14px;}
 .home-title{font-family:'Playfair Display',Georgia,serif;font-size:clamp(2.2rem,4vw,3.4rem);font-weight:700;color:#3d2010;line-height:1.1;letter-spacing:-.02em;margin-bottom:8px;}
 .home-subtitle{font-family:'Playfair Display',Georgia,serif;font-size:clamp(.9rem,1.8vw,1.2rem);font-style:italic;color:#9c6a4a;font-weight:400;}
-.home-infocard{background:rgba(255,255,255,.55);border:1px solid rgba(201,106,74,.2);border-radius:20px;padding:28px 30px;backdrop-filter:blur(16px);min-width:220px;max-width:270px;flex-shrink:0;margin-right:32px;}
+.home-infocard{position:absolute;right:48px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.62);border:1px solid rgba(201,106,74,.18);border-radius:20px;padding:28px 32px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);width:260px;box-shadow:0 8px 32px rgba(61,32,16,.1),0 2px 8px rgba(61,32,16,.06);}
 .home-infocard-tag{font-size:.6rem;letter-spacing:.13em;text-transform:uppercase;color:rgba(61,32,16,.4);margin-bottom:18px;font-weight:600;}
 .home-infocard-block{font-size:1.5rem;font-weight:800;color:#3d2010;margin-bottom:2px;}
 .home-infocard-sub{font-size:.75rem;color:rgba(61,32,16,.45);margin-bottom:18px;}
 .home-infocard-divider{height:1px;background:rgba(61,32,16,.1);margin-bottom:18px;}
 .home-infocard-label{font-size:.65rem;color:rgba(61,32,16,.38);margin-bottom:5px;}
-.home-infocard-name{font-weight:700;color:#3d2010;font-size:.85rem;}
+.home-infocard-name{font-weight:700;color:#3d2010;font-size:.88rem;}
 .home-infocard-role{font-size:.68rem;color:rgba(61,32,16,.45);margin-top:2px;text-transform:capitalize;}
 /* ── Home: module section ── */
 .home-modules{padding:36px 48px 52px;background:#f5ede0;}
@@ -1583,7 +1583,7 @@ function renderModGrid(){
   const hero=el("div",{cls:"home-hero"},
     shapes,
     el("div",{cls:"home-hero-inner"},
-      el("div",{st:{flex:"1",minWidth:"180px"}},
+      el("div",{st:{flex:"1",minWidth:"180px",maxWidth:"calc(100% - 330px)"}},
         el("p",{cls:"home-eyebrow"},greeting.toUpperCase()+" · "+dateStr.toUpperCase()+" · "+timeStr),
         el("h1",{cls:"home-title"},firstName),
         el("p",{cls:"home-subtitle"},"Block "+CURRENT_PERIOD+" · "+periodLabel),
