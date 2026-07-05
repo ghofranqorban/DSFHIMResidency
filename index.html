@@ -658,6 +658,106 @@ async function reviewProposal(proposalId,approve){
   }
   render();
 }
+async function revokeKpiApproval(resId,fieldKey){
+  if(!confirm("Remove verification for this achievement?"))return;
+  const p=KPI_PROPOSALS.find(x=>x.resident_id===resId&&x.field_key===fieldKey&&x.quarter==null&&x.status==="approved");
+  if(p){
+    const{error}=await sb.from("kpi_proposals").update({status:"rejected",reviewed_by:STATE.user.profileId,reviewed_at:new Date().toISOString()}).eq("id",p.id);
+    if(error){alert("Error: "+error.message);return;}
+    p.status="rejected";
+  }
+  const fieldMap={publication:"bonusPublished",oral:"bonusOral",poster:"bonusPoster",qi:"qiDone",awards:"awardsHonors",volunteering:"volunteering"};
+  if(fieldMap[fieldKey])await saveKpiScore(resId,{[fieldMap[fieldKey]]:false});
+  render();
+}
+function parseProposalNote(note){
+  if(!note)return{};
+  try{return JSON.parse(note);}catch(e){return{raw:note};}
+}
+async function uploadKpiFile(file,resId,fieldKey){
+  const ext=file.name.split(".").pop();
+  const path=resId+"/"+fieldKey+"_"+Date.now()+"."+ext;
+  const{data,error}=await sb.storage.from("kpi-evidence").upload(path,file,{upsert:true});
+  if(error){alert("Upload failed: "+error.message);return null;}
+  const{data:urlData}=sb.storage.from("kpi-evidence").getPublicUrl(path);
+  return urlData.publicUrl;
+}
+function renderKpiProposalModal(){
+  const s=STATE.kpiPropModal;
+  if(!s)return null;
+  const{resId,fieldKey}=s;
+  const fields=STATE.kpiPropFields||{};
+  const uploading=STATE.kpiPropUploading||false;
+  const close=()=>set({kpiPropModal:null,kpiPropFields:{},kpiPropUploading:false});
+
+  const inp=(label,key,placeholder,type)=>el("div",{st:{marginBottom:"10px"}},
+    el("label",{st:{fontSize:".8rem",fontWeight:"600",display:"block",marginBottom:"3px"}},label),
+    el("input",{type:type||"text",placeholder:placeholder||"",value:fields[key]||"",
+      st:{width:"100%",padding:"7px 10px",border:"1px solid #d1d5db",borderRadius:"7px",fontSize:".85rem"},
+      onInput:e=>{const f={...fields};f[key]=e.target.value;set({kpiPropFields:f});}})
+  );
+  const fileInp=(label,key)=>el("div",{st:{marginBottom:"10px"}},
+    el("label",{st:{fontSize:".8rem",fontWeight:"600",display:"block",marginBottom:"3px"}},label),
+    fields[key+"_name"]?
+      el("div",{st:{fontSize:".8rem",color:"#16a34a",padding:"6px 10px",background:"#f0fdf4",borderRadius:"6px",border:"1px solid #bbf7d0"}},
+        "📎 "+fields[key+"_name"]+" ",
+        el("span",{st:{cursor:"pointer",color:"#dc2626",fontWeight:"700"},onClick:()=>{const f={...fields};delete f[key];delete f[key+"_name"];set({kpiPropFields:f});}},"✕")
+      ):
+      el("input",{type:"file",accept:".pdf,.jpg,.jpeg,.png",
+        st:{width:"100%",fontSize:".8rem"},
+        onChange:async e=>{
+          const file=e.target.files[0];if(!file)return;
+          const f={...fields};f[key+"_file"]=file;f[key+"_name"]=file.name;set({kpiPropFields:f});
+        }})
+  );
+
+  let formFields=[];
+  if(fieldKey==="publication"){
+    formFields=[inp("Title *","title","e.g. Efficacy of X in Y"),inp("Authors *","authors","e.g. Al-Harbi M, Smith J, ..."),inp("Year *","year","e.g. 2024","number"),inp("Journal / Publisher","journal","e.g. NEJM, BMJ"),inp("Link (DOI or URL)","link","https://..."),fileInp("Upload PDF (optional)","file")];
+  }else if(fieldKey==="oral"){
+    formFields=[inp("Presentation Title *","title","Title of your talk"),inp("Conference / Event *","event","e.g. Saudi IM Congress 2024"),inp("Date (Month/Year) *","date","e.g. March 2024"),fileInp("Upload Abstract / Certificate (optional)","file")];
+  }else if(fieldKey==="poster"){
+    formFields=[inp("Poster Title *","title","Title of your poster"),inp("Conference / Event *","event","e.g. KFSH Research Day 2024"),inp("Date (Month/Year) *","date","e.g. November 2024"),fileInp("Upload Poster / Certificate (optional)","file")];
+  }else if(fieldKey==="qi"){
+    formFields=[inp("Project Title *","title","e.g. Reducing CAUTI rates in Ward 5"),inp("Description","description","Brief summary of the project"),inp("Completion / Submission Date","date","e.g. June 2024"),inp("Supervisor Name","supervisor","e.g. Dr. Ahmed Al-Zahrani"),inp("Supervisor Email","supervisorEmail","e.g. ahmed@dsfh.com.sa","email"),fileInp("Upload Supporting Document (optional)","file")];
+  }else if(fieldKey==="awards"){
+    formFields=[inp("Award / Honor Title *","title","e.g. Best Resident of the Year"),inp("Issuing Body *","issuer","e.g. Saudi Board of IM"),inp("Date (Month/Year) *","date","e.g. September 2024"),fileInp("Upload Certificate (optional)","file")];
+  }else if(fieldKey==="volunteering"){
+    formFields=[inp("Activity *","title","e.g. Community Health Screening"),inp("Organization *","organization","e.g. Saudi Red Crescent"),inp("Date","date","e.g. December 2024"),fileInp("Upload Evidence (optional)","file")];
+  }
+
+  const fieldLabels={publication:"Research Publication",oral:"Oral Presentation",poster:"Poster Presentation",qi:"QI Project",awards:"Awards & Honors",volunteering:"Volunteering"};
+
+  async function handleSubmit(){
+    if(!fields.title&&fieldKey!=="volunteering"){alert("Please fill in the required fields.");return;}
+    set({kpiPropUploading:true});
+    let fileUrl=null;
+    if(fields.file_file){
+      fileUrl=await uploadKpiFile(fields.file_file,resId,fieldKey);
+      if(!fileUrl){set({kpiPropUploading:false});return;}
+    }
+    const meta={...fields};
+    delete meta.file_file;delete meta.file_name;
+    if(fileUrl)meta.fileUrl=fileUrl;
+    const noteJson=JSON.stringify(meta);
+    await submitKpiProposal(resId,fieldKey,null,noteJson);
+    close();
+  }
+
+  return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
+    el("div",{cls:"modal-card",st:{width:"480px",maxWidth:"100%",maxHeight:"90vh",overflowY:"auto"}},
+      el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
+        el("div",{st:{fontWeight:"800",fontSize:"1rem",flex:"1"}},"📤 Submit Achievement — "+(fieldLabels[fieldKey]||fieldKey)),
+        el("button",{cls:"sbtn ghost",st:{padding:"2px 8px"},onClick:close},"✕")
+      ),
+      ...formFields,
+      el("div",{cls:"flex-gap",st:{gap:"8px",marginTop:"4px"}},
+        el("button",{cls:"sbtn primary",st:{flex:"1"},onClick:handleSubmit,disabled:uploading},uploading?"Uploading...":"📤 Submit for Review"),
+        el("button",{cls:"sbtn ghost",onClick:close},"Cancel")
+      )
+    )
+  );
+}
 // quiz IDs are now DB-generated; no local counter needed
 // ─── LEAVE RECORDS (DB-backed: table `leave_records` — manual approved leave +
 // unapproved absences; rota-derived leave lives in the `rotations` table above
@@ -3148,9 +3248,28 @@ function renderKPI(){
   const canSetMilestone=isPD()||STATE.user?.role==="chief"||isMentor;
 
   // ── Achievement card with proposal/approval flow ──────────────
+  function renderProposalDetails(p){
+    const m=parseProposalNote(p.note);
+    const rows=[];
+    if(m.raw)rows.push(el("div",{cls:"sh",st:{fontStyle:"italic"}},"\""+m.raw+"\""));
+    if(m.title)rows.push(el("div",{st:{fontSize:".8rem",fontWeight:"700",color:"#111827"}},m.title));
+    if(m.authors)rows.push(el("div",{cls:"sh"},"Authors: "+m.authors));
+    if(m.journal)rows.push(el("div",{cls:"sh"},"Journal: "+m.journal));
+    if(m.year)rows.push(el("div",{cls:"sh"},"Year: "+m.year));
+    if(m.event)rows.push(el("div",{cls:"sh"},"Event: "+m.event));
+    if(m.date)rows.push(el("div",{cls:"sh"},"Date: "+m.date));
+    if(m.issuer)rows.push(el("div",{cls:"sh"},"Issuing body: "+m.issuer));
+    if(m.organization)rows.push(el("div",{cls:"sh"},"Organization: "+m.organization));
+    if(m.description)rows.push(el("div",{cls:"sh"},"Description: "+m.description));
+    if(m.supervisor)rows.push(el("div",{cls:"sh"},"Supervisor: "+m.supervisor+(m.supervisorEmail?" ("+m.supervisorEmail+")":"")));
+    if(m.link)rows.push(el("a",{href:m.link,target:"_blank",st:{fontSize:".78rem",color:"#2563eb","wordBreak":"break-all"}},"🔗 "+m.link));
+    if(m.fileUrl)rows.push(el("a",{href:m.fileUrl,target:"_blank",st:{fontSize:".78rem",color:"#7c3aed"}},"📎 View uploaded file"));
+    return rows.length?el("div",{st:{marginBottom:"6px"}}, ...rows):null;
+  }
   function renderAchievement(fieldKey,icon,label,weight,isApproved){
     const pending=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.field_key===fieldKey&&p.quarter==null&&p.status==="pending");
     const rejected=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.field_key===fieldKey&&p.quarter==null&&p.status==="rejected");
+    const approvedProp=KPI_PROPOSALS.find(p=>p.resident_id===res.id&&p.field_key===fieldKey&&p.quarter==null&&p.status==="approved");
     const border=isApproved?"#bbf7d0":pending.length?"#fde68a":"#e2e8f0";
     const bg=isApproved?"#f0fdf4":pending.length?"#fefce8":"#f8fafc";
     return el("div",{st:{background:bg,borderRadius:"12px",padding:"14px 16px",border:"1px solid "+border}},
@@ -3160,18 +3279,23 @@ function renderKPI(){
           el("div",{st:{fontWeight:"700",fontSize:".88rem",color:"#111827"}},label),
           el("div",{cls:"sh"},weight+"% weight")
         ),
-        isApproved?el("span",{st:{background:"#dcfce7",color:"#166534",borderRadius:"6px",padding:"2px 8px",fontSize:".74rem",fontWeight:"700"}},"✅ Verified"):
+        isApproved?el("div",{cls:"flex-gap",st:{gap:"6px",alignItems:"center"}},
+          el("span",{st:{background:"#dcfce7",color:"#166534",borderRadius:"6px",padding:"2px 8px",fontSize:".74rem",fontWeight:"700"}},"✅ Verified"),
+          isPD()?el("button",{cls:"sbtn ghost",st:{fontSize:".7rem",padding:"2px 8px",color:"#dc2626",borderColor:"#fca5a5"},onClick:()=>revokeKpiApproval(res.id,fieldKey)},"↩ Undo"):null
+        ):
         pending.length?el("span",{st:{background:"#fef3c7",color:"#92400e",borderRadius:"6px",padding:"2px 8px",fontSize:".74rem",fontWeight:"700"}},"⏳ Pending"):
         el("span",{st:{background:"#f1f5f9",color:"#64748b",borderRadius:"6px",padding:"2px 8px",fontSize:".74rem"}},"— Not yet")
       ),
+      // Approved proposal details (visible to all)
+      isApproved&&approvedProp?renderProposalDetails(approvedProp):null,
       // PD review panel for pending proposals
       isPD()&&pending.length?el("div",{st:{marginTop:"6px"}},
         ...pending.map(p=>el("div",{st:{background:"#fff",border:"1px solid #fde68a",borderRadius:"8px",padding:"8px 10px",marginBottom:"4px"}},
-          el("div",{st:{fontSize:".78rem",fontWeight:"600",marginBottom:"4px"}},
+          el("div",{st:{fontSize:".78rem",fontWeight:"600",marginBottom:"6px"}},
             "Submitted by "+(p.proposed_by_role==="resident"?"the resident":p.proposed_by_role==="consultant"?"the mentor":p.proposed_by_role==="chief"?"Chief Resident":p.proposed_by_role)+
             " · "+new Date(p.proposed_at).toLocaleDateString("en-GB",{day:"numeric",month:"short"})
           ),
-          p.note?el("div",{cls:"sh",st:{marginBottom:"6px",fontStyle:"italic"}},"\""+p.note+"\""):null,
+          renderProposalDetails(p),
           el("div",{cls:"flex-gap",st:{gap:"6px"}},
             el("button",{cls:"sbtn primary",st:{fontSize:".74rem",padding:"3px 10px"},onClick:()=>reviewProposal(p.id,true)},"✓ Approve"),
             el("button",{cls:"sbtn ghost",st:{fontSize:".74rem",padding:"3px 10px",color:"#dc2626",borderColor:"#dc2626"},onClick:()=>reviewProposal(p.id,false)},"✗ Reject")
@@ -3180,13 +3304,9 @@ function renderKPI(){
       ):null,
       // Submit button (hidden if already approved or pending)
       !isApproved&&!pending.length&&(canEdit_||canSetMilestone||isMyRes)?
-        el("button",{cls:"sbtn ghost",st:{fontSize:".76rem",marginTop:"6px"},onClick:async()=>{
-          if(isPD()){await submitKpiProposal(res.id,fieldKey,null,null);}
-          else{
-            const note=window.prompt("Optional note or evidence (or press OK to skip):","");
-            if(note===null)return;
-            await submitKpiProposal(res.id,fieldKey,null,note||null);
-          }
+        el("button",{cls:"sbtn ghost",st:{fontSize:".76rem",marginTop:"6px"},onClick:()=>{
+          if(isPD()){submitKpiProposal(res.id,fieldKey,null,null);}
+          else{set({kpiPropModal:{resId:res.id,fieldKey},kpiPropFields:{},kpiPropUploading:false});}
         }},isPD()?"✓ Mark as Achieved":"📤 Submit Achievement"):null,
       // Show rejection note if last submission was rejected
       !isApproved&&!pending.length&&rejected.length?
@@ -5289,6 +5409,7 @@ function render(){
   main.appendChild(content);
   layout.appendChild(main);
   app.appendChild(layout);
+  if(STATE.kpiPropModal)app.appendChild(renderKpiProposalModal());
   if(STATE.showPromoModal&&isPD())app.appendChild(renderPromoModal());
   if(STATE.showBroadcast)(isPD()||STATE.user?.role==="chief")&&app.appendChild(renderBroadcastModal());
   const srch=renderSearchOverlay();if(srch)app.appendChild(srch);
