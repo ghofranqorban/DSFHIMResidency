@@ -933,7 +933,7 @@ function el(tag,props,...kids){
     if(k==="cls")e.className=v;
     else if(k==="st")Object.assign(e.style,v);
     else if(k.startsWith("on"))e.addEventListener(k.slice(2).toLowerCase(),v);
-    else e.setAttribute(k,v);
+    else if(typeof v==="boolean"){if(v)e.setAttribute(k,"");}else e.setAttribute(k,v);
   });
   kids.flat(9).forEach(c=>{
     if(c==null||c===false)return;
