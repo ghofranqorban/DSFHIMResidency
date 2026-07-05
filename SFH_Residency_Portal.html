@@ -4997,19 +4997,23 @@ function renderProfileTeach(res){
 }
 // Initialize
 (async function init(){
-  const{data:{session}}=await sb.auth.getSession();
-  if(session){
-    const{data:profile}=await sb.from("profiles").select("*").eq("id",session.user.id).single();
-    if(profile){
-      STATE.user=mapProfileToUser(profile);
-      await loadCoreData();
-      if(profile.role==="pd")checkPromotionNeeded();
-      loadPendingCounselCount();
-      loadSchedules();
-      loadRotations();
-      loadLeaveRecords();
-      loadAnnouncements();
+  try{
+    const{data:{session}}=await sb.auth.getSession();
+    if(session){
+      const{data:profile}=await sb.from("profiles").select("*").eq("id",session.user.id).single();
+      if(profile){
+        STATE.user=mapProfileToUser(profile);
+        await loadCoreData();
+        if(profile.role==="pd")checkPromotionNeeded();
+        loadPendingCounselCount();
+        loadSchedules();
+        loadRotations();
+        loadLeaveRecords();
+        loadAnnouncements();
+      }
     }
+  }catch(err){
+    console.error("Init error:",err);
   }
   render();
 })();
