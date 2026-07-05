@@ -646,40 +646,78 @@ async function rejectLeaveRequest(reqId,origComment,note){
   await loadLeaveRecords();
 }
 // ─── CALENDAR ICS ────────────────────────────────────────────────────────────
+const ANN_ICON={task:"📋",research:"🔬",qi:"📈",presentation:"🎤",deadline:"⏰",other:"📌"};
 function downloadRotationICS(resId){
   const res=resById(resId);if(!res)return;
   const fullRota=FULL_ROTA[resId]||{};
   function icsDate(d){return d.toISOString().split("T")[0].replace(/-/g,"");}
+  function icsEscape(s){return(s||"").replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\n/g,"\\n");}
   const uid=()=>Math.random().toString(36).slice(2,10);
-  const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//DSFH//Residency Portal//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH","X-WR-CALNAME:"+res.name+" — DSFH IM Rotations","X-WR-TIMEZONE:Asia/Riyadh"];
+  const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//DSFH//Residency Portal//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH",
+    "X-WR-CALNAME:"+icsEscape(res.name)+" — DSFH IM","X-WR-TIMEZONE:Asia/Riyadh"];
+
+  // 1 ── Rotation blocks (all-day, 4-week spans)
   ROTA_PERIODS.forEach((_,i)=>{
     const blockNum=i+1;
-    const rot=fullRota[String(blockNum)];
-    if(!rot)return;
-    const start=blockStartDate(blockNum,CURRENT_ACADEMIC_YEAR);
-    if(!start)return;
-    const endExcl=new Date(start.getTime()+28*86400000); // ICS DTEND is exclusive
-    lines.push("BEGIN:VEVENT");
-    lines.push("DTSTART;VALUE=DATE:"+icsDate(start));
-    lines.push("DTEND;VALUE=DATE:"+icsDate(endExcl));
-    lines.push("SUMMARY:B"+blockNum+" – "+(ROT_ABBR[rot]||rot));
-    lines.push("DESCRIPTION:"+res.name+" • Block "+blockNum+" • "+rot+" • DSFH IM Residency");
-    lines.push("UID:dsfh-"+resId+"-b"+blockNum+"@dsfh.local");
-    lines.push("END:VEVENT");
+    const rot=fullRota[String(blockNum)];if(!rot)return;
+    const start=blockStartDate(blockNum,CURRENT_ACADEMIC_YEAR);if(!start)return;
+    const endExcl=new Date(start.getTime()+28*86400000);
+    lines.push("BEGIN:VEVENT",
+      "DTSTART;VALUE=DATE:"+icsDate(start),
+      "DTEND;VALUE=DATE:"+icsDate(endExcl),
+      "SUMMARY:B"+blockNum+" – "+icsEscape(ROT_ABBR[rot]||rot),
+      "DESCRIPTION:"+icsEscape(res.name+" • Block "+blockNum+" • "+rot+" • DSFH IM"),
+      "CATEGORIES:Rotation",
+      "COLOR:green",
+      "UID:dsfh-rot-"+resId+"-b"+blockNum+"@dsfh.local",
+      "END:VEVENT");
   });
-  // Also add approved leave blocks
+
+  // 2 ── Approved leave blocks
   const ld=LEAVE_DATA[resId]||{};
   (ld.manual||[]).filter(x=>x.approved&&x.from&&x.to).forEach(lv=>{
     const isEdu=lv.comment?.startsWith("[EDU]");
-    lines.push("BEGIN:VEVENT");
-    lines.push("DTSTART;VALUE=DATE:"+lv.from.replace(/-/g,""));
     const endD=new Date(new Date(lv.to).getTime()+86400000);
-    lines.push("DTEND;VALUE=DATE:"+endD.toISOString().split("T")[0].replace(/-/g,""));
-    lines.push("SUMMARY:"+(isEdu?"📚 Educational Leave":"🏖️ Annual Leave")+" ("+lv.days+"d)");
-    lines.push("DESCRIPTION:"+(lv.comment?.replace("[EDU] ","")||"Approved leave")+" • "+res.name);
-    lines.push("UID:dsfh-leave-"+resId+"-"+uid()+"@dsfh.local");
-    lines.push("END:VEVENT");
+    lines.push("BEGIN:VEVENT",
+      "DTSTART;VALUE=DATE:"+lv.from.replace(/-/g,""),
+      "DTEND;VALUE=DATE:"+endD.toISOString().split("T")[0].replace(/-/g,""),
+      "SUMMARY:"+(isEdu?"📚 Educational Leave":"🏖️ Annual Leave")+" ("+lv.days+"d)",
+      "DESCRIPTION:"+icsEscape((lv.comment?.replace("[EDU] ","")||"Approved leave")+" • "+res.name),
+      "CATEGORIES:Leave",
+      "UID:dsfh-leave-"+resId+"-"+uid()+"@dsfh.local",
+      "END:VEVENT");
   });
+
+  // 3 ── MM Presentations & Moderator duties
+  MM_SESSIONS.forEach(s=>{
+    let role=null;
+    if(s.presenter_resident_id===resId)role="🎤 MM Presenter";
+    else if(s.moderator_resident_id===resId)role="🎙 MM Moderator";
+    if(!role)return;
+    const d=s.session_date;
+    lines.push("BEGIN:VEVENT",
+      "DTSTART;TZID=Asia/Riyadh:"+d.replace(/-/g,"")+"T070000",
+      "DTEND;TZID=Asia/Riyadh:"+d.replace(/-/g,"")+"T090000",
+      "SUMMARY:"+icsEscape(role+": "+s.topic),
+      "DESCRIPTION:"+icsEscape("Block "+s.block_number+" • "+fmtDate(d)+" • DSFH Morning Meeting"),
+      "CATEGORIES:Presentation",
+      "UID:dsfh-pres-"+resId+"-"+s.id+"@dsfh.local",
+      "END:VEVENT");
+  });
+
+  // 4 ── Announcements / KPI task deadlines targeting this resident
+  announcementsForResident(resId).filter(a=>a.deadline_date).forEach(a=>{
+    const icon=ANN_ICON[a.category]||"📌";
+    lines.push("BEGIN:VEVENT",
+      "DTSTART;VALUE=DATE:"+a.deadline_date.replace(/-/g,""),
+      "DTEND;VALUE=DATE:"+a.deadline_date.replace(/-/g,""),
+      "SUMMARY:"+icsEscape(icon+" "+a.title+" — DUE"),
+      "DESCRIPTION:"+icsEscape((a.description||"")+" • DSFH IM Residency"),
+      "CATEGORIES:Deadline",
+      "UID:dsfh-ann-"+a.id+"@dsfh.local",
+      "END:VEVENT");
+  });
+
   lines.push("END:VCALENDAR");
   const blob=new Blob([lines.join("\r\n")],{type:"text/calendar;charset=utf-8"});
   const url=URL.createObjectURL(blob);
@@ -698,11 +736,13 @@ let STATE={
   mmTab:"schedule",mmBlock:CURRENT_PERIOD,mmShowEntry:false,mmEntrySession:null,
   teachTab:"schedule",teachBlock:CURRENT_PERIOD,teachShowEntry:false,teachEntrySession:null,
   quizSelRes:null,quizShowAdd:false,quizSelQuiz:null,
-  leaveSelRes:null,leaveShowAdd:false,leaveShowAbsAdd:false,
+  leaveSelRes:null,leaveShowAdd:false,leaveShowAbsAdd:false,leaveShowReq:false,leaveTab:"overview",
   counselSelRes:1,counselShowForm:false,counselEditId:null,
   kpiSelRes:1,rotTrackRes:1,
   mentorQ:null,
   rotaImportStep:1,rotaImportSheet:null,
+  annShowForm:false,annEditId:null,annTargetType:"all",
+  ovLevel:"all",ovSort:"name",
 };
 // In-memory scratch state for the rota-import wizard (not part of STATE/render diffing
 // since it holds large parsed workbook data + per-row user picks; wizard steps are
@@ -825,6 +865,32 @@ async function loadCoreData(){
   MENTOR_NOTES={};
   COUNSEL_CACHE={};
   return true;
+}
+// ─── ANNOUNCEMENTS / DEADLINES ───────────────────────────────────────────────
+let ANNOUNCEMENTS=[];
+async function loadAnnouncements(){
+  const{data,error}=await sb.from("announcements").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("deadline_date",{ascending:true});
+  if(error){console.warn("announcements load error (table may not exist yet)",error.message);return;}
+  ANNOUNCEMENTS=data||[];
+  render();
+}
+function announcementsForResident(resId){
+  const res=resById(resId);if(!res)return[];
+  return ANNOUNCEMENTS.filter(a=>a.target_all||a.target_resident_id===resId||(a.target_level&&a.target_level===res.level));
+}
+async function saveAnnouncement(ann,id){
+  if(id){
+    const{error}=await sb.from("announcements").update(ann).eq("id",id);
+    if(error){alert("Could not save: "+error.message);return;}
+  }else{
+    const{error}=await sb.from("announcements").insert({...ann,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null});
+    if(error){alert("Could not save: "+error.message);return;}
+  }
+  await loadAnnouncements();
+}
+async function deleteAnnouncement(id){
+  await sb.from("announcements").delete().eq("id",id);
+  await loadAnnouncements();
 }
 function hasPriv(profileId,key){return!!(ACCOUNT_PRIVS[profileId]&&ACCOUNT_PRIVS[profileId].has(key));}
 let MENTOR_NOTES={};
@@ -992,6 +1058,7 @@ function renderLogin(){
     loadSchedules();
     loadRotations();
     loadLeaveRecords();
+    loadAnnouncements();
     render();
   }
   return el("div",{cls:"login-wrap"},
@@ -1262,6 +1329,31 @@ function renderModGrid(){
       "📥 "+LEAVE_PENDING_COUNT+" leave request"+(LEAVE_PENDING_COUNT>1?"s":"")+" pending your review. Click to approve or reject."
     )
   );
+  // Upcoming deadlines for residents (next 30 days)
+  if(u.role==="resident"&&u.rid){
+    const today=new Date();today.setHours(0,0,0,0);
+    const in30=new Date(today.getTime()+30*86400000);
+    const todayStr=today.toISOString().split("T")[0];
+    const in30Str=in30.toISOString().split("T")[0];
+    const upcoming=announcementsForResident(u.rid).filter(a=>a.deadline_date&&a.deadline_date>=todayStr&&a.deadline_date<=in30Str).slice(0,5);
+    if(upcoming.length>0) alerts.push(
+      el("div",{cls:"alert-yellow",st:{marginTop:"16px"}},
+        el("div",{st:{fontWeight:"700",marginBottom:"6px"}},"📋 Upcoming Deadlines (next 30 days)"),
+        ...upcoming.map(a=>{
+          const icon=ANN_ICON[a.category]||"📌";
+          const daysLeft=Math.round((new Date(a.deadline_date)-today)/86400000);
+          const urgency=daysLeft<=3?"#dc2626":daysLeft<=7?"#d97706":"#374151";
+          return el("div",{st:{fontSize:".82rem",marginTop:"4px",display:"flex",gap:"8px",alignItems:"center"}},
+            el("span",null,icon),
+            el("span",{st:{flex:"1",fontWeight:"600"}},a.title),
+            el("span",{st:{color:urgency,fontWeight:"700",whiteSpace:"nowrap"}},
+              daysLeft===0?"TODAY":daysLeft===1?"Tomorrow":"in "+daysLeft+"d"
+            )
+          );
+        })
+      )
+    );
+  }
   if(myDuties.length>0) alerts.push(
     el("div",{cls:"alert-yellow",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({mod:"morning",mmTab:"schedule",mmBlock:myDuties[0].session.block_number})},
       el("div",{st:{fontWeight:"700",marginBottom:"4px"}},"📋 Upcoming Duties — "+myDuties.length+" Morning Meeting "+(myDuties.length>1?"duties":"duty")),
@@ -3615,6 +3707,130 @@ function renderPDOverview(){
   );
 }
 // ─── PD ADMIN PANEL ──────────────────────────────────────────────────────────
+// ─── ADMIN: DEADLINES & TASKS ─────────────────────────────────────────────────
+function renderAdminDeadlines(){
+  const editing=STATE.annEditId;
+  const showForm=STATE.annShowForm||editing;
+  const CATS=[["task","📋 Task"],["research","🔬 Research"],["qi","📈 QI Project"],["presentation","🎤 Presentation"],["deadline","⏰ Deadline"],["other","📌 Other"]];
+  const today=new Date().toISOString().split("T")[0];
+
+  function targetLabel(a){
+    if(a.target_all)return "Everyone";
+    if(a.target_level)return a.target_level+" residents";
+    if(a.target_resident_id){const r=resById(a.target_resident_id);return r?r.name:"Specific resident";}
+    return "—";
+  }
+
+  async function doSave(){
+    const title=document.getElementById("ann_title")?.value.trim();
+    const desc=document.getElementById("ann_desc")?.value.trim();
+    const deadline=document.getElementById("ann_deadline")?.value||null;
+    const cat=document.getElementById("ann_cat")?.value||"task";
+    const targetType=document.getElementById("ann_target_type")?.value||"all";
+    const targetLevel=document.getElementById("ann_target_level")?.value||null;
+    const targetRes=parseInt(document.getElementById("ann_target_res")?.value)||null;
+    if(!title){alert("Title is required.");return;}
+    const ann={
+      title,description:desc||null,deadline_date:deadline||null,category:cat,
+      target_all:targetType==="all",
+      target_level:targetType==="level"?targetLevel:null,
+      target_resident_id:targetType==="resident"?targetRes:null
+    };
+    await saveAnnouncement(ann,editing||null);
+    set({annShowForm:false,annEditId:null});
+  }
+
+  function annForm(existing){
+    const initTargetType=existing?(existing.target_all?"all":existing.target_level?"level":"resident"):"all";
+    return el("div",{cls:"inline-form",st:{marginBottom:"16px"}},
+      el("div",{cls:"grid-2",st:{marginBottom:"10px"}},
+        el("div",null,
+          el("label",null,"Title *"),
+          el("input",{id:"ann_title",placeholder:"e.g. Literature Review Submission",value:existing?.title||""})
+        ),
+        el("div",null,
+          el("label",null,"Category"),
+          (()=>{const s=document.createElement("select");s.id="ann_cat";s.className="";CATS.forEach(([v,l])=>{const o=document.createElement("option");o.value=v;o.textContent=l;if(existing?.category===v)o.selected=true;s.appendChild(o);});return s;})()
+        )
+      ),
+      el("div",{cls:"grid-2",st:{marginBottom:"10px"}},
+        el("div",null,
+          el("label",null,"Deadline Date"),
+          el("input",{type:"date",id:"ann_deadline",value:existing?.deadline_date||""})
+        ),
+        el("div",null,
+          el("label",null,"Description / Note"),
+          el("input",{id:"ann_desc",placeholder:"Optional details",value:existing?.description||""})
+        )
+      ),
+      el("div",{cls:"grid-3",st:{marginBottom:"10px"}},
+        el("div",null,
+          el("label",null,"Who Sees This"),
+          (()=>{
+            const s=document.createElement("select");s.id="ann_target_type";
+            [["all","All Residents"],["level","By Level (R1/R2/R3/R4)"],["resident","Specific Resident"]].forEach(([v,l])=>{
+              const o=document.createElement("option");o.value=v;o.textContent=l;if(initTargetType===v)o.selected=true;s.appendChild(o);
+            });
+            s.onchange=e=>{set({annTargetType:e.target.value});};
+            return s;
+          })()
+        ),
+        el("div",null,
+          el("label",null,"Level (if by level)"),
+          (()=>{const s=document.createElement("select");s.id="ann_target_level";["R1","R2","R3","R4"].forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;if(existing?.target_level===v)o.selected=true;s.appendChild(o);});return s;})()
+        ),
+        el("div",null,
+          el("label",null,"Resident (if specific)"),
+          (()=>{const s=document.createElement("select");s.id="ann_target_res";const none=document.createElement("option");none.value="";none.textContent="— Select —";s.appendChild(none);RESIDENTS.forEach(r=>{const o=document.createElement("option");o.value=r.id;o.textContent=r.name+" ("+r.level+")";if(existing?.target_resident_id===r.id)o.selected=true;s.appendChild(o);});return s;})()
+        )
+      ),
+      el("div",{cls:"flex-gap"},
+        el("button",{cls:"sbtn success",onClick:doSave},existing?"Save Changes":"Add Announcement"),
+        el("button",{cls:"sbtn ghost",onClick:()=>set({annShowForm:false,annEditId:null})},"Cancel")
+      )
+    );
+  }
+
+  const sorted=[...ANNOUNCEMENTS].sort((a,b)=>(a.deadline_date||"zzz").localeCompare(b.deadline_date||"zzz"));
+
+  return el("div",null,
+    el("div",{cls:"card"},
+      el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
+        el("span",{cls:"card-title",st:{margin:"0"}},"Deadlines & Task Announcements"),
+        !showForm?el("button",{cls:"sbtn primary",onClick:()=>set({annShowForm:true,annEditId:null})},"+ Add"):null
+      ),
+      el("div",{cls:"sh",st:{fontSize:".78rem",marginBottom:"10px"}},"Announcements appear in residents' home screen and are included in their .ics calendar download."),
+      showForm&&!editing?annForm(null):null,
+      sorted.length===0&&!showForm?el("p",{cls:"sh"},"No announcements yet."):
+      el("div",null,...sorted.map(a=>{
+        const isEditing=editing===a.id;
+        const icon=ANN_ICON[a.category]||"📌";
+        const pastDue=a.deadline_date&&a.deadline_date<today;
+        const daysLeft=a.deadline_date?Math.round((new Date(a.deadline_date)-new Date(today))/86400000):null;
+        return el("div",{st:{border:"1px solid #e2e8f0",borderRadius:"10px",marginBottom:"8px",overflow:"hidden"}},
+          el("div",{st:{padding:"10px 14px",display:"flex",gap:"10px",alignItems:"flex-start",flexWrap:"wrap",background:pastDue?"#fff5f5":"#fff"}},
+            el("span",{st:{fontSize:"1.3rem",marginTop:"1px"}},icon),
+            el("div",{st:{flex:"1",minWidth:"160px"}},
+              el("div",{st:{fontWeight:"700",fontSize:".9rem",color:pastDue?"#991b1b":"#111827"}},a.title),
+              a.description?el("div",{cls:"sh",st:{fontSize:".78rem",marginTop:"2px"}},a.description):null,
+              el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",marginTop:"4px"}},
+                a.deadline_date?el("span",{cls:"bdg",st:{background:pastDue?"#fee2e2":daysLeft<=3?"#fef9c3":"#f0fdf4",color:pastDue?"#991b1b":daysLeft<=3?"#854d0e":"#166534"}},
+                  pastDue?"Past due":daysLeft===0?"Due today":daysLeft===1?"Due tomorrow":"Due "+fmtDate(a.deadline_date)):
+                  el("span",{cls:"sh"},"No deadline"),
+                el("span",{cls:"bdg",st:{background:"#f1f5f9",color:"#475569"}},targetLabel(a))
+              )
+            ),
+            el("div",{cls:"flex-gap",st:{gap:"6px",flexShrink:"0"}},
+              el("button",{cls:"sbtn ghost",st:{fontSize:".75rem"},onClick:()=>set({annEditId:a.id,annShowForm:false})},"Edit"),
+              el("button",{cls:"sbtn danger",st:{fontSize:".75rem"},onClick:async()=>{if(!confirm("Delete this announcement?"))return;await deleteAnnouncement(a.id);}},"Del")
+            )
+          ),
+          isEditing?el("div",{st:{padding:"10px 14px",borderTop:"1px solid #e2e8f0",background:"#f8fafc"}},annForm(a)):null
+        );
+      }))
+    )
+  );
+}
 function renderAdmin(){
   if(!isPD())return el("div",{cls:"content"},el("p",null,"Access denied."));
   if(STATE.adminProfile)return renderAdminProfile(STATE.adminProfile);
@@ -3623,14 +3839,15 @@ function renderAdmin(){
       el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
       el("h2",{st:{fontWeight:"800",color:"#111827"}},"PD Admin Panel")
     ),
-    el("div",{cls:"tab-bar"},
-      ["residents","mentors","accounts","rotaImport"].map(t=>el("span",{cls:"tab"+((STATE.adminTab||"residents")===t?" on":""),onClick:()=>set({adminTab:t,adminProfile:null})},
-        t==="residents"?"Residents":t==="mentors"?"Mentors":t==="accounts"?"Accounts":"Import Rota"
+    el("div",{cls:"tab-bar",st:{overflowX:"auto",display:"flex",flexWrap:"nowrap"}},
+      ["residents","mentors","accounts","deadlines","rotaImport"].map(t=>el("span",{cls:"tab"+((STATE.adminTab||"residents")===t?" on":""),onClick:()=>set({adminTab:t,adminProfile:null})},
+        t==="residents"?"Residents":t==="mentors"?"Mentors":t==="accounts"?"Accounts":t==="deadlines"?"Deadlines & Tasks":"Import Rota"
       ))
     ),
     (STATE.adminTab||"residents")==="residents"?renderAdminResidents():
     STATE.adminTab==="mentors"?renderAdminMentors():
     STATE.adminTab==="rotaImport"?renderAdminRotaImport():
+    STATE.adminTab==="deadlines"?renderAdminDeadlines():
     renderAdminAccounts()
   );
 }
@@ -4616,6 +4833,7 @@ function renderProfileTeach(res){
       loadSchedules();
       loadRotations();
       loadLeaveRecords();
+      loadAnnouncements();
     }
   }
   render();
