@@ -1191,7 +1191,7 @@ function renderSearchOverlay(){
   TEACH_SESSIONS.filter(s=>(s.topic||"").toLowerCase().includes(q)).slice(0,3).forEach(s=>{
     results.push({label:s.topic,sub:"Teaching · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"📚",action:()=>set({mod:"teaching",teachTab:"attendance",teachBlock:s.block_number,searchQ:""})});
   });
-  if(!results.length)results.push({label:"No results for ""+STATE.searchQ+""",sub:"",icon:"🔍",action:null});
+  if(!results.length)results.push({label:'No results for "'+STATE.searchQ+'"',sub:"",icon:"🔍",action:null});
   return el("div",{st:{position:"fixed",top:"0",left:"0",right:"0",bottom:"0",zIndex:"999",display:"flex",alignItems:"flex-start",justifyContent:"flex-start"},
     onClick:e=>{if(e.target===e.currentTarget)set({searchQ:""});}},
     el("div",{st:{position:"absolute",top:"80px",left:"220px",width:"340px",background:"#fff",borderRadius:"14px",boxShadow:"0 8px 32px rgba(0,0,0,.18)",border:"1px solid #e5e7eb",overflow:"hidden",zIndex:"1000"}},
