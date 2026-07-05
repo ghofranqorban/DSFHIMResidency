@@ -595,18 +595,22 @@ let nextQuizId=4;
 // ─── LEAVE RECORDS (DB-backed: table `leave_records` — manual approved leave +
 // unapproved absences; rota-derived leave lives in the `rotations` table above
 // via leave_weeks/leave_position and is merged in by buildLeaveData()) ───────
+let LEAVE_PENDING_COUNT=0;
 async function loadLeaveRecords(){
-  const{data,error}=await sb.from("leave_records").select("*");
-  RESIDENTS.forEach(r=>{if(!LEAVE_DATA[r.id])LEAVE_DATA[r.id]={rota:[],manual:[],absences:[]};});
-  Object.values(LEAVE_DATA).forEach(ld=>{ld.manual=[];ld.absences=[];});
+  const{data,error}=await sb.from("leave_records").select("*").order("created_at",{ascending:false});
+  RESIDENTS.forEach(r=>{if(!LEAVE_DATA[r.id])LEAVE_DATA[r.id]={rota:[],manual:[],absences:[],requests:[]};});
+  Object.values(LEAVE_DATA).forEach(ld=>{ld.manual=[];ld.absences=[];ld.requests=[];});
   (error?[]:(data||[])).forEach(row=>{
-    if(!LEAVE_DATA[row.resident_id])LEAVE_DATA[row.resident_id]={rota:[],manual:[],absences:[]};
+    if(!LEAVE_DATA[row.resident_id])LEAVE_DATA[row.resident_id]={rota:[],manual:[],absences:[],requests:[]};
     if(row.type==="manual"){
       LEAVE_DATA[row.resident_id].manual.push({id:row.id,from:row.from_date,to:row.to_date,days:row.days,comment:row.comment,approved:row.approved});
     }else if(row.type==="unapproved_absence"){
       LEAVE_DATA[row.resident_id].absences.push({id:row.id,date:row.from_date,days:row.days,comment:row.comment});
+    }else if(row.type==="leave_request"||row.type==="leave_rejected"){
+      LEAVE_DATA[row.resident_id].requests.push({id:row.id,from:row.from_date,to:row.to_date,days:row.days,comment:row.comment,status:row.type==="leave_request"?"pending":"rejected",createdAt:row.created_at});
     }
   });
+  LEAVE_PENDING_COUNT=Object.values(LEAVE_DATA).reduce((n,ld)=>n+(ld.requests||[]).filter(r=>r.status==="pending").length,0);
   render();
 }
 async function addManualLeave(residentId,from,to,days,comment){
@@ -622,6 +626,67 @@ async function addAbsence(residentId,date,days,comment){
   const{error}=await sb.from("leave_records").insert({resident_id:residentId,type:"unapproved_absence",source:"manual",from_date:date,days,comment,approved:false,created_by:STATE.user?STATE.user.profileId:null});
   if(error){alert("Could not save absence: "+error.message);return;}
   await loadLeaveRecords();
+}
+async function submitLeaveRequest(residentId,from,to,days,leaveType,reason){
+  const comment=(leaveType==="edu"?"[EDU] ":"")+reason;
+  const{error}=await sb.from("leave_records").insert({resident_id:residentId,type:"leave_request",source:"resident",from_date:from,to_date:to,days,comment,approved:false,created_by:STATE.user?.profileId||null});
+  if(error){alert("Could not submit request: "+error.message);return;}
+  await loadLeaveRecords();
+}
+async function approveLeaveRequest(reqId,residentId,from,to,days,comment){
+  await sb.from("leave_records").delete().eq("id",reqId);
+  const{error}=await sb.from("leave_records").insert({resident_id:residentId,type:"manual",source:"request",from_date:from,to_date:to,days,comment,approved:true,created_by:STATE.user?.profileId||null});
+  if(error){alert("Could not approve: "+error.message);return;}
+  await loadLeaveRecords();
+}
+async function rejectLeaveRequest(reqId,origComment,note){
+  const newComment=origComment+(note?"\n[Rejection note: "+note+"]":"");
+  const{error}=await sb.from("leave_records").update({type:"leave_rejected",comment:newComment}).eq("id",reqId);
+  if(error){alert("Could not reject: "+error.message);return;}
+  await loadLeaveRecords();
+}
+// ─── CALENDAR ICS ────────────────────────────────────────────────────────────
+function downloadRotationICS(resId){
+  const res=resById(resId);if(!res)return;
+  const fullRota=FULL_ROTA[resId]||{};
+  function icsDate(d){return d.toISOString().split("T")[0].replace(/-/g,"");}
+  const uid=()=>Math.random().toString(36).slice(2,10);
+  const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//DSFH//Residency Portal//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH","X-WR-CALNAME:"+res.name+" — DSFH IM Rotations","X-WR-TIMEZONE:Asia/Riyadh"];
+  ROTA_PERIODS.forEach((_,i)=>{
+    const blockNum=i+1;
+    const rot=fullRota[String(blockNum)];
+    if(!rot)return;
+    const start=blockStartDate(blockNum,CURRENT_ACADEMIC_YEAR);
+    if(!start)return;
+    const endExcl=new Date(start.getTime()+28*86400000); // ICS DTEND is exclusive
+    lines.push("BEGIN:VEVENT");
+    lines.push("DTSTART;VALUE=DATE:"+icsDate(start));
+    lines.push("DTEND;VALUE=DATE:"+icsDate(endExcl));
+    lines.push("SUMMARY:B"+blockNum+" – "+(ROT_ABBR[rot]||rot));
+    lines.push("DESCRIPTION:"+res.name+" • Block "+blockNum+" • "+rot+" • DSFH IM Residency");
+    lines.push("UID:dsfh-"+resId+"-b"+blockNum+"@dsfh.local");
+    lines.push("END:VEVENT");
+  });
+  // Also add approved leave blocks
+  const ld=LEAVE_DATA[resId]||{};
+  (ld.manual||[]).filter(x=>x.approved&&x.from&&x.to).forEach(lv=>{
+    const isEdu=lv.comment?.startsWith("[EDU]");
+    lines.push("BEGIN:VEVENT");
+    lines.push("DTSTART;VALUE=DATE:"+lv.from.replace(/-/g,""));
+    const endD=new Date(new Date(lv.to).getTime()+86400000);
+    lines.push("DTEND;VALUE=DATE:"+endD.toISOString().split("T")[0].replace(/-/g,""));
+    lines.push("SUMMARY:"+(isEdu?"📚 Educational Leave":"🏖️ Annual Leave")+" ("+lv.days+"d)");
+    lines.push("DESCRIPTION:"+(lv.comment?.replace("[EDU] ","")||"Approved leave")+" • "+res.name);
+    lines.push("UID:dsfh-leave-"+resId+"-"+uid()+"@dsfh.local");
+    lines.push("END:VEVENT");
+  });
+  lines.push("END:VCALENDAR");
+  const blob=new Blob([lines.join("\r\n")],{type:"text/calendar;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");a.href=url;
+  a.download=res.name.replace(/\s+/g,"_")+"_AY"+CURRENT_ACADEMIC_YEAR+"_"+String(CURRENT_ACADEMIC_YEAR+1).slice(-2)+".ics";
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let STATE={
@@ -710,7 +775,7 @@ let PROFILE_BY_ID={}; // profile.id (auth uuid) -> profile row, for any account 
 let ACCOUNT_PRIVS={}; // profile_id -> Set(privilege_key)
 function ensureResidentAuxData(){
   RESIDENTS.forEach(r=>{
-    if(!LEAVE_DATA[r.id])LEAVE_DATA[r.id]={rota:[],manual:[],absences:[]};
+    if(!LEAVE_DATA[r.id])LEAVE_DATA[r.id]={rota:[],manual:[],absences:[],requests:[]};
     if(!COMM_MEM[r.id])COMM_MEM[r.id]=[];
     if(COMM_SC[r.id]===undefined)COMM_SC[r.id]=0;
     if(!ROT_H[r.id])ROT_H[r.id]=[];
@@ -1192,6 +1257,11 @@ function renderModGrid(){
       "🚨 You have "+PENDING_COUNSEL_COUNT+" counseling record"+(PENDING_COUNSEL_COUNT>1?"s":"")+" awaiting your countersignature. Click to review."
     )
   );
+  if((isPD()||u.role==="chief")&&LEAVE_PENDING_COUNT>0) alerts.push(
+    el("div",{cls:"alert-yellow",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({mod:"leave",leaveTab:"requests"})},
+      "📥 "+LEAVE_PENDING_COUNT+" leave request"+(LEAVE_PENDING_COUNT>1?"s":"")+" pending your review. Click to approve or reject."
+    )
+  );
   if(myDuties.length>0) alerts.push(
     el("div",{cls:"alert-yellow",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({mod:"morning",mmTab:"schedule",mmBlock:myDuties[0].session.block_number})},
       el("div",{st:{fontWeight:"700",marginBottom:"4px"}},"📋 Upcoming Duties — "+myDuties.length+" Morning Meeting "+(myDuties.length>1?"duties":"duty")),
@@ -1227,10 +1297,24 @@ function renderModGrid(){
 }
 // ─── ROTA MODULE ─────────────────────────────────────────────────────────────
 function renderRota(){
+  const u=STATE.user;
   const tabs=["block","timeline","table"];
   const tabLabels={"block":"Block View","timeline":"Resident Timeline","table":"Full Table"};
+  // For residents: show only their own timeline + calendar download
+  const isResident=u.role==="resident";
+  if(isResident){
+    const res=resById(u.rid);
+    return el("div",{cls:"content"},
+      el("div",{cls:"flex-gap",st:{marginBottom:"16px",flexWrap:"wrap",alignItems:"center"}},
+        el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
+        el("h2",{st:{fontWeight:"800",color:"#111827"}},"My Rotation Schedule"),
+        el("button",{cls:"sbtn ghost",st:{fontSize:".8rem"},onClick:()=>downloadRotationICS(u.rid)},"📅 Download .ics")
+      ),
+      renderRotaTimeline()
+    );
+  }
   return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
+    el("div",{cls:"flex-gap",st:{marginBottom:"16px",flexWrap:"wrap",alignItems:"center"}},
       el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
       el("h2",{st:{fontWeight:"800",color:"#111827"}},"Rota Schedule")
     ),
@@ -2707,13 +2791,23 @@ function kpiRow(label,icon,pct,weight,color,detail){
 }
 // ─── ANNUAL LEAVE ────────────────────────────────────────────────────────────
 function renderLeave(){
+  const u=STATE.user;
+  const canManage=isPD()||u.role==="chief";
+  const tab=STATE.leaveTab||"overview";
   const vr=visRes();
   const sel=STATE.leaveSelRes;
   return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
+    el("div",{cls:"flex-gap",st:{marginBottom:"12px",flexWrap:"wrap",alignItems:"center"}},
       el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
       el("h2",{st:{fontWeight:"800",color:"#111827"}},"Annual Leave")
     ),
+    canManage?el("div",{cls:"tab-bar",st:{marginBottom:"16px"}},
+      el("span",{cls:"tab"+(tab==="overview"?" on":""),onClick:()=>set({leaveTab:"overview",leaveSelRes:null})},"Overview"),
+      el("span",{cls:"tab"+(tab==="requests"?" on":""),onClick:()=>set({leaveTab:"requests",leaveSelRes:null})},
+        "Requests"+(LEAVE_PENDING_COUNT>0?" ("+LEAVE_PENDING_COUNT+")":"")
+      )
+    ):null,
+    tab==="requests"&&canManage?renderLeaveRequests():
     sel?renderLeaveDetail(sel,()=>set({leaveSelRes:null})):renderLeaveList(vr)
   );
 }
@@ -2758,11 +2852,75 @@ function renderLeaveList(vr){
     )
   );
 }
+function renderLeaveRequests(){
+  // Collect all requests across residents
+  const pending=[];const rejected=[];
+  RESIDENTS.forEach(r=>{
+    (LEAVE_DATA[r.id]?.requests||[]).forEach(req=>{
+      if(req.status==="pending")pending.push({...req,res:r});
+      else rejected.push({...req,res:r});
+    });
+  });
+  pending.sort((a,b)=>a.createdAt?.localeCompare(b.createdAt||"")||0);
+  const isEdu=c=>c?.startsWith("[EDU]");
+  const cleanComment=c=>c?.replace("[EDU] ","")?.split("\n")[0]||"";
+
+  function reqRow(req,showActions){
+    const edu=isEdu(req.comment);
+    const rejected=req.status==="rejected";
+    const rejNote=req.comment?.split("\n").find(l=>l.startsWith("[Rejection note:"))?.replace("[Rejection note: ","").replace("]","");
+    return el("div",{st:{padding:"12px",border:"1px solid "+(rejected?"#fca5a5":edu?"#ddd6fe":"#bfdbfe"),borderRadius:"10px",marginBottom:"8px",background:rejected?"#fff5f5":edu?"#faf5ff":"#eff6ff"}},
+      el("div",{cls:"flex-gap",st:{flexWrap:"wrap",gap:"8px",marginBottom:"6px"}},
+        el("div",{cls:"flex-gap",st:{gap:"8px",alignItems:"center",flex:"1"}},
+          avEl(req.res),
+          el("div",null,
+            el("div",{st:{fontWeight:"700",fontSize:".88rem"}},req.res.name),
+            el("div",{cls:"sub"},req.res.level+" · Mentor: "+mentorName(req.res.id))
+          )
+        ),
+        el("span",{cls:"bdg",st:{background:edu?"#ede9fe":"#dbeafe",color:edu?"#5b21b6":"#1e40af"}},edu?"📚 Educational":"🏖️ Annual"),
+        el("span",{cls:"bdg",st:{background:"#f1f5f9",color:"#475569"}},req.days+"d")
+      ),
+      el("div",{st:{fontSize:".82rem",color:"#374151",marginBottom:"4px"}},
+        "📅 "+fmtDate(req.from)+" → "+fmtDate(req.to)
+      ),
+      cleanComment(req.comment)?el("div",{st:{fontSize:".82rem",color:"#6b7280",marginBottom:"4px"}},"💬 "+cleanComment(req.comment)):null,
+      rejected&&rejNote?el("div",{st:{fontSize:".78rem",color:"#b91c1c",marginTop:"4px"}},"❌ Rejected: "+rejNote):null,
+      showActions?el("div",{cls:"flex-gap",st:{marginTop:"8px",gap:"8px"}},
+        el("button",{cls:"sbtn success",st:{fontSize:".78rem"},onClick:async()=>{
+          if(!confirm("Approve this leave request for "+req.res.name+"?"))return;
+          await approveLeaveRequest(req.id,req.res.id,req.from,req.to,req.days,req.comment);
+        }},"✓ Approve"),
+        el("button",{cls:"sbtn danger",st:{fontSize:".78rem"},onClick:async()=>{
+          const note=prompt("Rejection note (optional):");
+          if(note===null)return;
+          await rejectLeaveRequest(req.id,req.comment,note);
+        }},"✗ Reject")
+      ):null
+    );
+  }
+
+  return el("div",null,
+    el("div",{cls:"card"},
+      el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
+        el("span",{cls:"card-title",st:{margin:"0"}},"Pending Leave Requests"),
+        el("span",{cls:"bdg",st:{background:"#fef9c3",color:"#854d0e"}},pending.length+" pending")
+      ),
+      pending.length===0?el("p",{cls:"sh"},"No pending requests — all clear ✅"):
+      el("div",null,...pending.map(req=>reqRow(req,true)))
+    ),
+    rejected.length>0?el("div",{cls:"card"},
+      el("div",{cls:"card-title"},"Rejected Requests"),
+      el("div",{cls:"sh",st:{marginBottom:"10px",fontSize:".78rem"}},"Residents can see these in their Leave view."),
+      ...rejected.map(req=>reqRow(req,false))
+    ):null
+  );
+}
 function renderLeaveDetail(rid,onBack){
   const res=resById(rid);
   if(!res)return el("div",null,"Not found");
-  const ld=LEAVE_DATA[rid]||{rota:[],manual:[],absences:[]};
-  if(!LEAVE_DATA[rid])LEAVE_DATA[rid]={rota:[],manual:[],absences:[]};
+  const ld=LEAVE_DATA[rid]||{rota:[],manual:[],absences:[],requests:[]};
+  if(!LEAVE_DATA[rid])LEAVE_DATA[rid]={rota:[],manual:[],absences:[],requests:[]};
   // Quotas
   const ANNUAL_QUOTA=28;
   const EDU_QUOTA=7;
@@ -2939,7 +3097,80 @@ function renderLeaveDetail(rid,onBack){
         ),
         canEdit()?el("button",{cls:"sbtn danger",st:{fontSize:".72rem",padding:"2px 7px"},onClick:async()=>{await deleteLeaveRecord(a.id);}},"Del"):null
       )))
-    )
+    ),
+    // ── Leave Request section (residents) / view requests (PD) ────────────
+    (()=>{
+      const u=STATE.user;
+      const isOwnRes=u.role==="resident"&&u.rid===rid;
+      const myReqs=(ld.requests||[]).slice().sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+      const canRequest=isOwnRes||canEdit();
+      if(!canRequest&&!myReqs.length)return null;
+      return el("div",{cls:"card"},
+        el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
+          el("span",{cls:"card-title",st:{margin:"0"}},isOwnRes?"My Leave Requests":"Resident's Leave Requests"),
+          canRequest?el("button",{cls:"sbtn primary",onClick:()=>set({leaveShowReq:!STATE.leaveShowReq})},STATE.leaveShowReq?"Cancel":"📤 Request Leave"):null
+        ),
+        STATE.leaveShowReq&&canRequest?el("div",{cls:"inline-form",st:{marginBottom:"12px"}},
+          el("div",{cls:"grid-2",st:{marginBottom:"10px"}},
+            el("div",null,
+              el("label",null,"Leave Type"),
+              el("select",{id:"req_type"},
+                el("option",{value:"annual"},"🏖️ Annual Leave"),
+                el("option",{value:"edu"},"📚 Educational Leave")
+              )
+            ),
+            el("div",null,el("label",null,"Reason"),el("input",{id:"req_reason",placeholder:"Briefly describe the reason"}))
+          ),
+          el("div",{cls:"grid-2",st:{marginBottom:"10px"}},
+            el("div",null,el("label",null,"From"),el("input",{type:"date",id:"req_from"})),
+            el("div",null,el("label",null,"To"),el("input",{type:"date",id:"req_to"}))
+          ),
+          el("p",{cls:"sh",st:{fontSize:".76rem",marginBottom:"8px"}},"Your request will be sent to the PD for approval. You'll see the status here once reviewed."),
+          el("div",{cls:"flex-gap"},
+            el("button",{cls:"sbtn success",onClick:async()=>{
+              const from=document.getElementById("req_from").value;
+              const to=document.getElementById("req_to").value;
+              const reason=document.getElementById("req_reason").value.trim();
+              const ltype=document.getElementById("req_type").value;
+              if(!from||!to){alert("Please select both from and to dates.");return;}
+              if(!reason){alert("Please enter a reason.");return;}
+              await submitLeaveRequest(rid,from,to,diffDays(from,to),ltype,reason);
+              set({leaveShowReq:false});
+            }},"Submit Request"),
+            el("button",{cls:"sbtn ghost",onClick:()=>set({leaveShowReq:false})},"Cancel")
+          )
+        ):null,
+        myReqs.length===0?el("p",{cls:"sh"},"No leave requests submitted yet."):
+        el("div",null,...myReqs.map(req=>{
+          const edu=req.comment?.startsWith("[EDU]");
+          const isPending=req.status==="pending";
+          const isRejected=req.status==="rejected";
+          const cleanReason=req.comment?.replace("[EDU] ","")?.split("\n")[0]||"";
+          const rejNote=req.comment?.split("\n").find(l=>l.startsWith("[Rejection note:"))?.replace("[Rejection note: ","").replace("]","");
+          const statusStyle=isPending?{bg:"#fef9c3",fg:"#854d0e",label:"⏳ Pending"}:isRejected?{bg:"#fee2e2",fg:"#b91c1c",label:"❌ Rejected"}:{bg:"#dcfce7",fg:"#166534",label:"✅ Approved"};
+          return el("div",{st:{padding:"10px",border:"1px solid #e2e8f0",borderRadius:"10px",marginBottom:"8px",background:isPending?"#fffbeb":isRejected?"#fff5f5":"#f0fdf4"}},
+            el("div",{cls:"flex-gap",st:{flexWrap:"wrap",gap:"6px",marginBottom:"6px"}},
+              el("span",{cls:"bdg",st:{background:edu?"#ede9fe":"#dbeafe",color:edu?"#5b21b6":"#1e40af"}},edu?"📚 Educational":"🏖️ Annual"),
+              el("span",{cls:"bdg",st:{background:statusStyle.bg,color:statusStyle.fg}},statusStyle.label),
+              el("span",{cls:"sh",st:{fontSize:".76rem"}},req.days+"d · "+fmtDate(req.from)+" → "+fmtDate(req.to))
+            ),
+            cleanReason?el("div",{cls:"sh",st:{fontSize:".8rem"}},"Reason: "+cleanReason):null,
+            isRejected&&rejNote?el("div",{st:{fontSize:".78rem",color:"#b91c1c",marginTop:"4px"}},"Note: "+rejNote):null,
+            isPending&&canEdit()?el("div",{cls:"flex-gap",st:{marginTop:"8px",gap:"8px"}},
+              el("button",{cls:"sbtn success",st:{fontSize:".76rem"},onClick:async()=>{
+                if(!confirm("Approve this request?"))return;
+                await approveLeaveRequest(req.id,rid,req.from,req.to,req.days,req.comment);
+              }},"✓ Approve"),
+              el("button",{cls:"sbtn danger",st:{fontSize:".76rem"},onClick:async()=>{
+                const note=prompt("Rejection note (optional):");
+                if(note===null)return;
+                await rejectLeaveRequest(req.id,req.comment,note);
+              }},"✗ Reject")
+            ):null
+          );
+        }))
+      );
+    })()
   );
 }
 // ─── COUNSELING ──────────────────────────────────────────────────────────────
@@ -4155,8 +4386,9 @@ function renderProfileInfo(res){
 function renderProfileRota(res){
   let editVals={};
   return el("div",{cls:"card"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
+    el("div",{cls:"flex-gap",st:{marginBottom:"12px",flexWrap:"wrap"}},
       el("span",{cls:"card-title",st:{margin:"0"}},"Rota for "+res.name),
+      el("button",{cls:"sbtn ghost",st:{fontSize:".8rem"},onClick:()=>downloadRotationICS(res.id)},"📅 Download .ics"),
       el("button",{cls:"sbtn success",onClick:async()=>{
         const entries=Object.entries(editVals).map(([p,rot])=>({residentId:res.id,block:p,rotationName:rot}));
         if(entries.length)await saveRotaCells(entries);
