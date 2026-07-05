@@ -381,13 +381,9 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - **Performance Report — 0-value bars gray**: Items not yet attempted show neutral gray instead of red.
 - **Rota: 3-tab view for residents**: Distribution (all residents block view) · My Rota (own timeline only, no dropdown) · Full Table (complete grid). Download .ics on My Rota tab.
 
-**Supabase RLS issue (NOT yet fixed — needs SQL):**
-- `rotations` table RLS blocks residents from reading other residents' rotation rows → Full Table and Distribution show "—" for other residents when logged in as resident.
-- Fix: run in Supabase SQL editor:
-  ```sql
-  CREATE POLICY "all authenticated users can read rotations"
-    ON public.rotations FOR SELECT TO authenticated USING (true);
-  ```
+**✅ Supabase RLS fix for rotations — DONE (6 Jul 2026):**
+- `rotations` table now allows all authenticated users to read all rows.
+- SQL run: `CREATE POLICY "all authenticated users can read rotations" ON public.rotations FOR SELECT TO authenticated USING (true);`
 
 **Key attendance scoring rule (confirmed by PD):**
 - P = Present (full), E = Excused (full), O = Outside rotation (full / excluded from denominator), L = Late (half mark), A = Absent (0), unlogged = excluded entirely.
