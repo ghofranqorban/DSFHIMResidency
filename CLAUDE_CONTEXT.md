@@ -387,3 +387,27 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 
 **Key attendance scoring rule (confirmed by PD):**
 - P = Present (full), E = Excused (full), O = Outside rotation (full / excluded from denominator), L = Late (half mark), A = Absent (0), unlogged = excluded entirely.
+
+---
+
+### Session — 6 Jul 2026 (continued — Performance Report redesign + home hero)
+
+**Features built / improved:**
+
+- **Performance Report visible to all roles**: Added `"consultant"` and `"resident"` to `kpi_exec` mod's roles array. DIO already covered by `effectiveRole()`.
+- **Scroll-to-top on every navigation**: Added `window.scrollTo(0,0)` at start of `render()` so every page change snaps to top.
+- **Performance Report Section 1 — swimming confetti**: Canvas-based confetti added to sec1 background. 80 pastel pieces float in random directions with sine-wave oscillation (swimming motion). Stops via IntersectionObserver when section scrolls out of view.
+- **Performance Report Section 1 — full redesign** (vertical layout, fits 100vh):
+  - **Header**: eyebrow + big title + gold year pill
+  - **Program Health band**: glass card — ring (left) + big stat + tier badge + progress bar toward "Outstanding" (right)
+  - **Top Performers**: 1st place = full-width gold featured card with accent bar + avatar + name + score; 2nd & 3rd = compact side-by-side cards. All clickable → drill down to Section 5.
+  - **Academic Achievements**: 6-column single row of glass tiles (3×2 on mobile)
+  - Section clamped to `height:100vh`
+- **Performance Report Section 1 — mobile responsive**: Added `.kpix-s1-pods`, `.kpix-s1-pod-card`, `.kpix-s1-pod-score`, `.kpix-s1-ach` CSS classes + `@media(max-width:640px)` rules. Score no longer clips; achievement grid goes 3-col on small screens.
+- **Home hero — animated confetti**: Replaced static decorative shape divs (`.home-shape`) with a canvas animation. 32 warm-palette pieces (terracotta, amber, brown) — mix of rectangles and circles — swim very slowly. Self-terminates when canvas leaves DOM. Canvas id: `home-hero-cv`.
+
+**Design decisions / patterns to carry forward:**
+- Preview complex UI changes in `/tmp/xxx_preview.html` before applying to portal — user approved this workflow.
+- User prefers vertical stacked layouts over side-by-side columns for report pages.
+- Confetti speed sweet spot: `speed: 0.08–0.18` for home hero (very gentle), `speed: 0.3–0.5` for performance report (more lively).
+- Section 1 uses `height:100vh` (not `min-height`) to hard-clamp to one screen.
