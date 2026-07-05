@@ -1177,11 +1177,11 @@ function canEditKPI(resId){
 }
 function calcKPI(id){
   let mmAtt=0,mmTotal=0;
-  Object.values(MM_ATT).forEach(blk=>{Object.values(blk).forEach(day=>{const s=day[id];if(s==='O')return;mmTotal++;if(s==='P'||s==='L'||s==='E')mmAtt++;});});
+  Object.values(MM_ATT).forEach(blk=>{Object.values(blk).forEach(day=>{const s=day[id];if(!s||s==='O')return;mmTotal++;if(s==='P'||s==='L'||s==='E')mmAtt++;});});
   if(mmTotal===0){mmAtt=1;mmTotal=1;}
   const mmPct=Math.round(mmAtt/mmTotal*100);
   let tAtt=0,tTotal=0;
-  Object.values(TEACH_ATT).forEach(blk=>{Object.values(blk).forEach(day=>{const s=day[id];if(s==='O')return;tTotal++;if(s==='P'||s==='L'||s==='E')tAtt++;});});
+  Object.values(TEACH_ATT).forEach(blk=>{Object.values(blk).forEach(day=>{const s=day[id];if(!s||s==='O')return;tTotal++;if(s==='P'||s==='L'||s==='E')tAtt++;});});
   if(tTotal===0){tAtt=1;tTotal=1;}
   const tPct=Math.round(tAtt/tTotal*100);
   const rotPct=Math.round(((ROT_H[id]||[]).length/MANDATORY.length)*100);
@@ -3105,9 +3105,9 @@ function calcKPIQ(id,qBlocks){
   let mmAtt=0,mmTotal=0,tAtt=0,tTotal=0;
   qBlocks.forEach(blk=>{
     const blkAtt=MM_ATT[blk]||{};
-    Object.values(blkAtt).forEach(day=>{const s=day[id];if(s==='O')return;mmTotal++;if(s==='P'||s==='L'||s==='E')mmAtt++;});
+    Object.values(blkAtt).forEach(day=>{const s=day[id];if(!s||s==='O')return;mmTotal++;if(s==='P'||s==='L'||s==='E')mmAtt++;});
     const tBlk=TEACH_ATT[blk]||{};
-    Object.values(tBlk).forEach(day=>{const s=day[id];if(s==='O')return;tTotal++;if(s==='P'||s==='L'||s==='E')tAtt++;});
+    Object.values(tBlk).forEach(day=>{const s=day[id];if(!s||s==='O')return;tTotal++;if(s==='P'||s==='L'||s==='E')tAtt++;});
   });
   const mmPct=mmTotal?Math.round(mmAtt/mmTotal*100):null;
   const tPct=tTotal?Math.round(tAtt/tTotal*100):null;
