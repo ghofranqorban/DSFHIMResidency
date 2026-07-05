@@ -545,12 +545,14 @@ function rotCellInfo(resId,block){
   return{rot,split,weeks:meta?.weeks||0,position:meta?.position||"none",splitLabel};
 }
 let QUIZZES=[];
+let QUIZZES_LOAD_ERR=null;
 async function loadQuizzes(){
   const[{data:qdata,error:qerr},{data:scdata,error:scerr}]=await Promise.all([
     sb.from("quizzes").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("date"),
     sb.from("quiz_scores").select("*")
   ]);
-  if(qerr){console.warn("quizzes load error (table may not exist yet)",qerr.message);return;}
+  if(qerr){console.warn("quizzes load error (table may not exist yet)",qerr.message);QUIZZES_LOAD_ERR=qerr.message;return;}
+  QUIZZES_LOAD_ERR=null;
   const scByQuiz={};
   (scdata||[]).forEach(s=>{
     if(!scByQuiz[s.quiz_id])scByQuiz[s.quiz_id]={};
@@ -738,6 +740,7 @@ function downloadRotationICS(resId){
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let STATE={
   user:null,mod:null,
+  searchQ:"",showBroadcast:false,
   rotaTab:"block",rotaPeriod:CURRENT_PERIOD,rotFilter:"all",rotaEdit:false,rotaTimeRes:1,
   adminTab:"residents",adminProfile:null,adminResTab:"info",adminResFilter:"all",
   adminEditResId:null,adminShowAddRes:false,
@@ -1106,6 +1109,92 @@ const MODS=[
   {id:"admin",label:"PD Admin Panel",icon:"⚙️",desc:"Accounts, privileges & settings",color:"#2e3a4e",roles:["pd","deputy_pd"]},
   {id:"overview",label:"Overview Dashboard",icon:"🏠",desc:"Bird's-eye view of all residents' performance",color:"#c96a4a",roles:["pd","deputy_pd","chief"]},
 ];
+function renderSearchOverlay(){
+  const q=(STATE.searchQ||"").trim().toLowerCase();
+  if(!q)return null;
+  const results=[];
+  RESIDENTS.filter(r=>r.name.toLowerCase().includes(q)).slice(0,4).forEach(r=>{
+    results.push({label:r.name,sub:r.level+" · Mentor: "+mentorName(r.id),icon:"👤",action:()=>set({mod:"kpi",kpiSelRes:r.id,searchQ:""})});
+  });
+  QUIZZES.filter(q2=>q2.title.toLowerCase().includes(q)).slice(0,3).forEach(qz=>{
+    results.push({label:qz.title,sub:"Quiz · "+fmtDate(qz.date)+" · Max: "+qz.max,icon:"📝",action:()=>set({mod:"quiz",quizSelQuiz:qz.id,searchQ:""})});
+  });
+  MM_SESSIONS.filter(s=>(s.topic||"").toLowerCase().includes(q)).slice(0,3).forEach(s=>{
+    results.push({label:s.topic,sub:"Morning Meeting · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"🌅",action:()=>set({mod:"morning",mmTab:"attendance",mmBlock:s.block_number,searchQ:""})});
+  });
+  TEACH_SESSIONS.filter(s=>(s.topic||"").toLowerCase().includes(q)).slice(0,3).forEach(s=>{
+    results.push({label:s.topic,sub:"Teaching · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"📚",action:()=>set({mod:"teaching",teachTab:"attendance",teachBlock:s.block_number,searchQ:""})});
+  });
+  if(!results.length)results.push({label:"No results for ""+STATE.searchQ+""",sub:"",icon:"🔍",action:null});
+  return el("div",{st:{position:"fixed",top:"0",left:"0",right:"0",bottom:"0",zIndex:"999",display:"flex",alignItems:"flex-start",justifyContent:"flex-start"},
+    onClick:e=>{if(e.target===e.currentTarget)set({searchQ:""});}},
+    el("div",{st:{position:"absolute",top:"80px",left:"220px",width:"340px",background:"#fff",borderRadius:"14px",boxShadow:"0 8px 32px rgba(0,0,0,.18)",border:"1px solid #e5e7eb",overflow:"hidden",zIndex:"1000"}},
+      el("div",{st:{padding:"8px 14px",background:"#f8fafc",borderBottom:"1px solid #e5e7eb",fontSize:".75rem",fontWeight:"700",color:"#6b7280",letterSpacing:".06em"}},"SEARCH RESULTS"),
+      ...results.map(r=>el("div",{st:{display:"flex",alignItems:"center",gap:"12px",padding:"11px 14px",cursor:r.action?"pointer":"default",borderBottom:"1px solid #f1f5f9"},
+        onClick:r.action||undefined,
+        onMouseOver:e=>{if(r.action)e.currentTarget.style.background="#f8fafc";},
+        onMouseOut:e=>{e.currentTarget.style.background="";}},
+        el("span",{st:{fontSize:"1.1rem",flexShrink:"0"}},r.icon),
+        el("div",null,
+          el("div",{st:{fontWeight:"600",fontSize:".88rem",color:"#111827"}},r.label),
+          r.sub?el("div",{st:{fontSize:".76rem",color:"#6b7280"}},r.sub):null
+        )
+      ))
+    )
+  );
+}
+function renderBroadcastModal(){
+  if(!STATE.showBroadcast)return null;
+  function close(){set({showBroadcast:false});}
+  async function send(){
+    const title=document.getElementById("bc_title").value.trim();
+    const desc=document.getElementById("bc_desc").value.trim();
+    const target=document.getElementById("bc_target").value;
+    const deadline=document.getElementById("bc_deadline").value||null;
+    if(!title){alert("Please enter a message title.");return;}
+    const btn=document.getElementById("bc_btn");
+    btn.disabled=true;btn.textContent="Sending…";
+    const ann={title,description:desc,category:"general",deadline_date:deadline,
+      target_all:target==="all",
+      target_level:target.startsWith("level:")?target.replace("level:",""):null,
+      target_resident_id:null,
+      academic_year:CURRENT_ACADEMIC_YEAR};
+    await saveAnnouncement(ann,null);
+    close();
+  }
+  const lvls=["R1","R2","R3","R4"];
+  return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
+    el("div",{cls:"modal-card",st:{width:"480px",maxWidth:"100%"}},
+      el("div",{cls:"modal-header"},
+        el("div",{cls:"modal-title"},"📢 Broadcast Announcement"),
+        el("button",{cls:"modal-close",onClick:close},"✕")
+      ),
+      el("div",{cls:"modal-body"},
+        el("div",{cls:"lbl"},"Title / Subject"),
+        el("input",{id:"bc_title",cls:"input",placeholder:"e.g. Reminder: Submit logbooks by Friday"}),
+        el("div",{cls:"lbl",st:{marginTop:"12px"}},"Message (optional)"),
+        el("textarea",{id:"bc_desc",cls:"input",rows:"3",st:{resize:"vertical"},placeholder:"Additional details…"}),
+        el("div",{cls:"grid-2",st:{gap:"12px",marginTop:"12px"}},
+          el("div",null,
+            el("div",{cls:"lbl"},"Target"),
+            el("select",{id:"bc_target",cls:"input"},
+              el("option",{value:"all"},"All Residents"),
+              ...lvls.map(l=>el("option",{value:"level:"+l},l+" Residents"))
+            )
+          ),
+          el("div",null,
+            el("div",{cls:"lbl"},"Deadline (optional)"),
+            el("input",{id:"bc_deadline",type:"date",cls:"input"})
+          )
+        )
+      ),
+      el("div",{cls:"modal-footer"},
+        el("button",{cls:"sbtn ghost",onClick:close},"Cancel"),
+        el("button",{id:"bc_btn",cls:"sbtn primary",onClick:send},"📢 Send Broadcast")
+      )
+    )
+  );
+}
 function renderNav(){return null;}// legacy — replaced by sidebar
 function renderSidebar(){
   const u=STATE.user;
@@ -1125,12 +1214,19 @@ function renderSidebar(){
         el("div",{cls:"sidebar-user-role"},u.role)
       )
     ),
+    el("div",{st:{padding:"0 12px 10px"}},
+      el("input",{type:"search",placeholder:"🔍 Search…",cls:"input-sm",st:{width:"100%",boxSizing:"border-box",fontSize:".82rem"},
+        value:STATE.searchQ,
+        onInput:e=>set({searchQ:e.target.value}),
+        onKeyDown:e=>{if(e.key==="Escape")set({searchQ:""});}
+      })
+    ),
     el("nav",{cls:"sidebar-nav"},
-      el("div",{cls:"snav"+(STATE.mod===null?" active":""),onClick:()=>set({mod:null,adminProfile:null})},
+      el("div",{cls:"snav"+(STATE.mod===null?" active":""),onClick:()=>set({mod:null,adminProfile:null,searchQ:""})},
         el("span",{cls:"sni"},"🏠"),
         el("span",null,"Home")
       ),
-      ...avail.map(m=>el("div",{cls:"snav"+(STATE.mod===m.id?" active":""),onClick:()=>set({mod:m.id,adminProfile:null})},
+      ...avail.map(m=>el("div",{cls:"snav"+(STATE.mod===m.id?" active":""),onClick:()=>set({mod:m.id,adminProfile:null,searchQ:""})},
         el("span",{cls:"sni"},m.icon),
         el("span",null,m.label)
       ))
@@ -1400,6 +1496,11 @@ function renderModGrid(){
   const wrap=el("div");
   wrap.appendChild(hero);
   if(alertsDiv)wrap.appendChild(alertsDiv);
+  if(isPD()||STATE.user?.role==="chief")wrap.appendChild(
+    el("div",{st:{padding:"0 0 4px"}},
+      el("button",{cls:"sbtn primary",st:{fontSize:".84rem",marginTop:"12px"},onClick:()=>set({showBroadcast:true})},"📢 Broadcast Announcement")
+    )
+  );
   wrap.appendChild(modules);
   return wrap;
 }
@@ -2536,6 +2637,17 @@ function exportAttendance(type, blk){
 // ─── QUIZ MARKS ──────────────────────────────────────────────────────────────
 function renderQuiz(){
   const u=STATE.user;
+  if(QUIZZES_LOAD_ERR)return el("div",{cls:"content"},
+    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
+      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
+      el("h2",{st:{fontWeight:"800",color:"#111827"}},"Quiz Marks")
+    ),
+    el("div",{cls:"alert-red"},
+      el("div",{st:{fontWeight:"700",marginBottom:"6px"}},"⚠️ Quiz tables not found in Supabase"),
+      el("div",{st:{fontSize:".84rem"}},"The `quizzes` and `quiz_scores` tables do not exist yet. Run the relevant section of schema.sql in the Supabase SQL editor to create them."),
+      el("div",{st:{fontSize:".82rem",marginTop:"6px",fontFamily:"monospace",background:"rgba(0,0,0,.07)",borderRadius:"6px",padding:"8px"}},"Error: "+QUIZZES_LOAD_ERR)
+    )
+  );
   if(isResident()){return renderQuizResident();}
   const vr=visRes();
   const selQId=STATE.quizSelQuiz;
@@ -2914,6 +3026,35 @@ function renderMentorHome(){
   );
 }
 // ─── KPI DASHBOARD ───────────────────────────────────────────────────────────
+function exportKpiPDF(res,k){
+  const kpiColor=v=>v>=80?"#16a34a":v>=60?"#d97706":"#dc2626";
+  const ks=KPI_SCORES[res.id]||{};
+  const row=(label,val,weight,detail)=>`<tr><td>${label}</td><td style="text-align:center;font-weight:700;color:${kpiColor(val)}">${val}%</td><td style="text-align:center">${weight}%</td><td style="color:#6b7280;font-size:.85rem">${detail||""}</td></tr>`;
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>KPI Report – ${res.name}</title>
+  <style>body{font-family:Arial,sans-serif;margin:32px;color:#111827}h1{color:#c96a4a;margin-bottom:4px}
+  .sub{color:#6b7280;font-size:.9rem;margin-bottom:20px}.score{font-size:2.5rem;font-weight:900;color:${kpiColor(k.overall)}}
+  table{width:100%;border-collapse:collapse;margin-top:16px}th{background:#f3f4f6;padding:10px 12px;text-align:left;font-size:.85rem}
+  td{padding:9px 12px;border-bottom:1px solid #e5e7eb;font-size:.9rem}.bonus{background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-top:16px;font-size:.9rem}
+  .footer{margin-top:32px;font-size:.75rem;color:#9ca3af}@media print{body{margin:16px}}</style></head>
+  <body>
+  <h1>KPI Report — ${res.name}</h1>
+  <div class="sub">${res.level} · Mentor: ${mentorName(res.id)} · AY ${CURRENT_ACADEMIC_YEAR}–${CURRENT_ACADEMIC_YEAR+1}</div>
+  <div class="score">${k.overall}%</div><div style="color:#6b7280;margin-bottom:8px">Overall KPI Score</div>
+  <div style="background:#e5e7eb;border-radius:4px;height:12px"><div style="background:${kpiColor(k.overall)};width:${Math.min(k.overall,100)}%;height:12px;border-radius:4px"></div></div>
+  <table><thead><tr><th>Component</th><th style="text-align:center">Score</th><th style="text-align:center">Weight</th><th>Detail</th></tr></thead><tbody>
+  ${row("Quiz Average",k.qAvg,KPI_W.quiz,QUIZZES.filter(q=>q.published&&q.sc[res.id]!=null).length+" quizzes")}
+  ${row("Morning Meetings",k.mmPct,KPI_W.mm,k.mmAtt+"/"+k.mmTotal+" sessions")}
+  ${row("Teaching Sessions",k.tPct,KPI_W.teach,k.tAtt+"/"+k.tTotal+" sessions")}
+  ${row("MM Presentation",k.pres?100:0,KPI_W.pres,k.presCount+" presentation"+(k.presCount!==1?"s":""))}
+  ${row("Committee Work",k.commPct,KPI_W.comm,"Score: "+(COMM_SC[res.id]||0)+"/10")}
+  ${row("Research Participation",k.researchPct,KPI_W.research,k.researchPct?"✓ Participated":"Not recorded")}
+  ${row("QI Project",k.qiPct,KPI_W.qi,k.qiPct?"✓ Participated":"Not recorded")}
+  </tbody></table>
+  ${k.bonus>0?`<div class="bonus">🏆 Bonus points: +${k.bonus} (${ks.bonusPublished?"📄 Published ":""}${ks.bonusOral?"🎤 Oral ":""}${ks.bonusPoster?"🪧 Poster ":""})</div>`:""}
+  <div class="footer">Generated ${new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})} · DSFH Internal Medicine Residency Portal</div>
+  </body></html>`;
+  const w=window.open("","_blank");w.document.write(html);w.document.close();w.focus();setTimeout(()=>w.print(),400);
+}
 function renderKPI(){
   const vr=visRes();
   const u=STATE.user;
@@ -2925,9 +3066,10 @@ function renderKPI(){
   const k=calcKPI(res.id);
   const kpiColor=v=>v>=80?"#16a34a":v>=60?"#d97706":"#dc2626";
   return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
+    el("div",{cls:"flex-gap",st:{marginBottom:"16px",flexWrap:"wrap"}},
       el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
-      el("h2",{st:{fontWeight:"800",color:"#111827"}},"KPI Dashboard")
+      el("h2",{st:{fontWeight:"800",color:"#111827",flex:"1"}},"KPI Dashboard"),
+      el("button",{cls:"sbtn ghost",st:{fontSize:".82rem"},onClick:()=>{const r=res||vr[0];if(r)exportKpiPDF(r,k);}},"📄 Export PDF")
     ),
     !isResident()?el("div",{cls:"card"},
       el("div",{cls:"lbl"},"Select Resident"),
@@ -4913,6 +5055,8 @@ function render(){
   layout.appendChild(main);
   app.appendChild(layout);
   if(STATE.showPromoModal&&isPD())app.appendChild(renderPromoModal());
+  if(STATE.showBroadcast)(isPD()||STATE.user?.role==="chief")&&app.appendChild(renderBroadcastModal());
+  const srch=renderSearchOverlay();if(srch)app.appendChild(srch);
   appendAccountModal(app);
 }
 function appendAccountModal(app){
