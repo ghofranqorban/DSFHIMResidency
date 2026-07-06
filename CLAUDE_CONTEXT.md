@@ -434,3 +434,41 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - Create `kpi-evidence` Supabase Storage bucket (public) for KPI file uploads
 - Upload historical KPI data for 2024-25, 2023-24, 2022-23 (Phase 2)
 - **KPI page redesign** — full visual overhaul (discussed, user confirmed to do this)
+
+---
+
+### Session — 6 Jul 2026 (On-Call Schedule module)
+
+**Features built:**
+- **🏥 On-Call Schedule module** (mod id: `oncall`, roles: all). 3-tab structure:
+  - **📅 Schedule tab**: 28-day block grid. Weekday rows = 4 slots (ER Medical, Building 1, Building 2, Consult, 16:00–22:00). Weekend rows (Fri/Sat) highlighted blue = 6 slots (+ CTU Cover A & B, 08:00–16:00 day cover only; full oncall = 08:00–22:00). Extra/penalty slots show ⚠ Extra red badge.
+  - **👤 My On-Calls tab**: personal upcoming/past list, today highlighted, `.ics` calendar download.
+  - **📊 Statistics tab**: PD-only for now. Per-resident regular vs extra counts, block + all-time. Flip visibility later.
+  - Block selector (B1–B13 pills), defaults to CURRENT_PERIOD.
+  - Edit modal: per-day slot dropdowns + "Extra" checkbox. Authorized: pd, deputy_pd, chief, privilege `edit_oncall`.
+  - Home page alert for residents: shows next upcoming oncall, red if extra penalty.
+  - Positioned 2nd in MODS grid (after Rota Schedule).
+
+**New Supabase table:** `oncall_schedule` — migration at `supabase/add_oncall_schedule.sql`.
+  - Columns: id (uuid), block_number (int), academic_year (int), schedule_date (date), slot_key (text), resident_id (**bigint** — matches residents.id), is_extra (bool), created_by (uuid), created_at.
+  - UNIQUE constraint: (schedule_date, slot_key).
+  - RLS: all authenticated can read; pd/deputy_pd/chief/edit_oncall privilege can write.
+
+**New privilege:** `edit_oncall` added to `PRIV_LABELS_RESIDENT` — "Enter/edit On-Call schedule (Oncall Committee)".
+
+**Block 11 data (AY 2025-26):** Full schedule entered via SQL INSERT for 2026-07-05 → 2026-08-01. Extra flags: Raghda (Jul 7 consult), Farid (Jul 14 consult), Mansour (Jul 20 consult), Abdulmajeed (Jul 21 consult), Rasha (Jul 22 consult), Nawaf (Jul 24 bldg2). M. Juninah (outside rotator, id=124 or 125, level='R1', active=false) added for 4 consult slots (Jul 13, 18, 24, 27).
+
+**Critical bugs found and fixed this session:**
+- `dname()` was a local function inside `renderKPIExecutive()` — invisible to `renderOncall()`. Promoted to **module-level** (near `resById`). ⚠️ Never re-localize it.
+- `resById(id)` changed from `===` to `==` (loose equality) — Supabase returns bigint FK columns as JS strings but `residents.id` may be a number; `==` handles both.
+- `blockStartDate(block, academicYear)` adds 1 year for months < 9. Block 11 label = "5/7-1/8" → month 7 < 9 → year = academicYear+1. So block 11 of AY 2025 = **July 2026**, not July 2025. Always use `blockStartDate()` output for date ranges — never hardcode year offsets when inserting oncall data.
+- `oncall_schedule.resident_id` must be `bigint` (not uuid) to match `residents.id` type.
+- When saving from dropdown: `parseInt(resident_id, 10)` required before Supabase insert.
+
+**Still TODO:**
+- Statistics tab visibility: currently PD-only. User will decide when to open it to other roles.
+- M. Juninah's consult slots: 4 rows inserted (Jul 13, 18, 24, 27) using his resident record.
+- Future blocks: enter via Edit modal in the portal, or SQL INSERT with correct 2026/2027 dates.
+- `kpi-evidence` Supabase Storage bucket still not created.
+- Historical KPI data (Phase 2) still pending.
+- KPI page redesign still pending.
