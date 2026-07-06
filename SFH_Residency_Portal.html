@@ -1327,6 +1327,7 @@ function renderLogin(){
 // ─── NAV ─────────────────────────────────────────────────────────────────────
 const MODS=[
   {id:"rota",label:"Rota Schedule",icon:"📅",desc:"Master rotation plan for all residents",color:"#2a7a5a",roles:["pd","chief","consultant","resident"]},
+  {id:"oncall",label:"On-Call Schedule",icon:"🏥",desc:"Duty assignments, personal schedule & on-call statistics",color:"#1a4a7a",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"rottrack",label:"Rotation Tracker",icon:"🔄",desc:"Track where every resident is rotating",color:"#1a6a9a",roles:["pd","chief","consultant"]},
   {id:"morning",label:"Morning Meetings",icon:"🌅",desc:"Attendance, schedules & topics",color:"#c97a2a",roles:["pd","chief","consultant","resident"]},
   {id:"teaching",label:"Teaching Att.",icon:"📚",desc:"Teaching session attendance records",color:"#7c3aad",roles:["pd","chief","consultant","resident"]},
@@ -1338,7 +1339,6 @@ const MODS=[
   {id:"admin",label:"PD Admin Panel",icon:"⚙️",desc:"Accounts, privileges & settings",color:"#2e3a4e",roles:["pd","deputy_pd"]},
   {id:"overview",label:"Overview Dashboard",icon:"🏠",desc:"Bird's-eye view of all residents' performance",color:"#c96a4a",roles:["pd","deputy_pd","chief"]},
   {id:"kpi_exec",label:"Performance Report",icon:"🏆",desc:"Executive KPI — program health, top performers & resident drill-down",color:"#1a2a4a",roles:["pd","deputy_pd","chief","consultant","resident"]},
-  {id:"oncall",label:"On-Call Schedule",icon:"🏥",desc:"Duty assignments, personal schedule & on-call statistics",color:"#1a4a7a",roles:["pd","deputy_pd","chief","consultant","resident"]},
 ];
 function renderSearchOverlay(){
   const q=(STATE.searchQ||"").trim().toLowerCase();
