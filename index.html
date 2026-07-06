@@ -1278,6 +1278,8 @@ function fmtDate(d){if(!d)return"";const p=d.split("-");return p[2]+"/"+p[1]+"/"
 function diffDays(from,to){return Math.round((new Date(to)-new Date(from))/(86400000))+1;}
 function resById(id){return RESIDENTS.find(r=>r.id==id);}
 function dname(name){return(name||"").replace(/^Dr\.\s*/i,"");}
+const _LVL_ORD={R4:0,R3:1,R2:2,R1:3};
+function sortByLevel(arr){return arr.slice().sort((a,b)=>(_LVL_ORD[a.level]??9)-(_LVL_ORD[b.level]??9)||a.name.localeCompare(b.name));}
 function consultById(id){return CONSULTANTS.find(c=>c.id===id);}
 function mentorName(rid){const c=consultById(MENTORS[rid]);return c?c.name:"-";}
 // ─── LOGIN VIEW ──────────────────────────────────────────────────────────────
@@ -2422,7 +2424,7 @@ function schedInlineResident(sid,field,currentResId,currentLabel,saveFn,tbl){
       clr.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;color:#9ca3af;border-bottom:1px solid #f3f4f6;";
       clr.onmousedown=ev=>{ev.preventDefault();set({schedInlineEdit:null});saveFn(null,null);};
       drop.appendChild(clr);
-      const sorted=RESIDENTS.slice().sort((a,b)=>a.name.localeCompare(b.name));
+      const sorted=sortByLevel(RESIDENTS);
       const rMatches=q?sorted.filter(r=>dname(r.name).toLowerCase().includes(q.toLowerCase())):sorted;
       rMatches.forEach(r=>{
         const li=document.createElement("li");
@@ -5334,7 +5336,7 @@ function renderRotaImportStep1(){
   );
 }
 function renderRotaImportStep2(){
-  const sortedResidents=RESIDENTS.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const sortedResidents=sortByLevel(RESIDENTS);
   return el("div",null,
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap"},
@@ -6265,7 +6267,7 @@ function renderOncallEditModal(){
             const sel=document.createElement("select");
             sel.id="oc_"+s.key;sel.className="input";
             const emp=document.createElement("option");emp.value="";emp.textContent="— Not assigned —";sel.appendChild(emp);
-            RESIDENTS.slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(r=>{
+            sortByLevel(RESIDENTS).forEach(r=>{
               const opt=document.createElement("option");
               opt.value=r.id;opt.textContent=dname(r.name)+" ("+r.level+")";
               if(r.id===cur.resId)opt.selected=true;
@@ -6335,7 +6337,7 @@ function renderOncall(){
         clearLi.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;color:#9ca3af;border-bottom:1px solid #f3f4f6;";
         clearLi.onmousedown=async ev=>{ev.preventDefault();set({oncallInlineEdit:null});await saveOncallCell(blk,date,slotKey,null);};
         drop.appendChild(clearLi);
-        const sorted=RESIDENTS.slice().sort((a,b)=>a.name.localeCompare(b.name));
+        const sorted=sortByLevel(RESIDENTS);
         const matches=q?sorted.filter(r=>dname(r.name).toLowerCase().includes(q.toLowerCase())):sorted;
         matches.forEach(r=>{
           const li=document.createElement("li");
@@ -6487,7 +6489,7 @@ function renderOncall(){
       aReg:allEntries.filter(e=>e.resident_id===r.id&&!e.is_extra).length,
       aExtra:allEntries.filter(e=>e.resident_id===r.id&&e.is_extra).length,
     })).filter(s=>s.bReg+s.bExtra+s.aReg+s.aExtra>0)
-       .sort((a,b)=>(b.bReg+b.bExtra)-(a.bReg+a.bExtra));
+       .sort((a,b)=>(_LVL_ORD[a.res.level]??9)-(_LVL_ORD[b.res.level]??9)||a.res.name.localeCompare(b.res.name));
     const totBReg=blkEntries.filter(e=>!e.is_extra).length;
     const totBExtra=blkEntries.filter(e=>e.is_extra).length;
     const totAReg=allEntries.filter(e=>!e.is_extra).length;
