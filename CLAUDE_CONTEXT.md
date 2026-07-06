@@ -584,3 +584,42 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - `kpi-evidence` Supabase Storage bucket — still not created
 - Historical KPI data (Phase 2)
 - KPI page visual redesign (deferred)
+
+---
+
+### Session — 6 Jul 2026 (UX polish: counseling redesign, schedules, highlights)
+
+**Bugs fixed:**
+- **Counseling: residents could see all records**: `renderCounseling()` was using `visRes()` which returns all residents for privileged residents (attendance committee). Fixed to always filter to own record when `u.role==="resident"`.
+- **Oncall mobile scroll broken**: `overflow:"hidden"` on the table wrapper was overriding `overflowX:"auto"`. Removed `overflow:"hidden"`.
+
+**Features built / improved:**
+- **Counseling PD view — roster + drawer**: Full-width resident table (sorted by level) with colored counseling count badges (✅ None / ⚠️ 1 / 🚨 N). Clicking a row slides open a sticky 400px drawer from the right — lists records, click to expand details inline with Edit/Delete/Countersign. Page content shifts left to make room. Resident view unchanged (own records only). New functions: `renderCounselRecordsList()`, `renderCounselingDrawer()`. State: `STATE.counselDrawerRes`, `STATE.counselExpandId`.
+- **Self-name highlighting** — gold amber pill (`#fde68a` bg, `#b45309` text) applied everywhere a user's name appears:
+  - **Oncall schedule**: amber pill on name cell
+  - **Rota full table**: amber pill on name in sticky col + warm cream row background + amber left border
+  - **Rota block view**: warm `#fffbeb` card background + amber left border
+  - **MM/Teaching schedule**: amber pill via `personLabelEl()` (both view-mode and edit-mode via `schedInlineResident()`)
+  - `personLabelEl()` also matches by name string as fallback when `presenter_resident_id` is null
+- **Resident default tab — Oncall**: opens on "My On-Calls" tab instead of Schedule
+- **Oncall: Date + Day sticky columns**: Date pinned at `left:0` (60px), Day pinned at `left:60px` (90px). Header also sticky top:0. Compact date format "5 Jul" instead of "dd/mm/yyyy".
+- **Rota full table: sticky header row** (`th { position:sticky; top:0 }`) and sticky level-group rows (`R4 — N RESIDENTS` cells pin at `left:0` when scrolling right).
+- **MM schedule: combined Day/Date column**: Day (3-letter abbrev "Mon") + Date ("5 Jul") stacked in one cell — saves a full column on mobile. Uses `shortFmtDate()` helper. Week column shortened to "W1/W2". No sticky left columns (user preference — let them scroll freely).
+- **`selfTag()` helper** added (module-level) — originally used as a pill, now replaced by inline styling in all highlight locations.
+- **`shortFmtDate(d)`** helper added (module-level) — returns "5 Jul" compact format.
+
+**Key functions added/modified:**
+- `renderCounselRecordsList(res, records, u)` — shared record list for drawer and resident view
+- `renderCounselingDrawer()` — fixed-position drawer panel
+- `selfTag()` — amber pill span (kept for potential future use)
+- `shortFmtDate(d)` — compact date formatter
+- `personLabelEl(residentId, label)` — updated with name-match fallback + amber highlight
+- `schedInlineResident()` — updated to apply amber highlight in display mode when currentResId===u.rid
+- `renderScheduleTable()` — updated to support `stickyLeft`, `minW`, `maxW` on cols; wk-cell shows "W1" not "Week 1"
+
+**Still TODO (carried forward):**
+- Run `supabase/add_oncall_resident_name.sql` (free-text oncall entries) — NOT YET RUN
+- `kpi-evidence` Supabase Storage bucket — still not created
+- Historical KPI data (Phase 2)
+- KPI page visual redesign (deferred)
+- Oncall Statistics tab visibility (PD decides when to open to other roles)
