@@ -1077,10 +1077,10 @@ async function deleteAnnouncement(id){
 }
 // ─── ONCALL DATA LAYER ───────────────────────────────────────────────────────
 const ONCALL_SLOTS=[
-  {key:"er_medical",label:"ER Medical",ctu:false},
-  {key:"bldg1",label:"Building 1",ctu:false},
-  {key:"bldg2",label:"Building 2",ctu:false},
-  {key:"consult",label:"Consult",ctu:false},
+  {key:"er_medical",label:"ER Medical Oncall",ctu:false},
+  {key:"bldg1",label:"Floor Oncall",ctu:false},
+  {key:"bldg2",label:"Floor Oncall",ctu:false},
+  {key:"consult",label:"Floor Oncall",ctu:false},
   {key:"ctu1",label:"CTU Cover A",ctu:true},
   {key:"ctu2",label:"CTU Cover B",ctu:true},
 ];
@@ -1097,6 +1097,16 @@ async function saveOncallDay(blockNum,date,entries){
   if(de){alert("Error clearing old entries: "+de.message);return;}
   const rows=entries.filter(e=>e.resident_id).map(e=>({block_number:blockNum,schedule_date:date,slot_key:e.slot_key,resident_id:parseInt(e.resident_id,10),is_extra:!!e.is_extra,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null}));
   if(rows.length){const{error:ie}=await sb.from("oncall_schedule").insert(rows);if(ie){alert("Error saving: "+ie.message);return;}}
+  await loadOncallData();
+}
+async function saveOncallCell(blk,date,slotKey,residentId){
+  const{error:de}=await sb.from("oncall_schedule").delete().eq("schedule_date",date).eq("slot_key",slotKey).eq("academic_year",CURRENT_ACADEMIC_YEAR);
+  if(de){alert("Error: "+de.message);return;}
+  if(residentId){
+    const existing=ONCALL_DATA.find(e=>e.schedule_date===date&&e.slot_key===slotKey);
+    const{error:ie}=await sb.from("oncall_schedule").insert({block_number:blk,schedule_date:date,slot_key:slotKey,resident_id:parseInt(residentId,10),is_extra:existing?.is_extra||false,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null});
+    if(ie){alert("Error saving: "+ie.message);return;}
+  }
   await loadOncallData();
 }
 function downloadOncallICS(resId){
@@ -6214,14 +6224,68 @@ function renderOncall(){
   const todayStr=new Date().toISOString().slice(0,10);
   // Resident's own oncall across all blocks in current year
   const myEntries=u.rid?ONCALL_DATA.filter(e=>e.resident_id===u.rid).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date)):[];
-  function oncallCell(entry){
-    if(!entry)return el("span",{st:{color:"#d1d5db",fontSize:".78rem"}},"—");
-    const res=resById(entry.resident_id);
-    const name=res?dname(res.name):"?";
-    return el("span",{st:{display:"inline-flex",flexDirection:"column",gap:"2px"}},
-      el("span",{st:{fontWeight:"600",fontSize:".83rem"}},name),
-      entry.is_extra?el("span",{st:{fontSize:".63rem",background:"#fde8e8",color:"#b91c1c",border:"1px solid #fca5a5",borderRadius:"4px",padding:"1px 5px",alignSelf:"flex-start",whiteSpace:"nowrap"}},"⚠ Extra"):null
-    );
+  function oncallCell(entry,date,slotKey){
+    const ie=STATE.oncallInlineEdit;
+    if(canEdit&&ie&&ie.date===date&&ie.slotKey===slotKey){
+      const wrap=document.createElement("div");
+      wrap.style.cssText="position:relative;min-width:130px;";
+      const inp=document.createElement("input");
+      inp.type="text";inp.className="input";
+      inp.style.cssText="padding:4px 8px;font-size:.82rem;width:100%;box-sizing:border-box;";
+      inp.placeholder="Type to search...";
+      if(entry){const r=resById(entry.resident_id);if(r)inp.value=dname(r.name);}
+      const drop=document.createElement("ul");
+      drop.style.cssText="position:absolute;top:100%;left:0;right:0;z-index:9999;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.15);max-height:200px;overflow-y:auto;list-style:none;padding:0;margin:2px 0 0;";
+      function buildDrop(q){
+        drop.innerHTML="";
+        const clearLi=document.createElement("li");
+        clearLi.textContent="— Clear assignment —";
+        clearLi.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;color:#9ca3af;border-bottom:1px solid #f3f4f6;";
+        clearLi.onmousedown=async ev=>{ev.preventDefault();set({oncallInlineEdit:null});await saveOncallCell(blk,date,slotKey,null);};
+        drop.appendChild(clearLi);
+        const sorted=RESIDENTS.slice().sort((a,b)=>a.name.localeCompare(b.name));
+        const matches=q?sorted.filter(r=>dname(r.name).toLowerCase().includes(q.toLowerCase())):sorted;
+        matches.forEach(r=>{
+          const li=document.createElement("li");
+          li.textContent=dname(r.name)+" ("+r.level+")";
+          li.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;border-bottom:1px solid #f9fafb;";
+          li.onmouseover=()=>{li.style.background="#f0f9ff";};
+          li.onmouseout=()=>{li.style.background="";};
+          li.onmousedown=async ev=>{ev.preventDefault();set({oncallInlineEdit:null});await saveOncallCell(blk,date,slotKey,r.id);};
+          drop.appendChild(li);
+        });
+      }
+      buildDrop("");
+      inp.oninput=ev=>buildDrop(ev.target.value);
+      inp.onkeydown=ev=>{if(ev.key==="Escape")set({oncallInlineEdit:null});};
+      inp.onblur=()=>setTimeout(()=>set({oncallInlineEdit:null}),200);
+      wrap.appendChild(inp);wrap.appendChild(drop);
+      setTimeout(()=>inp.focus(),0);
+      return wrap;
+    }
+    const cell=document.createElement("div");
+    cell.style.cssText="min-height:28px;"+(canEdit?"cursor:pointer;":"");
+    if(canEdit)cell.title="Double-click to edit";
+    if(canEdit)cell.ondblclick=()=>set({oncallInlineEdit:{date,slotKey}});
+    if(!entry){
+      const dash=document.createElement("span");
+      dash.style.cssText="color:#d1d5db;font-size:.78rem;";
+      dash.textContent=canEdit?"dbl-click":"—";
+      cell.appendChild(dash);
+    }else{
+      const res=resById(entry.resident_id);
+      const nm=document.createElement("span");
+      nm.style.cssText="font-weight:600;font-size:.83rem;display:block;";
+      nm.textContent=res?dname(res.name):"?";
+      cell.appendChild(nm);
+      if(entry.is_extra){
+        const badge=document.createElement("span");
+        badge.style.cssText="font-size:.63rem;background:#fde8e8;color:#b91c1c;border:1px solid #fca5a5;border-radius:4px;padding:1px 5px;display:inline-block;margin-top:2px;white-space:nowrap;";
+        badge.textContent="⚠ Extra";
+        cell.appendChild(badge);
+      }
+    }
+    return cell;
   }
   // ── Schedule tab ──────────────────────────────────────────────
   function renderScheduleTab(){
@@ -6239,10 +6303,10 @@ function renderOncall(){
             el("tr",null,
               el("th",null,"Date"),
               el("th",null,"Day"),
-              el("th",null,"ER Medical"),
-              el("th",null,"Building 1"),
-              el("th",null,"Building 2"),
-              el("th",null,"Consult"),
+              el("th",null,"ER Medical Oncall"),
+              el("th",null,"Floor Oncall"),
+              el("th",null,"Floor Oncall"),
+              el("th",null,"Floor Oncall"),
               el("th",{st:{color:"#1e40af"}},"CTU A"),
               el("th",{st:{color:"#1e40af"}},"CTU B"),
               canEdit?el("th",null,""):null
@@ -6254,12 +6318,12 @@ function renderOncall(){
               return el("tr",{st:{background:isWe?"rgba(219,234,254,.35)":""}},
                 el("td",{st:{fontWeight:"600",whiteSpace:"nowrap"}},fmtDate(date)),
                 el("td",{st:{color:isWe?"#1d4ed8":"#374151",fontWeight:isWe?"700":"400",whiteSpace:"nowrap"}},day),
-                el("td",null,oncallCell(sl.er_medical)),
-                el("td",null,oncallCell(sl.bldg1)),
-                el("td",null,oncallCell(sl.bldg2)),
-                el("td",null,oncallCell(sl.consult)),
-                el("td",null,isWe?oncallCell(sl.ctu1):el("span",{st:{color:"#e5e7eb"}},"—")),
-                el("td",null,isWe?oncallCell(sl.ctu2):el("span",{st:{color:"#e5e7eb"}},"—")),
+                el("td",null,oncallCell(sl.er_medical,date,"er_medical")),
+                el("td",null,oncallCell(sl.bldg1,date,"bldg1")),
+                el("td",null,oncallCell(sl.bldg2,date,"bldg2")),
+                el("td",null,oncallCell(sl.consult,date,"consult")),
+                el("td",null,isWe?oncallCell(sl.ctu1,date,"ctu1"):el("span",{st:{color:"#e5e7eb"}},"—")),
+                el("td",null,isWe?oncallCell(sl.ctu2,date,"ctu2"):el("span",{st:{color:"#e5e7eb"}},"—")),
                 canEdit?el("td",null,
                   el("button",{cls:"sbtn",st:{fontSize:".74rem",padding:"3px 9px"},onClick:()=>set({oncallEditDate:date})},"Edit")
                 ):null
