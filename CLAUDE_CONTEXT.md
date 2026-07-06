@@ -412,3 +412,25 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - User prefers vertical stacked layouts over side-by-side columns for report pages.
 - Confetti speed sweet spot: `speed: 0.08–0.18` for home hero (very gentle), `speed: 0.3–0.5` for performance report (more lively).
 - Section 1 uses `height:100vh` (not `min-height`) to hard-clamp to one screen.
+
+---
+
+### Session — 6 Jul 2026 (continued — multiple KPI submissions + Performance Report access)
+
+**Features built / improved:**
+
+- **Multiple KPI achievement submissions per type**: Residents can now submit more than one entry per achievement category (e.g. two QI projects, multiple publications). Previously the submit button was hidden once any entry was pending or approved.
+  - `renderAchievement()` updated: `approvedProp` (find) → `approvedProps` (filter). All approved entries rendered individually with dividers.
+  - Submit button always visible; label switches to "Submit Another…" once at least one is approved.
+  - PD gets a per-entry ↩ Undo button (passes `proposalId`, not just `fieldKey`).
+  - `revokeKpiApproval(resId, fieldKey, proposalId)` — only flips `kpi_scores` to false if it was the last approved proposal for that type.
+  - Badge shows "✅ Verified (N)" when N > 1.
+
+- **Performance Report visible to all roles — navigation fix**: `kpi_exec` already had "resident" and "consultant" in its `roles` array and `renderKPIExecutive` had no role-based filtering. The bug was `STATE.kpiExResident` persisting from previous session navigation — on re-entry, users landed on their own Section 5 profile instead of the full report.
+  - Fixed by resetting `kpiExResident: null` whenever navigating to `kpi_exec` from both sidebar (line ~1411) and home grid (line ~1734).
+  - Every visit now starts fresh at Section 1 — program health ring, top performers, cohort stats, full roster.
+
+**Still TODO:**
+- Create `kpi-evidence` Supabase Storage bucket (public) for KPI file uploads
+- Upload historical KPI data for 2024-25, 2023-24, 2022-23 (Phase 2)
+- **KPI page redesign** — full visual overhaul (discussed, user confirmed to do this)
