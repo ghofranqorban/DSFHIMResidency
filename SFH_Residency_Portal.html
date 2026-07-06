@@ -2215,10 +2215,11 @@ function renderRotaBlock(resOverride){
               );
             }
             const blockMeta=(ROTA_LEAVE_META[r.id]||{})[String(p)];
-            return el("div",{cls:"flex-gap",st:{background:"#f8fafc",borderRadius:"8px",padding:"6px 10px",border:"1px solid #e2e8f0"}},
+            const isSelf=STATE.user?.rid&&r.id===STATE.user.rid;
+            return el("div",{cls:"flex-gap",st:{background:isSelf?"#fff3eb":"#f8fafc",borderRadius:"8px",padding:"6px 10px",border:isSelf?"1.5px solid #f8c9a8":"1px solid #e2e8f0"}},
               avEl(r),
               el("div",null,
-                el("div",{cls:"name",st:{fontSize:".82rem"}},r.name),
+                el("div",{cls:"name",st:{fontSize:".82rem",color:isSelf?"#c96a4a":""}},r.name),
                 el("div",{st:{fontSize:".72rem",color:"#64748b"}},r.level),
                 blockMeta&&blockMeta.weeks?el("div",{st:{fontSize:".65rem",color:"#c2410c",fontWeight:"700",marginTop:"2px"}},"+"+blockMeta.weeks+"wk AL ("+( blockMeta.position==="end"?"Wk 3-4":"Wk 1-2")+")"):null
               )
@@ -2343,12 +2344,12 @@ function renderRotaTable(resOverride){
             if(!lvRes.length)return[];
             return[
               el("tr",null,el("td",{colspan:"14",st:{background:"#f8fafc",fontWeight:"700",fontSize:".75rem",color:"#94a3b8",letterSpacing:".05em",textTransform:"uppercase",padding:"8px 10px"}},lv+" — "+lvRes.length+" residents")),
-              ...lvRes.map(r=>el("tr",null,
-                el("td",{cls:"sticky-col"},
+              ...lvRes.map(r=>{const isSelf=STATE.user?.rid&&r.id===STATE.user.rid;return el("tr",{st:{background:isSelf?"#fff8f3":""}},
+                el("td",{cls:"sticky-col",st:{background:isSelf?"#fff8f3":""}},
                   el("div",{cls:"flex-gap"},
                     avEl(r),
                     el("div",null,
-                      el("div",{cls:"name",st:{fontSize:".82rem"}},r.name),
+                      el("div",{cls:"name",st:{fontSize:".82rem",color:isSelf?"#c96a4a":""}},r.name,...(isSelf?[selfTag()]:[]) ),
                       el("div",{st:{fontSize:".7rem",color:"#64748b"}},r.level)
                     )
                   )
@@ -2386,7 +2387,8 @@ function renderRotaTable(resOverride){
                     ):el("span",{cls:"sh"},"—")
                   );
                 })
-              ))
+              )
+            })
             ];
           })
         )
@@ -2472,6 +2474,20 @@ function weekInBlock(s,blk){return s.week_number-4*(blk-1)+1;}
 function personLabel(residentId,label){
   if(residentId){const r=resById(residentId);if(r)return r.name;}
   return label||"—";
+}
+function selfTag(){
+  const s=document.createElement("span");
+  s.style.cssText="display:inline-block;background:#fff3eb;color:#c96a4a;border:1px solid #f8c9a8;border-radius:20px;font-size:.65rem;font-weight:700;padding:1px 6px;margin-left:5px;vertical-align:middle;line-height:1.4;white-space:nowrap;";
+  s.textContent="You";
+  return s;
+}
+function personLabelEl(residentId,label){
+  const u=STATE.user;
+  const name=residentId?(resById(residentId)?.name||label||"—"):(label||"—");
+  const wrap=document.createElement("span");
+  wrap.textContent=name;
+  if(residentId&&u?.rid&&residentId===u.rid)wrap.appendChild(selfTag());
+  return wrap;
 }
 function renderScheduleTable(sessions,blk,cols){
   const byWeek={};
@@ -2755,8 +2771,8 @@ function renderMMSchedule(){
     {label:"Day",render:s=>canEditSched?schedInlineText(s.id,"day_label",s.day_label||"",v=>{sb.from("mm_sessions").update({day_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):s.day_label||"—"},
     {label:"Date",render:s=>canEditSched?schedInlineText(s.id,"session_date",s.session_date,v=>{if(!v)return;sb.from("mm_sessions").update({session_date:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):fmtDate(s.session_date)},
     {label:"Topic",render:s=>canEditSched?schedInlineText(s.id,"topic",s.topic,v=>{sb.from("mm_sessions").update({topic:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):s.topic},
-    {label:"Presenter",render:s=>canEditSched?schedInlineResident(s.id,"presenter_resident_id",s.presenter_resident_id,s.presenter_label,(resId,label)=>{sb.from("mm_sessions").update({presenter_resident_id:resId,presenter_label:label}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):personLabel(s.presenter_resident_id,s.presenter_label)},
-    {label:"Moderator",render:s=>canEditSched?schedInlineResident(s.id,"moderator_resident_id",s.moderator_resident_id,s.moderator_label,(resId,label)=>{sb.from("mm_sessions").update({moderator_resident_id:resId,moderator_label:label}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):personLabel(s.moderator_resident_id,s.moderator_label)},
+    {label:"Presenter",render:s=>canEditSched?schedInlineResident(s.id,"presenter_resident_id",s.presenter_resident_id,s.presenter_label,(resId,label)=>{sb.from("mm_sessions").update({presenter_resident_id:resId,presenter_label:label}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):personLabelEl(s.presenter_resident_id,s.presenter_label)},
+    {label:"Moderator",render:s=>canEditSched?schedInlineResident(s.id,"moderator_resident_id",s.moderator_resident_id,s.moderator_label,(resId,label)=>{sb.from("mm_sessions").update({moderator_resident_id:resId,moderator_label:label}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):personLabelEl(s.moderator_resident_id,s.moderator_label)},
     {label:"Consultant",render:s=>canEditSched?schedInlineText(s.id,"consultant_label",s.consultant_label||"",v=>{sb.from("mm_sessions").update({consultant_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):s.consultant_label||"—"}
   ];
   if(canEditSched)cols.push({label:"",render:s=>{
@@ -7056,7 +7072,7 @@ function renderOncallEditModal(){
 function renderOncall(){
   const u=STATE.user;
   const blk=STATE.oncallBlock||CURRENT_PERIOD;
-  const tab=STATE.oncallTab||"schedule";
+  const tab=STATE.oncallTab||(u.role==="resident"?"mine":"schedule");
   const canEdit=canEditOncall();
   // Build full 28-day block date list
   const allDates=[];
@@ -7144,6 +7160,7 @@ function renderOncall(){
       const nm=document.createElement("span");
       nm.style.cssText="font-weight:600;font-size:.83rem;display:block;";
       nm.textContent=res?dname(res.name):(entry.resident_name||"?");
+      if(res&&u.rid&&res.id===u.rid)nm.appendChild(selfTag());
       cell.appendChild(nm);
       if(entry.is_extra){
         const badge=document.createElement("span");
@@ -7164,7 +7181,7 @@ function renderOncall(){
           "✏️ Add / Edit Day")
       ):null,
       !hasData?el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},"No on-call data entered for Block "+blk+" yet."+(canEdit?" Use 'Edit' on any row to add assignments.":"")):null,
-      el("div",{st:{overflowX:"auto",borderRadius:"12px",boxShadow:"0 2px 12px rgba(0,0,0,.08)",border:"1px solid #ddd6cc",overflow:"hidden"}},
+      el("div",{st:{overflowX:"auto",borderRadius:"12px",boxShadow:"0 2px 12px rgba(0,0,0,.08)",border:"1px solid #ddd6cc"}},
         el("table",{cls:"oncall-tbl",st:{minWidth:"820px"}},
           el("thead",null,
             el("tr",null,
