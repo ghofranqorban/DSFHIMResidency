@@ -1408,7 +1408,7 @@ function renderSidebar(){
         el("span",{cls:"sni"},"🏠"),
         el("span",null,"Home")
       ),
-      ...avail.map(m=>el("div",{cls:"snav"+(STATE.mod===m.id?" active":""),onClick:()=>set({mod:m.id,adminProfile:null,searchQ:""})},
+      ...avail.map(m=>el("div",{cls:"snav"+(STATE.mod===m.id?" active":""),onClick:()=>set({mod:m.id,adminProfile:null,searchQ:"",...(m.id==="kpi_exec"?{kpiExResident:null}:{})})},
         el("span",{cls:"sni"},m.icon),
         el("span",null,m.label)
       ))
@@ -1731,7 +1731,7 @@ function renderModGrid(){
     el("p",{cls:"home-section-tag"},"Quick Access"),
     el("h2",{cls:"home-section-title"},"Where would you like to go?"),
     el("div",{cls:"home-mod-grid"},
-      ...avail.map(m=>el("div",{cls:"home-modbtn",onClick:()=>set({mod:m.id,adminProfile:null})},
+      ...avail.map(m=>el("div",{cls:"home-modbtn",onClick:()=>set({mod:m.id,adminProfile:null,...(m.id==="kpi_exec"?{kpiExResident:null}:{})})},
         el("div",{cls:"home-mod-ico-wrap",st:{background:(m.color||"#c96a4a")+"22"}},
           el("span",{cls:"home-mod-ico"},m.icon)
         ),
