@@ -97,7 +97,11 @@ tr:hover .sticky-col{background:#fdf9f5;}
 /* ── On-Call Schedule table ── */
 .oncall-tbl{width:100%;border-collapse:collapse;}
 .oncall-tbl thead tr{background:#4a3828;}
-.oncall-tbl thead th{color:#f0e8dd;font-weight:700;padding:12px 14px;text-align:left;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;border-bottom:none;background:transparent;white-space:nowrap;}
+.oncall-tbl thead th{color:#f0e8dd;font-weight:700;padding:12px 14px;text-align:left;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;border-bottom:none;background:#4a3828;white-space:nowrap;position:sticky;top:0;z-index:4;}
+.oncall-tbl th.oc-sticky-date{position:sticky;left:0;z-index:5;background:#4a3828;}
+.oncall-tbl th.oc-sticky-day{position:sticky;left:110px;z-index:5;background:#4a3828;border-right:2px solid #6b5040;}
+.oncall-tbl td.oc-sticky-date{position:sticky;left:0;z-index:2;background:inherit;border-right:1px solid #ede5d8;}
+.oncall-tbl td.oc-sticky-day{position:sticky;left:110px;z-index:2;background:inherit;border-right:2px solid #ede5d8;}
 .oncall-tbl thead th.ctu-h{color:#fbbf24;}
 .oncall-tbl tbody tr{border-bottom:1px solid #ede5d8;transition:background .1s;}
 .oncall-tbl tbody tr:nth-child(even){background:#fff;}
@@ -2346,11 +2350,11 @@ function renderRotaTable(resOverride){
             return[
               el("tr",null,el("td",{colspan:"14",cls:"lvl-hdr-cell",st:{fontWeight:"700",fontSize:".75rem",color:"#94a3b8",letterSpacing:".05em",textTransform:"uppercase",padding:"8px 10px"}},lv+" — "+lvRes.length+" residents")),
               ...lvRes.map(r=>{const isSelf=STATE.user?.rid&&r.id===STATE.user.rid;return el("tr",{st:{background:isSelf?"#fff8f3":""}},
-                el("td",{cls:"sticky-col",st:{background:isSelf?"#fff8f3":""}},
+                el("td",{cls:"sticky-col",st:{background:isSelf?"#fff8f3":"",borderLeft:isSelf?"3px solid #c96a4a":""}},
                   el("div",{cls:"flex-gap"},
                     avEl(r),
                     el("div",null,
-                      el("div",{cls:"name",st:{fontSize:".82rem",color:isSelf?"#c96a4a":""}},r.name,...(isSelf?[selfTag()]:[]) ),
+                      el("div",{cls:"name",st:{fontSize:".82rem",color:isSelf?"#c96a4a":""}},r.name),
                       el("div",{st:{fontSize:".7rem",color:"#64748b"}},r.level)
                     )
                   )
@@ -2487,7 +2491,7 @@ function personLabelEl(residentId,label){
   const name=residentId?(resById(residentId)?.name||label||"—"):(label||"—");
   const wrap=document.createElement("span");
   wrap.textContent=name;
-  if(residentId&&u?.rid&&residentId===u.rid)wrap.appendChild(selfTag());
+  if(residentId&&u?.rid&&residentId===u.rid){wrap.style.cssText="color:#c96a4a;font-weight:700;";}
   return wrap;
 }
 function renderScheduleTable(sessions,blk,cols){
@@ -7158,10 +7162,11 @@ function renderOncall(){
       cell.appendChild(dash);
     }else{
       const res=anyResById(entry.resident_id);
+      const isSelfCell=!!(res&&u.rid&&res.id===u.rid);
       const nm=document.createElement("span");
-      nm.style.cssText="font-weight:600;font-size:.83rem;display:block;";
+      nm.style.cssText="font-weight:600;font-size:.83rem;display:block;"+(isSelfCell?"color:#c96a4a;":"");
       nm.textContent=res?dname(res.name):(entry.resident_name||"?");
-      if(res&&u.rid&&res.id===u.rid)nm.appendChild(selfTag());
+      if(isSelfCell){cell.style.cssText+="background:#fff3eb;border-radius:6px;padding:3px 6px;margin:-3px -6px;";}
       cell.appendChild(nm);
       if(entry.is_extra){
         const badge=document.createElement("span");
@@ -7186,8 +7191,8 @@ function renderOncall(){
         el("table",{cls:"oncall-tbl",st:{minWidth:"820px"}},
           el("thead",null,
             el("tr",null,
-              el("th",null,"Date"),
-              el("th",null,"Day"),
+              el("th",{cls:"oc-sticky-date"},"Date"),
+              el("th",{cls:"oc-sticky-day"},"Day"),
               el("th",null,"ER Medical Oncall"),
               el("th",null,"Floor Oncall"),
               el("th",null,"Floor Oncall"),
@@ -7207,8 +7212,8 @@ function renderOncall(){
               dateCellContent.textContent=fmtDate(date);
               if(isToday){const badge=document.createElement("span");badge.className="oc-today-badge";badge.textContent="TODAY";dateCellContent.appendChild(badge);}
               return el("tr",{cls:rowCls},
-                el("td",null,dateCellContent),
-                el("td",null,el("span",{cls:"oc-day-pill "+(isToday?"today":isWe?"we":"wd")},day)),
+                el("td",{cls:"oc-sticky-date"},dateCellContent),
+                el("td",{cls:"oc-sticky-day"},el("span",{cls:"oc-day-pill "+(isToday?"today":isWe?"we":"wd")},day)),
                 el("td",null,oncallCell(sl.er_medical,date,"er_medical")),
                 el("td",null,oncallCell(sl.bldg1,date,"bldg1")),
                 el("td",null,oncallCell(sl.bldg2,date,"bldg2")),
