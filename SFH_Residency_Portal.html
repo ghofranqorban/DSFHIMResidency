@@ -93,6 +93,21 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .sched-tbl td,.sched-tbl th{border-right:1px solid #ede5d8;}
 .sched-tbl .wk-cell{background:#faf6f1;font-weight:700;color:#1c1410;text-align:center;vertical-align:middle;border-right:2px solid #ede5d8;white-space:nowrap;}
 .sched-tbl tr td{white-space:normal;}
+/* ── On-Call Schedule table ── */
+.oncall-tbl{width:100%;border-collapse:collapse;}
+.oncall-tbl thead tr{background:#1a3a5c;}
+.oncall-tbl thead th{color:#e8ddd2;font-weight:700;padding:12px 14px;text-align:left;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;border-bottom:none;background:transparent;white-space:nowrap;}
+.oncall-tbl thead th.ctu-h{color:#93c5fd;}
+.oncall-tbl tbody tr{border-bottom:1px solid #ede5d8;transition:background .1s;}
+.oncall-tbl tbody tr:nth-child(even){background:#fff;}
+.oncall-tbl tbody tr:nth-child(odd){background:#fdfcfa;}
+.oncall-tbl tbody tr:hover td{background:rgba(201,106,74,.06)!important;}
+.oncall-tbl tbody tr.oc-we{background:rgba(219,234,254,.5)!important;}
+.oncall-tbl tbody tr.oc-we:hover td{background:rgba(219,234,254,.75)!important;}
+.oncall-tbl tbody tr.oc-today{background:#fff7f3!important;box-shadow:inset 4px 0 0 #c96a4a;}
+.oncall-tbl tbody tr.oc-today:hover td{background:#fff3ec!important;}
+.oncall-tbl td{padding:10px 14px;vertical-align:middle;}
+.oc-today-badge{display:inline-block;background:#c96a4a;color:#fff;font-size:.6rem;font-weight:800;padding:2px 7px;border-radius:20px;margin-left:7px;vertical-align:middle;letter-spacing:.05em;}
 /* ── Inputs ── */
 .input-sm{padding:5px 8px;border:1.5px solid #ede5d8;border-radius:7px;font-size:.82rem;width:100%;background:#fff;}
 input,select,textarea{padding:9px 12px;border:1.5px solid #ede5d8;border-radius:9px;font-size:.88rem;width:100%;outline:none;transition:border .12s;background:#fff;color:#1c1410;}
@@ -6417,8 +6432,8 @@ function renderOncall(){
           "✏️ Add / Edit Day")
       ):null,
       !hasData?el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},"No on-call data entered for Block "+blk+" yet."+(canEdit?" Use 'Edit' on any row to add assignments.":"")):null,
-      el("div",{st:{overflowX:"auto"}},
-        el("table",{cls:"data-table",st:{minWidth:"820px"}},
+      el("div",{st:{overflowX:"auto",borderRadius:"12px",boxShadow:"0 2px 12px rgba(0,0,0,.08)",border:"1px solid #ddd6cc",overflow:"hidden"}},
+        el("table",{cls:"oncall-tbl",st:{minWidth:"820px"}},
           el("thead",null,
             el("tr",null,
               el("th",null,"Date"),
@@ -6427,23 +6442,29 @@ function renderOncall(){
               el("th",null,"Floor Oncall"),
               el("th",null,"Floor Oncall"),
               el("th",null,"Floor Oncall"),
-              el("th",{st:{color:"#1e40af"}},"CTU A"),
-              el("th",{st:{color:"#1e40af"}},"CTU B"),
+              el("th",{cls:"ctu-h"},"CTU A"),
+              el("th",{cls:"ctu-h"},"CTU B"),
               canEdit?el("th",null,""):null
             )
           ),
           el("tbody",null,
             ...allDates.map(({date,day,isWe})=>{
               const sl=byDate[date]||{};
-              return el("tr",{st:{background:isWe?"rgba(219,234,254,.35)":""}},
-                el("td",{st:{fontWeight:"600",whiteSpace:"nowrap"}},fmtDate(date)),
-                el("td",{st:{color:isWe?"#1d4ed8":"#374151",fontWeight:isWe?"700":"400",whiteSpace:"nowrap"}},day),
+              const isToday=date===todayStr;
+              const rowCls=isToday?"oc-today":isWe?"oc-we":"";
+              const dateCellContent=document.createElement("span");
+              dateCellContent.style.cssText="font-weight:700;font-size:.88rem;color:"+(isToday?"#c96a4a":"#1c1410")+";white-space:nowrap;";
+              dateCellContent.textContent=fmtDate(date);
+              if(isToday){const badge=document.createElement("span");badge.className="oc-today-badge";badge.textContent="TODAY";dateCellContent.appendChild(badge);}
+              return el("tr",{cls:rowCls},
+                el("td",null,dateCellContent),
+                el("td",{st:{fontSize:".85rem",fontWeight:isWe?"700":"400",color:isWe?"#1d4ed8":"#6b7280",whiteSpace:"nowrap"}},day),
                 el("td",null,oncallCell(sl.er_medical,date,"er_medical")),
                 el("td",null,oncallCell(sl.bldg1,date,"bldg1")),
                 el("td",null,oncallCell(sl.bldg2,date,"bldg2")),
                 el("td",null,oncallCell(sl.consult,date,"consult")),
-                el("td",null,isWe?oncallCell(sl.ctu1,date,"ctu1"):el("span",{st:{color:"#e5e7eb"}},"—")),
-                el("td",null,isWe?oncallCell(sl.ctu2,date,"ctu2"):el("span",{st:{color:"#e5e7eb"}},"—")),
+                el("td",null,isWe?oncallCell(sl.ctu1,date,"ctu1"):el("span",{st:{color:"#d1d5db",fontSize:".78rem"}},"—")),
+                el("td",null,isWe?oncallCell(sl.ctu2,date,"ctu2"):el("span",{st:{color:"#d1d5db",fontSize:".78rem"}},"—")),
                 canEdit?el("td",null,
                   el("button",{cls:"sbtn",st:{fontSize:".74rem",padding:"3px 9px"},onClick:()=>set({oncallEditDate:date})},"Edit")
                 ):null
