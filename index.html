@@ -1706,6 +1706,9 @@ function renderModGrid(){
   // ── Right-side portal info card ──────────────────────────────
   const infoCard=el("div",{cls:"home-infocard"},
     el("div",{cls:"home-infocard-tag"},"DSFH · Internal Medicine"),
+    el("div",{st:{fontSize:".58rem",color:"#92680a",lineHeight:"1.5",marginBottom:"10px",padding:"5px 8px",background:"#fef9ec",borderRadius:"6px",border:"1px solid #f0d98a"}},
+      "⚠ Pilot portal — not an official institutional website. Do not enter patient data or personal information."
+    ),
     el("div",{cls:"home-infocard-block"},"Block "+CURRENT_PERIOD),
     el("div",{cls:"home-infocard-sub"},periodLabel+" · AY "+CURRENT_ACADEMIC_YEAR+"–"+(CURRENT_ACADEMIC_YEAR+1)),
     el("div",{cls:"home-infocard-divider"}),
