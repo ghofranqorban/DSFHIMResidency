@@ -1132,10 +1132,12 @@ async function loadCoreData(){
     sb.from("account_privileges").select("*"),
     sb.from("kpi_scores").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR)
   ]);
-  if(cerr||rerr||perr||pverr){
-    console.error("loadCoreData error",cerr||rerr||perr||pverr);
+  if(cerr||rerr){
+    console.error("loadCoreData critical error",cerr||rerr);
     return false;
   }
+  if(perr)console.warn("profiles load error (non-critical)",perr.message);
+  if(pverr)console.warn("account_privileges load error (non-critical)",pverr.message);
   if(kpierr)console.warn("kpi_scores load error (table may not exist yet)",kpierr.message);
   CONSULTANTS=(cons||[]).map(c=>({id:c.id,name:c.name,user:c.username}));
   RESIDENTS=(res||[]).map(r=>({id:r.id,name:r.name,user:r.username,level:r.level,ph:r.photo_initials||initialsFromName(r.name),yearStarted:r.year_started,chiefRole:r.chief_role||null}));
