@@ -4529,7 +4529,8 @@ function renderLeaveDetail(rid,onBack){
 }
 // ─── COUNSELING ──────────────────────────────────────────────────────────────
 function renderCounseling(){
-  const vr=visRes();
+  const u=STATE.user;
+  const vr=u?.role==="resident"?RESIDENTS.filter(r=>r.id===u.rid):visRes();
   const selId=STATE.counselSelRes||(vr[0]?.id);
   const res=resById(selId)||vr[0];
   if(!res)return el("div",{cls:"content"},el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),el("p",null,"No residents available"));
@@ -4541,7 +4542,6 @@ function renderCounseling(){
   const loaded=Array.isArray(records);
   const activeCount=loaded?records.length:0;
   const alertLv=activeCount===0?"green":activeCount===1?"yellow":"red";
-  const u=STATE.user;
   return el("div",{cls:"content"},
     el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
       el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
