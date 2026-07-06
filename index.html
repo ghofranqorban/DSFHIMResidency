@@ -92,7 +92,7 @@ tr:hover td{background:#fdf9f5;}
 tr:hover .sticky-col{background:#fdf9f5;}
 .lvl-hdr-cell{position:sticky;left:0;background:#f8fafc;z-index:2;}
 .sched-tbl td,.sched-tbl th{border-right:1px solid #ede5d8;}
-.sched-tbl .wk-cell{background:#faf6f1;font-weight:700;color:#1c1410;text-align:center;vertical-align:middle;border-right:2px solid #ede5d8;white-space:nowrap;}
+.sched-tbl .wk-cell{background:#faf6f1;font-weight:700;color:#1c1410;text-align:center;vertical-align:middle;border-right:2px solid #ede5d8;white-space:nowrap;position:sticky;left:0;z-index:2;}
 .sched-tbl tr td{white-space:normal;}
 /* ── On-Call Schedule table ── */
 .oncall-tbl{width:100%;border-collapse:collapse;}
@@ -2354,7 +2354,7 @@ function renderRotaTable(resOverride){
                   el("div",{cls:"flex-gap"},
                     avEl(r),
                     el("div",null,
-                      el("div",{cls:"name",st:{fontSize:".82rem",color:isSelf?"#b45309":""}},r.name),
+                      el("div",{cls:"name",st:{fontSize:".82rem"}},isSelf?el("span",{st:{color:"#b45309",fontWeight:"700",background:"#fde68a",padding:"2px 10px",borderRadius:"20px",display:"inline-block"}},r.name):r.name),
                       el("div",{st:{fontSize:".7rem",color:"#64748b"}},r.level)
                     )
                   )
@@ -2476,6 +2476,7 @@ function renderRotTrack(){
 }
 // ─── SHARED: weekly-banded schedule table (mirrors the committee's distributed sheet) ──
 function weekInBlock(s,blk){return s.week_number-4*(blk-1)+1;}
+function shortFmtDate(d){if(!d)return"";const p=d.split("-");const M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return parseInt(p[2])+" "+M[parseInt(p[1])-1];}
 function personLabel(residentId,label){
   if(residentId){const r=resById(residentId);if(r)return r.name;}
   return label||"—";
@@ -2508,14 +2509,20 @@ function renderScheduleTable(sessions,blk,cols){
     rows.forEach((s,i)=>{
       const tds=[];
       if(i===0)tds.push(el("td",{rowspan:rows.length,cls:"wk-cell"},"Week "+w));
-      cols.forEach(c=>tds.push(el("td",{st:{textAlign:c.center?"center":"left"}},c.render(s))));
+      cols.forEach(c=>{
+        const stickyStyle=c.stickyLeft?{position:"sticky",left:c.stickyLeft,zIndex:"2",background:"inherit",borderRight:"1px solid #ede5d8"}:{};
+        tds.push(el("td",{st:{textAlign:c.center?"center":"left",...stickyStyle}},c.render(s)));
+      });
       const rowStyle=s.row_highlight?{background:s.row_highlight+"26",borderLeft:"4px solid "+s.row_highlight}:null;
       bodyRows.push(el("tr",{st:rowStyle},...tds));
     });
   });
   return el("div",{cls:"tbl-wrap"},
     el("table",{cls:"sched-tbl"},
-      el("thead",null,el("tr",null,el("th",null,"Week"),...cols.map(c=>el("th",null,c.label)))),
+      el("thead",null,el("tr",null,
+        el("th",{st:{position:"sticky",top:"0",left:"0",zIndex:"5",background:"#faf6f1"}},"Week"),
+        ...cols.map(c=>el("th",{st:{position:"sticky",top:"0",zIndex:c.stickyLeft?"5":"3",left:c.stickyLeft||"auto",background:"#faf6f1"}},c.label))
+      )),
       sessions.length===0?
         el("tbody",null,el("tr",null,el("td",{colspan:cols.length+1,cls:"sh",st:{textAlign:"center",padding:"14px"}},"No sessions scheduled for this block yet."))):
         el("tbody",null,...bodyRows)
@@ -2773,8 +2780,8 @@ function renderMMSchedule(){
   const editingSession=(formOpen&&typeof STATE.mmEntrySession==="number")?MM_SESSION_BY_ID[STATE.mmEntrySession]:null;
   const canEditSched=canEditMMSchedule();
   const cols=[
-    {label:"Day",render:s=>canEditSched?schedInlineText(s.id,"day_label",s.day_label||"",v=>{sb.from("mm_sessions").update({day_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):s.day_label||"—"},
-    {label:"Date",render:s=>canEditSched?schedInlineText(s.id,"session_date",s.session_date,v=>{if(!v)return;sb.from("mm_sessions").update({session_date:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):fmtDate(s.session_date)},
+    {label:"Day",stickyLeft:"60px",render:s=>canEditSched?schedInlineText(s.id,"day_label",s.day_label||"",v=>{sb.from("mm_sessions").update({day_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):s.day_label||"—"},
+    {label:"Date",stickyLeft:"150px",render:s=>canEditSched?schedInlineText(s.id,"session_date",s.session_date,v=>{if(!v)return;sb.from("mm_sessions").update({session_date:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):shortFmtDate(s.session_date)},
     {label:"Topic",render:s=>canEditSched?schedInlineText(s.id,"topic",s.topic,v=>{sb.from("mm_sessions").update({topic:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):s.topic},
     {label:"Presenter",render:s=>canEditSched?schedInlineResident(s.id,"presenter_resident_id",s.presenter_resident_id,s.presenter_label,(resId,label)=>{sb.from("mm_sessions").update({presenter_resident_id:resId,presenter_label:label}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):personLabelEl(s.presenter_resident_id,s.presenter_label)},
     {label:"Moderator",render:s=>canEditSched?schedInlineResident(s.id,"moderator_resident_id",s.moderator_resident_id,s.moderator_label,(resId,label)=>{sb.from("mm_sessions").update({moderator_resident_id:resId,moderator_label:label}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):personLabelEl(s.moderator_resident_id,s.moderator_label)},
