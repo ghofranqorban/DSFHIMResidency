@@ -186,6 +186,7 @@ QUIZZES_LOAD_ERR // string|null — set if quizzes table missing in Supabase
 | `add_promotion_log.sql` | ✅ Partially run | promotion_log table exists (policy already existed error — table is present) |
 | `add_kpi_quarterly_proposals.sql` | ✅ Partially run | kpi_quarterly + kpi_proposals tables exist (policy already existed error — tables are present) |
 | `fix_attendance_rls_and_deputy_pd.sql` | ⛔ Do NOT run | Adds consultants to attendance write policy — not needed. Attendance committee = privileged residents only, already covered by `has_priv('edit_mm_attendance')` in the original migration_003 policy. |
+| `add_oncall_resident_name.sql` | ⚠️ NOT YET RUN | Adds `resident_name text` column to `oncall_schedule` for free-text / outside-rotator entries. Run before using free-text in oncall cells. |
 
 ---
 
@@ -473,3 +474,44 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - `kpi-evidence` Supabase Storage bucket still not created.
 - Historical KPI data (Phase 2) still pending.
 - KPI page redesign still pending.
+
+---
+
+### Session — 6 Jul 2026 (UX improvements + Oncall redesign)
+
+**Features built / improved:**
+
+- **Oncall column labels updated**: ER Medical → "ER Medical Oncall"; Building 1/2/Consult → "Floor Oncall"
+- **Inline double-click editing — Oncall**: double-click any cell opens a type-to-filter resident dropdown. Escape/blur closes. Saves single cell to Supabase immediately. Extra flag still managed via Edit modal.
+- **Inline double-click editing — MM & Teaching schedules**: same pattern extended to Morning Meeting (Day, Date, Topic, Presenter, Moderator, Consultant) and Teaching (Day, Date, Specialty, Topic, Presenter). Uses shared helper functions:
+  - `schedInlineText(sid, field, val, saveFn, tbl)` — text/date field
+  - `schedInlineResident(sid, field, currentResId, currentLabel, saveFn, tbl)` — resident+consultant dropdown with free-text fallback
+  - `STATE.schedInlineEdit = {id, field, tbl}` — tbl="mm" or "teach" prevents ID collision
+  - Edit/Delete buttons remain for full-form fields (row colour, etc.)
+- **sortByLevel()** — global helper (`_LVL_ORD = {R4:0,R3:1,R2:2,R1:3}`). Replaces all `sort((a,b)=>a.name.localeCompare(b.name))` for RESIDENTS everywhere. Stats table also sorted by level.
+- **Search input focus fix**: `render()` now saves `document.activeElement?.id==="search-inp"` + cursor position before DOM wipe, restores both after rebuild. Input has `id="search-inp"`.
+- **Outside rotator display fix**: `_inactiveResById = {}` global, populated at startup from inactive residents. `anyResById(id)` checks RESIDENTS first then `_inactiveResById`. Fixes "?" display for archived/outside residents like M. Juninah.
+- **Free-text oncall entries**: `oncall_schedule` table needs `resident_name text` column (migration `add_oncall_resident_name.sql` — **NOT YET RUN**). `saveOncallCell(blk, date, slotKey, residentId, residentName)` — pass null residentId + name string for free text. Edit modal has text input below each slot dropdown; typing there disables the dropdown.
+- **Oncall table redesign**:
+  - CSS class `oncall-tbl` (not `data-table`) — warm chocolate brown header (`#4a3828`), alternating rows, hover tint
+  - Day column: pill badges — weekday = beige `.oc-day-pill.wd`, weekend = olive `.oc-day-pill.we` (`#4a6741`), today = terracotta `.oc-day-pill.today`
+  - Weekend rows: `.oc-we` = sage green `#f1f4ee`
+  - Today row: `.oc-today` = warm cream + 4px terracotta left border + `TODAY` badge (`.oc-today-badge`)
+  - Table wrapped in rounded card with shadow
+- **Color preview workflow confirmed**: User approved previewing complex UI changes in `/tmp/xxx_preview.html` before applying. Always do this for new visual designs.
+- **Pilot disclaimer**: Added below eyebrow on hero left (mobile) and below DSFH tag inside info card (desktop). Style: small amber note box (`#fef9ec` bg, `#f0d98a` border, `#92680a` text).
+
+**Key globals / helpers added this session:**
+- `_LVL_ORD`, `sortByLevel(arr)` — level-sorted resident list (R4→R1 then alpha)
+- `_inactiveResById`, `anyResById(id)` — lookup including inactive residents
+- `schedInlineText()`, `schedInlineResident()` — shared inline-edit helpers for schedule tables
+- `saveOncallCell(blk, date, slotKey, residentId, residentName)` — single-cell oncall save
+- `STATE.schedInlineEdit = {id, field, tbl}` — active inline edit cell tracker
+- `STATE.oncallInlineEdit = {date, slotKey}` — active oncall inline edit tracker
+
+**Still TODO (carried forward):**
+- Run `supabase/add_oncall_resident_name.sql` in Supabase to enable free-text oncall entries
+- `kpi-evidence` Supabase Storage bucket (public) — KPI file uploads still fail without it
+- Historical KPI data 2024-25, 2023-24, 2022-23 (Phase 2 — show "Under Progress 🔒")
+- KPI page full visual redesign (confirmed by user, still deferred)
+- Oncall Statistics tab — currently PD-only; user will decide when to open to other roles
