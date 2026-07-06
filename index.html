@@ -95,19 +95,23 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .sched-tbl tr td{white-space:normal;}
 /* ── On-Call Schedule table ── */
 .oncall-tbl{width:100%;border-collapse:collapse;}
-.oncall-tbl thead tr{background:#1a3a5c;}
-.oncall-tbl thead th{color:#e8ddd2;font-weight:700;padding:12px 14px;text-align:left;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;border-bottom:none;background:transparent;white-space:nowrap;}
-.oncall-tbl thead th.ctu-h{color:#93c5fd;}
+.oncall-tbl thead tr{background:#4a3828;}
+.oncall-tbl thead th{color:#f0e8dd;font-weight:700;padding:12px 14px;text-align:left;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;border-bottom:none;background:transparent;white-space:nowrap;}
+.oncall-tbl thead th.ctu-h{color:#fbbf24;}
 .oncall-tbl tbody tr{border-bottom:1px solid #ede5d8;transition:background .1s;}
 .oncall-tbl tbody tr:nth-child(even){background:#fff;}
 .oncall-tbl tbody tr:nth-child(odd){background:#fdfcfa;}
 .oncall-tbl tbody tr:hover td{background:rgba(201,106,74,.06)!important;}
-.oncall-tbl tbody tr.oc-we{background:rgba(219,234,254,.5)!important;}
-.oncall-tbl tbody tr.oc-we:hover td{background:rgba(219,234,254,.75)!important;}
+.oncall-tbl tbody tr.oc-we{background:#eff6ff!important;}
+.oncall-tbl tbody tr.oc-we:hover td{background:#dbeafe!important;}
 .oncall-tbl tbody tr.oc-today{background:#fff7f3!important;box-shadow:inset 4px 0 0 #c96a4a;}
 .oncall-tbl tbody tr.oc-today:hover td{background:#fff3ec!important;}
 .oncall-tbl td{padding:10px 14px;vertical-align:middle;}
 .oc-today-badge{display:inline-block;background:#c96a4a;color:#fff;font-size:.6rem;font-weight:800;padding:2px 7px;border-radius:20px;margin-left:7px;vertical-align:middle;letter-spacing:.05em;}
+.oc-day-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.76rem;font-weight:700;white-space:nowrap;}
+.oc-day-pill.wd{background:#ede5d8;color:#4a3828;}
+.oc-day-pill.we{background:#1d4ed8;color:#fff;}
+.oc-day-pill.today{background:#c96a4a;color:#fff;}
 /* ── Inputs ── */
 .input-sm{padding:5px 8px;border:1.5px solid #ede5d8;border-radius:7px;font-size:.82rem;width:100%;background:#fff;}
 input,select,textarea{padding:9px 12px;border:1.5px solid #ede5d8;border-radius:9px;font-size:.88rem;width:100%;outline:none;transition:border .12s;background:#fff;color:#1c1410;}
@@ -6458,7 +6462,7 @@ function renderOncall(){
               if(isToday){const badge=document.createElement("span");badge.className="oc-today-badge";badge.textContent="TODAY";dateCellContent.appendChild(badge);}
               return el("tr",{cls:rowCls},
                 el("td",null,dateCellContent),
-                el("td",{st:{fontSize:".85rem",fontWeight:isWe?"700":"400",color:isWe?"#1d4ed8":"#6b7280",whiteSpace:"nowrap"}},day),
+                el("td",null,el("span",{cls:"oc-day-pill "+(isToday?"today":isWe?"we":"wd")},day)),
                 el("td",null,oncallCell(sl.er_medical,date,"er_medical")),
                 el("td",null,oncallCell(sl.bldg1,date,"bldg1")),
                 el("td",null,oncallCell(sl.bldg2,date,"bldg2")),
