@@ -981,7 +981,7 @@ function downloadRotationICS(resId){
     if(!role)return;
     const d=s.session_date;
     lines.push("BEGIN:VEVENT",
-      "DTSTART;TZID=Asia/Riyadh:"+d.replace(/-/g,"")+"T070000",
+      "DTSTART;TZID=Asia/Riyadh:"+d.replace(/-/g,"")+"T080000",
       "DTEND;TZID=Asia/Riyadh:"+d.replace(/-/g,"")+"T090000",
       "SUMMARY:"+icsEscape(role+": "+s.topic),
       "DESCRIPTION:"+icsEscape("Block "+s.block_number+" • "+fmtDate(d)+" • DSFH Morning Meeting"),
@@ -1032,7 +1032,7 @@ let STATE={
   showPromoModal:false,promoSkip:{},
   showCalModal:false,
   calToken:null,
-  calPrefs:{rota:true,oncall:true,mm:true,teach:false,deadlines:true},
+  calPrefs:{rota:true,oncall:true,mm_mine:true,mm_all:false,teach_mine:false,teach_all:false,deadlines:true},
 };
 // In-memory scratch state for the rota-import wizard (not part of STATE/render diffing
 // since it holds large parsed workbook data + per-row user picks; wizard steps are
@@ -1932,7 +1932,7 @@ function renderModGrid(){
         el("p",{cls:"home-subtitle"},"Block "+CURRENT_PERIOD+" · "+periodLabel),
         el("div",{st:{display:"flex",flexWrap:"wrap",gap:"10px",marginTop:"16px"}},
           (isPD()||STATE.user?.role==="chief")?el("button",{cls:"sbtn primary",st:{fontSize:".82rem"},onClick:()=>set({showBroadcast:true})},"📢 Broadcast"):null,
-          el("button",{cls:"sbtn ghost",st:{fontSize:".82rem"},onClick:()=>{_calPrefsDraft=Object.assign({},STATE.calPrefs||{rota:true,oncall:true,mm:true,teach:false,deadlines:true});set({showCalModal:true});}},"\uD83D\uDCC5 My Calendar")
+          el("button",{cls:"sbtn ghost",st:{fontSize:".82rem"},onClick:()=>{_calPrefsDraft=Object.assign({},STATE.calPrefs||{rota:true,oncall:true,mm_mine:true,mm_all:false,teach_mine:false,teach_all:false,deadlines:true});set({showCalModal:true});}},"\uD83D\uDCC5 My Calendar")
         )
       ),
       infoCard
@@ -2111,7 +2111,7 @@ function renderRota(){
       el("div",{cls:"flex-gap",st:{marginBottom:"16px",flexWrap:"wrap",alignItems:"center"}},
         el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
         el("h2",{st:{fontWeight:"800",color:"#111827"}},"Rota Schedule"),
-        resTab==="my"?el("button",{cls:"sbtn ghost",st:{fontSize:".8rem"},onClick:()=>downloadRotationICS(u.rid)},"📅 Download .ics"):null
+        null
       ),
       el("div",{cls:"tab-bar"},
         el("span",{cls:"tab"+(resTab==="dist"?" on":""),onClick:()=>set({rotaResTab:"dist"})},"📋 Distribution"),
@@ -5849,7 +5849,6 @@ function renderProfileRota(res){
   return el("div",{cls:"card"},
     el("div",{cls:"flex-gap",st:{marginBottom:"12px",flexWrap:"wrap"}},
       el("span",{cls:"card-title",st:{margin:"0"}},"Rota for "+res.name),
-      el("button",{cls:"sbtn ghost",st:{fontSize:".8rem"},onClick:()=>downloadRotationICS(res.id)},"📅 Download .ics"),
       el("button",{cls:"sbtn success",onClick:async()=>{
         const entries=Object.entries(editVals).map(([p,rot])=>({residentId:res.id,block:p,rotationName:rot}));
         if(entries.length)await saveRotaCells(entries);
@@ -7153,7 +7152,7 @@ function renderOncall(){
           )
         :el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},"No upcoming on-calls scheduled for you this academic year."),
       myEntries.length>0
-        ?el("button",{cls:"sbtn",st:{marginBottom:"24px"},onClick:()=>downloadOncallICS(u.rid)},"📅 Download Calendar (.ics)")
+        ?null
         :null,
       past.length>0
         ?el("div",{cls:"card"},
@@ -7391,7 +7390,18 @@ async function saveCalPrefs(prefs){
 }
 function renderCalModal(){
   const u=STATE.user;if(!u)return null;
-  if(!_calPrefsDraft)_calPrefsDraft=Object.assign({},STATE.calPrefs||{rota:true,oncall:true,mm:true,teach:false,deadlines:true});
+  if(!_calPrefsDraft){
+    const _p=STATE.calPrefs||{};
+    _calPrefsDraft={
+      rota:_p.rota!==undefined?_p.rota:true,
+      oncall:_p.oncall!==undefined?_p.oncall:true,
+      mm_mine:_p.mm_mine!==undefined?_p.mm_mine:(_p.mm!==undefined?_p.mm:true),
+      mm_all:_p.mm_all!==undefined?_p.mm_all:false,
+      teach_mine:_p.teach_mine!==undefined?_p.teach_mine:false,
+      teach_all:_p.teach_all!==undefined?_p.teach_all:(_p.teach!==undefined?_p.teach:false),
+      deadlines:_p.deadlines!==undefined?_p.deadlines:true,
+    };
+  }
   const prefs=_calPrefsDraft;
   const token=STATE.calToken;
   const feedUrl=token?(SUPABASE_URL+"/functions/v1/"+CAL_FEED_FN+"?token="+token):"";
@@ -7399,11 +7409,13 @@ function renderCalModal(){
   const gcalUrl=feedUrl?"https://calendar.google.com/calendar/r/settings/addbyurl?url="+encodeURIComponent(feedUrl):"";
   function close(){_calPrefsDraft=null;set({showCalModal:false});}
   const PREF_OPTS=[
-    {key:"rota",label:"Rotation Schedule",sub:"28-day block assignments for the current academic year"},
-    {key:"oncall",label:"On-Call Duties",sub:"My assigned on-call shifts (with slot and penalty flag)"},
-    {key:"mm",label:"Morning Meetings",sub:"All MM sessions — my presenter/moderator role highlighted"},
-    {key:"teach",label:"Teaching Sessions",sub:"All scheduled teaching sessions"},
-    {key:"deadlines",label:"Deadlines & Announcements",sub:"Tasks and due dates assigned to me"},
+    {key:"rota",label:"Rotation Schedule",sub:"My 28-day block assignments only"},
+    {key:"oncall",label:"On-Call Duties",sub:"My assigned shifts only"},
+    {key:"mm_mine",label:"Morning Meetings — my duties only",sub:"Sessions where I am presenter or moderator"},
+    {key:"mm_all",label:"Morning Meetings — full schedule",sub:"All MM sessions (every resident)"},
+    {key:"teach_mine",label:"Teaching — my presentations only",sub:"Sessions where I am the listed presenter"},
+    {key:"teach_all",label:"Teaching — full schedule",sub:"All teaching sessions"},
+    {key:"deadlines",label:"Deadlines & Announcements",sub:"Public announcements + those targeted to me or my level"},
   ];
   function mkChkRow(opt){
     const cb=document.createElement("input");

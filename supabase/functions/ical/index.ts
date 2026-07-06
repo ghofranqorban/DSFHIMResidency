@@ -124,9 +124,19 @@ Deno.serve(async (req) => {
     });
   }
 
-  const prefs = profile.calendar_prefs ?? {
-    rota: true, oncall: true, mm: true, teach: false, deadlines: true,
+  const _p = profile.calendar_prefs ?? {};
+  // Resolve prefs — support both new keys and old single-key format for backward compat
+  const prefs = {
+    rota:       _p.rota       !== undefined ? _p.rota       : true,
+    oncall:     _p.oncall     !== undefined ? _p.oncall     : true,
+    mm_mine:    _p.mm_mine    !== undefined ? _p.mm_mine    : (_p.mm !== undefined ? _p.mm : true),
+    mm_all:     _p.mm_all     !== undefined ? _p.mm_all     : false,
+    teach_mine: _p.teach_mine !== undefined ? _p.teach_mine : false,
+    teach_all:  _p.teach_all  !== undefined ? _p.teach_all  : (_p.teach !== undefined ? _p.teach : false),
+    deadlines:  _p.deadlines  !== undefined ? _p.deadlines  : true,
   };
+  // For "my teaching only" — match presenter_label against display name (no resident_id in teaching_sessions)
+  const myDisplayName = (profile.display_name ?? "").replace(/^Dr\.?\s*/i, "").trim().toLowerCase();
   const resId = profile.resident_id ?? null;
   const ay = currentAcademicYear();
   const calName = icsEscape(
@@ -198,7 +208,7 @@ Deno.serve(async (req) => {
   }
 
   // ── 3. Morning Meeting sessions ────────────────────────────────────────────
-  if (prefs.mm) {
+  if (prefs.mm_mine || prefs.mm_all) {
     const { data: mms } = await sb
       .from("mm_sessions")
       .select("id, block_number, session_date, topic, presenter_resident_id, moderator_resident_id")
@@ -208,15 +218,19 @@ Deno.serve(async (req) => {
       id: string; block_number: number; session_date: string;
       topic: string; presenter_resident_id: number | null; moderator_resident_id: number | null;
     }) => {
+      const isPresenter = resId && s.presenter_resident_id == resId;
+      const isModerator = resId && s.moderator_resident_id == resId;
+      // mm_mine only: skip sessions not assigned to me
+      if (!prefs.mm_all && prefs.mm_mine && !isPresenter && !isModerator) return;
       let role = "";
-      if (resId && s.presenter_resident_id == resId) role = " \uD83C\uDFA4 Presenter";
-      else if (resId && s.moderator_resident_id == resId) role = " \uD83C\uDF99 Moderator";
+      if (isPresenter) role = " \uD83C\uDFA4 Presenter";
+      else if (isModerator) role = " \uD83C\uDF99 Moderator";
       const ds = s.session_date.replace(/-/g, "");
       push(
         "BEGIN:VEVENT",
         "UID:dsfh-mm-" + s.id + "@dsfh.local",
         fold("SUMMARY:\u2600\uFE0F Morning Meeting" + role + (s.topic ? ": " + icsEscape(s.topic) : "")),
-        "DTSTART;TZID=Asia/Riyadh:" + ds + "T070000",
+        "DTSTART;TZID=Asia/Riyadh:" + ds + "T080000",
         "DTEND;TZID=Asia/Riyadh:" + ds + "T090000",
         fold("DESCRIPTION:DSFH IM Morning Meeting \u2013 Block " + s.block_number + (role ? "\\nYour role: " + role.trim() : "")),
         "CATEGORIES:Morning Meeting",
@@ -226,7 +240,7 @@ Deno.serve(async (req) => {
   }
 
   // ── 4. Teaching sessions ───────────────────────────────────────────────────
-  if (prefs.teach) {
+  if (prefs.teach_mine || prefs.teach_all) {
     const { data: teaches } = await sb
       .from("teaching_sessions")
       .select("id, block_number, session_date, topic, presenter_label")
@@ -236,6 +250,11 @@ Deno.serve(async (req) => {
       id: string; block_number: number; session_date: string;
       topic: string; presenter_label: string;
     }) => {
+      // teach_mine only: filter by name match (no resident_id in teaching_sessions table)
+      if (!prefs.teach_all && prefs.teach_mine) {
+        const lbl = (s.presenter_label ?? "").toLowerCase();
+        if (!myDisplayName || !lbl.includes(myDisplayName.split(" ")[0])) return;
+      }
       const ds = s.session_date.replace(/-/g, "");
       push(
         "BEGIN:VEVENT",
