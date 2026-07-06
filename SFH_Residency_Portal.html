@@ -98,10 +98,10 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .oncall-tbl{width:100%;border-collapse:collapse;}
 .oncall-tbl thead tr{background:#4a3828;}
 .oncall-tbl thead th{color:#f0e8dd;font-weight:700;padding:12px 14px;text-align:left;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;border-bottom:none;background:#4a3828;white-space:nowrap;position:sticky;top:0;z-index:4;}
-.oncall-tbl th.oc-sticky-date{position:sticky;left:0;z-index:5;background:#4a3828;}
-.oncall-tbl th.oc-sticky-day{position:sticky;left:110px;z-index:5;background:#4a3828;border-right:2px solid #6b5040;}
-.oncall-tbl td.oc-sticky-date{position:sticky;left:0;z-index:2;background:inherit;border-right:1px solid #ede5d8;}
-.oncall-tbl td.oc-sticky-day{position:sticky;left:110px;z-index:2;background:inherit;border-right:2px solid #ede5d8;}
+.oncall-tbl th.oc-sticky-date{position:sticky;left:0;z-index:5;background:#4a3828;min-width:60px;width:60px;}
+.oncall-tbl th.oc-sticky-day{position:sticky;left:60px;z-index:5;background:#4a3828;border-right:2px solid #6b5040;min-width:90px;width:90px;}
+.oncall-tbl td.oc-sticky-date{position:sticky;left:0;z-index:2;background:inherit;border-right:1px solid #ede5d8;min-width:60px;width:60px;padding:10px 8px;}
+.oncall-tbl td.oc-sticky-day{position:sticky;left:60px;z-index:2;background:inherit;border-right:2px solid #ede5d8;min-width:90px;width:90px;}
 .oncall-tbl thead th.ctu-h{color:#fbbf24;}
 .oncall-tbl tbody tr{border-bottom:1px solid #ede5d8;transition:background .1s;}
 .oncall-tbl tbody tr:nth-child(even){background:#fff;}
@@ -7207,10 +7207,13 @@ function renderOncall(){
               const sl=byDate[date]||{};
               const isToday=date===todayStr;
               const rowCls=isToday?"oc-today":isWe?"oc-we":"";
-              const dateCellContent=document.createElement("span");
-              dateCellContent.style.cssText="font-weight:700;font-size:.88rem;color:"+(isToday?"#c96a4a":"#1c1410")+";white-space:nowrap;";
-              dateCellContent.textContent=fmtDate(date);
-              if(isToday){const badge=document.createElement("span");badge.className="oc-today-badge";badge.textContent="TODAY";dateCellContent.appendChild(badge);}
+              const [_y,_mo,_dy]=date.split("-");
+              const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+              const shortDate=parseInt(_dy)+" "+MONTHS[parseInt(_mo)-1];
+              const dateCellContent=document.createElement("div");
+              dateCellContent.style.cssText="font-weight:700;font-size:.83rem;color:"+(isToday?"#c96a4a":"#1c1410")+";white-space:nowrap;line-height:1.3;";
+              dateCellContent.textContent=shortDate;
+              if(isToday){const badge=document.createElement("div");badge.style.cssText="font-size:.6rem;font-weight:800;color:#c96a4a;letter-spacing:.04em;margin-top:1px;";badge.textContent="TODAY";dateCellContent.appendChild(badge);}
               return el("tr",{cls:rowCls},
                 el("td",{cls:"oc-sticky-date"},dateCellContent),
                 el("td",{cls:"oc-sticky-day"},el("span",{cls:"oc-day-pill "+(isToday?"today":isWe?"we":"wd")},day)),
