@@ -2238,7 +2238,8 @@ function renderRotaBlock(resOverride){
   );
 }
 function renderRotaTimeline(){
-  const vr=visRes();
+  const u=STATE.user;
+  const vr=(u&&u.role==="resident"&&!hasPriv(u.profileId,"edit_mm_attendance")&&!hasPriv(u.profileId,"edit_teach_attendance"))?visRes():RESIDENTS;
   const rid=STATE.rotaTimeRes||(vr[0]?.id);
   const res=resById(rid)||vr[0];
   if(!res)return el("div",null,"No residents available");
