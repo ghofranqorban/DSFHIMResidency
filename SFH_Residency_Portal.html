@@ -1266,7 +1266,7 @@ function pbar(pct,color){
 }
 function fmtDate(d){if(!d)return"";const p=d.split("-");return p[2]+"/"+p[1]+"/"+p[0];}
 function diffDays(from,to){return Math.round((new Date(to)-new Date(from))/(86400000))+1;}
-function resById(id){return RESIDENTS.find(r=>r.id===id);}
+function resById(id){return RESIDENTS.find(r=>r.id==id);}
 function consultById(id){return CONSULTANTS.find(c=>c.id===id);}
 function mentorName(rid){const c=consultById(MENTORS[rid]);return c?c.name:"-";}
 // ─── LOGIN VIEW ──────────────────────────────────────────────────────────────
