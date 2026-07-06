@@ -236,6 +236,80 @@ label{display:block;font-size:.8rem;font-weight:600;color:#4a3828;margin-bottom:
   .modal-card{width:100%;border-radius:0;max-height:none;height:auto;padding:18px 16px;box-shadow:none;}
   .inline-form{padding:12px;}
 }
+/* ── Best Resident Stars Banner ─────────────────────────────────────────── */
+.stars-banner{background:linear-gradient(135deg,#fffbf0 0%,#fff8e6 50%,#fffbf0 100%);border-top:3px solid #e8c84a;border-bottom:3px solid #e8c84a;padding:24px 48px 22px;position:relative;overflow:hidden;}
+.stars-banner::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% -20%,rgba(232,200,74,.12) 0%,transparent 70%);pointer-events:none;}
+.stars-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px;}
+.stars-title-row{display:flex;align-items:center;gap:12px;}
+.stars-icon-bubble{width:42px;height:42px;background:linear-gradient(135deg,#f5c518,#e8a000);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 4px 12px rgba(232,160,0,.35);animation:starPulse 3s ease-in-out infinite;flex-shrink:0;}
+@keyframes starPulse{0%,100%{box-shadow:0 4px 12px rgba(232,160,0,.35);transform:scale(1);}50%{box-shadow:0 4px 20px rgba(232,160,0,.55);transform:scale(1.06);}}
+.stars-title-row h2{font-size:20px;font-weight:900;color:#3d2b1f;letter-spacing:-.3px;}
+.stars-title-row p{font-size:10px;color:#9a8060;letter-spacing:2px;font-family:sans-serif;margin-top:1px;}
+.stars-qpill{background:linear-gradient(135deg,#f5c518,#e8a000);color:#3d2b1f;font-size:10px;font-weight:700;letter-spacing:2px;font-family:sans-serif;padding:4px 12px;border-radius:20px;box-shadow:0 2px 8px rgba(232,160,0,.3);white-space:nowrap;}
+.star-cards-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:640px;}
+.star-card{background:#fff;border-radius:14px;padding:16px 18px;box-shadow:0 4px 16px rgba(61,43,31,.08);display:flex;align-items:center;gap:14px;position:relative;overflow:hidden;cursor:default;transition:transform .2s,box-shadow .2s;}
+.star-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(61,43,31,.12);}
+.star-card::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;}
+.star-card.sc-senior::before{background:linear-gradient(180deg,#B8860B,#f5c518);}
+.star-card.sc-junior::before{background:linear-gradient(180deg,#c0504d,#e87c79);}
+.star-card-glow{position:absolute;top:-20px;right:-20px;width:80px;height:80px;border-radius:50%;opacity:.06;}
+.sc-senior .star-card-glow{background:#B8860B;}
+.sc-junior .star-card-glow{background:#c0504d;}
+.star-av-wrap{position:relative;flex-shrink:0;}
+.star-av-ring{width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:900;color:#fff;}
+.sc-senior .star-av-ring{background:linear-gradient(135deg,#B8860B,#f5c518);box-shadow:0 4px 12px rgba(184,134,11,.4);}
+.sc-junior .star-av-ring{background:linear-gradient(135deg,#c0504d,#e87c79);box-shadow:0 4px 12px rgba(192,80,77,.4);}
+.star-crown{position:absolute;top:-10px;left:50%;transform:translateX(-50%);font-size:15px;}
+.star-info{flex:1;min-width:0;}
+.star-type-lbl{font-size:9px;letter-spacing:2px;font-family:sans-serif;font-weight:700;color:#9a8060;text-transform:uppercase;margin-bottom:2px;}
+.star-winner-name{font-size:15px;font-weight:900;color:#3d2b1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.star-winner-level{font-size:11px;color:#8a7060;font-family:sans-serif;margin-top:1px;}
+.star-score-col{display:flex;flex-direction:column;align-items:center;flex-shrink:0;}
+.star-score-num{font-size:24px;font-weight:900;line-height:1;}
+.sc-senior .star-score-num{color:#B8860B;}
+.sc-junior .star-score-num{color:#c0504d;}
+.star-score-unit{font-size:9px;color:#9a8060;font-family:sans-serif;letter-spacing:1px;margin-top:1px;}
+.stars-pending-card{background:#fff;border-radius:14px;padding:16px 18px;box-shadow:0 4px 16px rgba(61,43,31,.08);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;opacity:.55;filter:blur(1px);}
+.stars-voting-strip{margin-top:14px;display:flex;align-items:center;gap:10px;background:#fff8e6;border:1.5px solid #f5c518;border-radius:10px;padding:10px 14px;max-width:640px;flex-wrap:wrap;}
+.vote-pulse-dot{width:9px;height:9px;border-radius:50%;background:#e07c00;flex-shrink:0;animation:vPulse 1.5s ease-in-out infinite;}
+@keyframes vPulse{0%,100%{box-shadow:0 0 0 0 rgba(224,124,0,.5);}50%{box-shadow:0 0 0 6px rgba(224,124,0,0);}}
+.vote-strip-text{font-family:sans-serif;font-size:12px;color:#7a5800;flex:1;}
+.vote-strip-cd{font-family:monospace;font-size:12px;font-weight:700;color:#e07c00;background:#fff3cc;padding:2px 9px;border-radius:6px;border:1px solid #f5c518;white-space:nowrap;}
+/* ── Best Resident module ─────────────────────────────────────────────────── */
+.br-rank-list{display:flex;flex-direction:column;gap:10px;}
+.br-rank-row{background:#fff;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 10px rgba(61,43,31,.06);transition:transform .15s;}
+.br-rank-row:hover{transform:translateX(3px);}
+.br-rank-row.rk1{border-left:4px solid #B8860B;}
+.br-rank-row.rk2{border-left:4px solid #9ca3af;}
+.br-rank-row.rk3{border-left:4px solid #CD7F32;}
+.br-rank-num{font-size:17px;font-weight:900;width:26px;text-align:center;flex-shrink:0;}
+.rk1 .br-rank-num{color:#B8860B;}
+.rk2 .br-rank-num{color:#9ca3af;}
+.rk3 .br-rank-num{color:#CD7F32;}
+.br-rank-row:not(.rk1):not(.rk2):not(.rk3) .br-rank-num{color:#8a7060;}
+.br-rank-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#fff;flex-shrink:0;}
+.br-rank-av.snr{background:linear-gradient(135deg,#B8860B,#f5c518);}
+.br-rank-av.jnr{background:linear-gradient(135deg,#c0504d,#e87c79);}
+.br-rank-info{flex:1;min-width:0;}
+.br-rank-name{font-size:14px;font-weight:700;color:#3d2b1f;}
+.br-rank-sub{font-size:10px;color:#8a7060;font-family:sans-serif;margin-top:1px;}
+.br-rank-bar{height:5px;background:#f0ece6;border-radius:4px;overflow:hidden;margin-top:5px;}
+.br-rank-bar-fill{height:100%;border-radius:4px;transition:width 1s ease;}
+.br-rank-bar-fill.snr{background:linear-gradient(90deg,#B8860B,#f5c518);}
+.br-rank-bar-fill.jnr{background:linear-gradient(90deg,#c0504d,#e87c79);}
+.br-rank-score{font-size:18px;font-weight:900;flex-shrink:0;width:38px;text-align:right;}
+.br-snr-sec .br-rank-score{color:#B8860B;}
+.br-jnr-sec .br-rank-score{color:#c0504d;}
+.br-you-badge{font-size:8px;font-family:sans-serif;font-weight:700;letter-spacing:1px;background:#f5c518;color:#5a3a00;padding:1px 5px;border-radius:5px;margin-left:4px;vertical-align:middle;}
+.br-rank-row.br-you-row{background:linear-gradient(135deg,#fff8e6,#fffcf0);border:1.5px solid #f5c518;border-left:4px solid #f5c518;}
+.hof-card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 4px 14px rgba(61,43,31,.07);position:relative;overflow:hidden;}
+.hof-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#f5c518,#e8a000);}
+.hof-q-label{font-size:9px;letter-spacing:2px;font-family:sans-serif;font-weight:700;color:#9a8060;text-transform:uppercase;margin-bottom:12px;}
+.hof-winner-type{font-size:9px;letter-spacing:1.5px;font-family:sans-serif;color:#9a8060;text-transform:uppercase;margin-bottom:2px;}
+.hof-winner-name{font-size:15px;font-weight:900;color:#3d2b1f;}
+.hof-winner-score{font-size:11px;color:#8a7060;font-family:sans-serif;}
+.hof-divider{height:1px;background:#f0ece6;margin:10px 0;}
+@media(max-width:600px){.star-cards-row{grid-template-columns:1fr!important;}.stars-banner{padding:18px 16px!important;}}
 </style>
 </head>
 <body>
@@ -796,6 +870,7 @@ function renderKpiProposalModal(){
 // via leave_weeks/leave_position and is merged in by buildLeaveData()) ───────
 let LEAVE_PENDING_COUNT=0;
 let ONCALL_DATA=[];
+let BEST_VOTES=[];let BEST_STATUS=null;
 let _inactiveResById={};
 async function loadLeaveRecords(){
   const{data,error}=await sb.from("leave_records").select("*").order("created_at",{ascending:false});
@@ -1096,6 +1171,59 @@ async function deleteAnnouncement(id){
   await sb.from("announcements").delete().eq("id",id);
   await loadAnnouncements();
 }
+// ─── BEST RESIDENT DATA LAYER ────────────────────────────────────────────────
+async function loadBestResident(){
+  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
+  const[vRes,wRes]=await Promise.all([
+    sb.from("best_resident_votes").select("*").eq("academic_year",ay).eq("quarter",q),
+    sb.from("best_resident_winners").select("*").eq("academic_year",ay).eq("quarter",q).single()
+  ]);
+  if(!vRes.error&&vRes.data)BEST_VOTES=vRes.data;
+  BEST_STATUS=(!wRes.error&&wRes.data)?wRes.data:null;
+  render();
+}
+async function brCastVote(seniorId,juniorId){
+  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
+  const pid=STATE.user?.profileId;
+  if(!pid)return;
+  const{error}=await sb.from("best_resident_votes").upsert({
+    profile_id:pid,academic_year:ay,quarter:q,
+    voted_senior_id:seniorId?parseInt(seniorId,10):null,
+    voted_junior_id:juniorId?parseInt(juniorId,10):null
+  },{onConflict:"profile_id,academic_year,quarter"});
+  if(error){alert("Could not save vote: "+error.message);return;}
+  await loadBestResident();
+}
+async function brOpenVoting(deadline){
+  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
+  const row={academic_year:ay,quarter:q,voting_open:true,voting_deadline:deadline||null,announced:false};
+  const{error}=await sb.from("best_resident_winners").upsert(row,{onConflict:"academic_year,quarter"});
+  if(error){alert("Error: "+error.message);return;}
+  await loadBestResident();
+}
+async function brCloseVoting(){
+  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
+  const{error}=await sb.from("best_resident_winners").upsert({academic_year:ay,quarter:q,voting_open:false},{onConflict:"academic_year,quarter"});
+  if(error){alert("Error: "+error.message);return;}
+  await loadBestResident();
+}
+async function brAnnounceWinners(seniorId,juniorId,seniorScore,juniorScore){
+  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
+  const{error}=await sb.from("best_resident_winners").upsert({
+    academic_year:ay,quarter:q,voting_open:false,
+    senior_resident_id:seniorId?parseInt(seniorId,10):null,
+    junior_resident_id:juniorId?parseInt(juniorId,10):null,
+    senior_score:seniorScore,junior_score:juniorScore,
+    announced:true,announced_at:new Date().toISOString()
+  },{onConflict:"academic_year,quarter"});
+  if(error){alert("Error announcing: "+error.message);return;}
+  await loadBestResident();
+}
+async function loadBestResidentAll(){
+  const{data,error}=await sb.from("best_resident_winners").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("quarter");
+  if(!error&&data)return data;
+  return[];
+}
 // ─── ONCALL DATA LAYER ───────────────────────────────────────────────────────
 const ONCALL_SLOTS=[
   {key:"er_medical",label:"ER Medical Oncall",ctu:false},
@@ -1303,6 +1431,61 @@ function dname(name){return(name||"").replace(/^Dr\.\s*/i,"");}
 const _LVL_ORD={R4:0,R3:1,R2:2,R1:3};
 function sortByLevel(arr){return arr.slice().sort((a,b)=>(_LVL_ORD[a.level]??9)-(_LVL_ORD[b.level]??9)||a.name.localeCompare(b.name));}
 function consultById(id){return CONSULTANTS.find(c=>c.id===id);}
+// ─── BEST RESIDENT HELPERS ───────────────────────────────────────────────────
+function currentQuarter(){const m=new Date().getMonth()+1;if(m>=10)return 1;if(m>=7)return 4;if(m>=4)return 3;return 2;}
+function quarterLabel(q){return["","Q1 (Oct–Dec)","Q2 (Jan–Mar)","Q3 (Apr–Jun)","Q4 (Jul–Sep)"][q]||"";}
+function quarterMonthsLabel(q){return["","October · November · December","January · February · March","April · May · June","July · August · September"][q]||"";}
+function quarterEndDate(q,ay){const ends={1:ay+"-12-31",2:(ay+1)+"-03-31",3:(ay+1)+"-06-30",4:(ay+1)+"-09-30"};return ends[q];}
+function kpiOngoingScore(id){
+  const k=calcKPI(id);
+  const raw=k.qAvg*0.20+k.mmPct*0.15+k.tPct*0.15+(k.pres?10:0);
+  return Math.round(raw/60*100);
+}
+function ini(name){const n=dname(name);const parts=n.trim().split(/\s+/);if(parts.length>=2)return(parts[0][0]+(parts[parts.length-1][0]||"")).toUpperCase();return n.slice(0,2).toUpperCase();}
+function brVoteCountFor(resId,role){
+  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
+  const col=role==="senior"?"voted_senior_id":"voted_junior_id";
+  return BEST_VOTES.filter(v=>v.academic_year===ay&&v.quarter===q&&v[col]==resId).length;
+}
+function brTotalVoters(){
+  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
+  return BEST_VOTES.filter(v=>v.academic_year===ay&&v.quarter===q).length;
+}
+function brMyVote(){
+  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
+  return BEST_VOTES.find(v=>v.academic_year===ay&&v.quarter===q&&v.profile_id===STATE.user?.profileId)||null;
+}
+function brComputeRankings(){
+  const seniors=sortByLevel(RESIDENTS.filter(r=>r.level==="R3"||r.level==="R4"));
+  const juniors=sortByLevel(RESIDENTS.filter(r=>r.level==="R1"||r.level==="R2"));
+  const totalVoters=brTotalVoters();
+  function score(res,col){
+    const kpi=kpiOngoingScore(res.id);
+    const votes=brVoteCountFor(res.id,col);
+    const votePct=totalVoters>0?Math.round(votes/totalVoters*100):0;
+    const final=Math.round(kpi*0.5+votePct*0.5);
+    return{res,kpi,votes,votePct,final};
+  }
+  const sRanked=seniors.map(r=>score(r,"senior")).sort((a,b)=>b.final-a.final);
+  const jRanked=juniors.map(r=>score(r,"junior")).sort((a,b)=>b.final-a.final);
+  return{sRanked,jRanked};
+}
+function brVotingIsOpen(){
+  if(!BEST_STATUS||!BEST_STATUS.voting_open)return false;
+  if(BEST_STATUS.voting_deadline){const dl=new Date(BEST_STATUS.voting_deadline);if(dl<new Date())return false;}
+  return true;
+}
+function brDeadlineCountdown(){
+  if(!BEST_STATUS?.voting_deadline)return null;
+  const diff=new Date(BEST_STATUS.voting_deadline)-new Date();
+  if(diff<=0)return"Voting closed";
+  const d=Math.floor(diff/86400000);
+  const h=Math.floor((diff%86400000)/3600000);
+  const mn=Math.floor((diff%3600000)/60000);
+  if(d>0)return d+"d "+h+"h left";
+  if(h>0)return h+"h "+mn+"m left";
+  return mn+"m left";
+}
 function mentorName(rid){const c=consultById(MENTORS[rid]);return c?c.name:"-";}
 // ─── LOGIN VIEW ──────────────────────────────────────────────────────────────
 function renderLogin(){
@@ -1337,6 +1520,8 @@ function renderLogin(){
     loadQuizzes().then(render);
     loadKpiQuarterly();
     loadKpiProposals();
+    loadOncallData();
+    loadBestResident();
     render();
   }
   return el("div",{cls:"login-wrap"},
@@ -1374,6 +1559,7 @@ const MODS=[
   {id:"admin",label:"PD Admin Panel",icon:"⚙️",desc:"Accounts, privileges & settings",color:"#2e3a4e",roles:["pd","deputy_pd"]},
   {id:"overview",label:"Overview Dashboard",icon:"🏠",desc:"Bird's-eye view of all residents' performance",color:"#c96a4a",roles:["pd","deputy_pd","chief"]},
   {id:"kpi_exec",label:"Performance Report",icon:"🏆",desc:"Executive KPI — program health, top performers & resident drill-down",color:"#1a2a4a",roles:["pd","deputy_pd","chief","consultant","resident"]},
+  {id:"best_resident",label:"Best Resident",icon:"⭐",desc:"Quarterly voting, live KPI rankings & Hall of Fame",color:"#B8860B",roles:["pd","deputy_pd","chief","consultant","resident"]},
 ];
 function renderSearchOverlay(){
   const q=(STATE.searchQ||"").trim().toLowerCase();
@@ -1850,8 +2036,45 @@ function renderModGrid(){
     )
   );
 
+  // ── Confetti celebration when winner is newly announced ──────────────────
+  const seenKey="br_seen_"+currentQuarter()+"_"+CURRENT_ACADEMIC_YEAR;
+  const justAnnounced=BEST_STATUS?.announced&&!localStorage.getItem(seenKey);
+  if(justAnnounced){
+    localStorage.setItem(seenKey,"1");
+    setTimeout(()=>{
+      const cv=document.createElement("canvas");
+      cv.style.cssText="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9999;";
+      document.body.appendChild(cv);
+      const ctx=cv.getContext("2d");
+      cv.width=window.innerWidth;cv.height=window.innerHeight;
+      const pieces=Array.from({length:120},()=>({
+        x:Math.random()*cv.width,y:-20-Math.random()*200,
+        vx:(Math.random()-.5)*3,vy:2+Math.random()*3,
+        r:5+Math.random()*6,a:Math.random()*Math.PI*2,va:(Math.random()-.5)*.1,
+        color:["#f5c518","#B8860B","#c96a4a","#e87c79","#7ab648","#4a9ade","#e8a000"][Math.floor(Math.random()*7)],
+        shape:Math.random()>.5?"rect":"circle"
+      }));
+      let frame=0;
+      function tick(){
+        ctx.clearRect(0,0,cv.width,cv.height);
+        pieces.forEach(p=>{
+          p.x+=p.vx;p.y+=p.vy;p.a+=p.va;p.vy+=.05;
+          ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.a);ctx.fillStyle=p.color;ctx.globalAlpha=Math.max(0,1-frame/160);
+          if(p.shape==="rect"){ctx.fillRect(-p.r/2,-p.r/2,p.r,p.r*1.5);}else{ctx.beginPath();ctx.arc(0,0,p.r/2,0,Math.PI*2);ctx.fill();}
+          ctx.restore();
+        });
+        frame++;
+        if(frame<180)requestAnimationFrame(tick);else cv.remove();
+      }
+      tick();
+    },300);
+  }
+
   const wrap=el("div");
   wrap.appendChild(hero);
+  // Stars banner — always shown to all logged-in users
+  const banner=renderBestResidentBanner();
+  if(banner)wrap.appendChild(banner);
   if(alertsDiv)wrap.appendChild(alertsDiv);
   wrap.appendChild(modules);
   return wrap;
@@ -5703,6 +5926,346 @@ function renderProfileCounsel(res){
     )
   );
 }
+// ─── BEST RESIDENT BANNER (home page) ────────────────────────────────────────
+function renderBestResidentBanner(){
+  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
+  const qLabel=quarterLabel(q);
+  const qMonths=quarterMonthsLabel(q);
+  const isOpen=brVotingIsOpen();
+  const announced=BEST_STATUS?.announced;
+  const cd=brDeadlineCountdown();
+
+  // Sparkle particles
+  function spark(style){return el("div",{st:{position:"absolute",width:"6px",height:"6px",borderRadius:"50%",background:"#f5c518",opacity:"0",pointerEvents:"none",animation:"sparkleFloat 4s ease-in-out infinite",...style}});}
+
+  const header=el("div",{cls:"stars-header"},
+    el("div",{cls:"stars-title-row"},
+      el("div",{cls:"stars-icon-bubble"},announced?"⭐":isOpen?"🗳️":"⭐"),
+      el("div",null,
+        el("h2",null,announced?"Stars of "+qLabel:isOpen?"Stars of "+qLabel+" — Vote Now":"Stars of "+qLabel),
+        el("p",null,qMonths.toUpperCase())
+      )
+    ),
+    el("span",{cls:"stars-qpill"},qLabel.split(" ")[0]+" · AY "+ay+"–"+(ay+1))
+  );
+
+  let cardsEl;
+  if(announced&&BEST_STATUS.senior_resident_id){
+    const sr=resById(BEST_STATUS.senior_resident_id);
+    const jr=resById(BEST_STATUS.junior_resident_id);
+    function wCard(cls,typeLabel,crown,res,score){
+      if(!res)return null;
+      return el("div",{cls:"star-card "+cls,onClick:()=>set({mod:"best_resident",brTab:"rank"})},
+        el("div",{cls:"star-card-glow"}),
+        el("div",{cls:"star-av-wrap"},
+          el("div",{cls:"star-av-ring"},ini(res.name)),
+          el("div",{cls:"star-crown"},crown)
+        ),
+        el("div",{cls:"star-info"},
+          el("div",{cls:"star-type-lbl"},typeLabel),
+          el("div",{cls:"star-winner-name"},dname(res.name)),
+          el("div",{cls:"star-winner-level"},res.level+" · Internal Medicine")
+        ),
+        score!=null?el("div",{cls:"star-score-col"},
+          el("div",{cls:"star-score-num"},Math.round(score)),
+          el("div",{cls:"star-score-unit"},"/ 100")
+        ):null
+      );
+    }
+    cardsEl=el("div",{cls:"star-cards-row"},
+      wCard("sc-senior","⭐ Best Senior Resident","👑",sr,BEST_STATUS.senior_score),
+      wCard("sc-junior","🌟 Best Junior Resident","🌟",jr,BEST_STATUS.junior_score)
+    );
+  } else {
+    // Not yet announced — show blurred placeholder cards
+    function blurCard(icon,label){
+      return el("div",{cls:"stars-pending-card",st:{cursor:"pointer"},onClick:()=>set({mod:"best_resident",brTab:"vote"})},
+        el("div",{st:{fontSize:"26px"}},icon),
+        el("div",{st:{fontSize:"12px",color:"#8a7060",fontFamily:"sans-serif",fontWeight:"600"}},label),
+        el("div",{st:{fontSize:"10px",color:"#aaa",fontFamily:"sans-serif"}},"Announced after voting closes")
+      );
+    }
+    cardsEl=el("div",{cls:"star-cards-row"},
+      blurCard("🏆","Best Senior Resident"),
+      blurCard("🌟","Best Junior Resident")
+    );
+  }
+
+  const votingStrip=isOpen?el("div",{cls:"stars-voting-strip"},
+    el("div",{cls:"vote-pulse-dot"}),
+    el("div",{cls:"vote-strip-text"},
+      el("strong",null,"Voting is open! "),
+      "Cast your vote for Best Senior and Best Junior — counts 50% of the final score."
+    ),
+    cd?el("div",{cls:"vote-strip-cd"},cd):null,
+    el("button",{cls:"sbtn primary",st:{fontSize:".78rem",padding:"5px 12px"},onClick:()=>set({mod:"best_resident",brTab:"vote"})},"Vote →")
+  ):null;
+
+  return el("div",{cls:"stars-banner"},
+    spark({left:"12%",top:"30%"}),spark({left:"27%",top:"65%",width:"4px",height:"4px",background:"#e8a000",animationDelay:".8s"}),
+    spark({left:"45%",top:"20%",animationDelay:"1.5s"}),spark({right:"18%",top:"40%",animationDelay:".3s"}),
+    header,cardsEl,votingStrip
+  );
+}
+
+// ─── BEST RESIDENT MODULE ─────────────────────────────────────────────────────
+function renderBestResident(){
+  const u=STATE.user;
+  const tab=STATE.brTab||"vote";
+  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
+  const isPD_=isPD()||u.role==="deputy_pd";
+  const isOpen=brVotingIsOpen();
+  const announced=BEST_STATUS?.announced;
+  const myVote=brMyVote();
+  const {sRanked,jRanked}=brComputeRankings();
+
+  // ── Vote tab ──
+  function renderVoteTab(){
+    const seniors=sortByLevel(RESIDENTS.filter(r=>r.level==="R3"||r.level==="R4"));
+    const juniors=sortByLevel(RESIDENTS.filter(r=>r.level==="R1"||r.level==="R2"));
+
+    // PD controls
+    let pdControls=null;
+    if(isPD_){
+      const cd=brDeadlineCountdown();
+      if(!BEST_STATUS||(!BEST_STATUS.voting_open&&!announced)){
+        // Open voting form
+        let _deadline=STATE.brDeadlineInput||"";
+        pdControls=el("div",{cls:"card",st:{background:"#fff8e6",border:"2px solid #f5c518",marginBottom:"20px",maxWidth:"640px"}},
+          el("div",{cls:"card-title",st:{color:"#B8860B"}},"🔓 Open Voting — "+quarterLabel(q)),
+          el("div",{st:{display:"flex",gap:"12px",alignItems:"flex-end",flexWrap:"wrap"}},
+            el("div",null,
+              el("label",null,"Auto-close deadline (optional)"),
+              el("input",{type:"datetime-local",value:_deadline,
+                onInput:e=>{STATE.brDeadlineInput=e.target.value;},
+                st:{maxWidth:"220px"}})
+            ),
+            el("button",{cls:"sbtn primary",st:{background:"#B8860B"},async onClick(){
+              await brOpenVoting(STATE.brDeadlineInput||null);
+              STATE.brDeadlineInput="";
+            }},"🗳️ Open Voting")
+          ),
+          el("p",{cls:"sh",st:{marginTop:"8px",fontSize:".78rem"}},"Residents and consultants can vote once. Leave deadline blank to close manually.")
+        );
+      } else if(BEST_STATUS.voting_open&&!announced){
+        // Close + announce
+        const totalV=brTotalVoters();
+        const topSr=sRanked[0];const topJr=jRanked[0];
+        pdControls=el("div",{cls:"card",st:{background:"#fff8e6",border:"2px solid #f5c518",marginBottom:"20px",maxWidth:"640px"}},
+          el("div",{cls:"card-title",st:{color:"#B8860B"}},"🗳️ Voting is Open — "+quarterLabel(q)),
+          el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"12px"}},
+            el("div",{cls:"sh",st:{fontWeight:"700",fontSize:".85rem"}},"Total votes cast: "+totalV),
+            cd?el("span",{cls:"pill",st:{background:"#f5c518",color:"#3d2b1f"}},cd):null
+          ),
+          el("div",{st:{display:"flex",gap:"12px",flexWrap:"wrap"}},
+            el("button",{cls:"sbtn ghost",async onClick(){if(confirm("Close voting now? Votes will be locked."))await brCloseVoting();}},"🔒 Close Voting"),
+            el("button",{cls:"sbtn primary",st:{background:"#2a7a4a"},async onClick(){
+              if(!topSr||!topJr){alert("No votes yet — cannot announce.");return;}
+              if(!confirm("Announce "+dname(topSr.res.name)+" (Senior) and "+dname(topJr.res.name)+" (Junior) as winners?"))return;
+              await brAnnounceWinners(topSr.res.id,topJr.res.id,topSr.final,topJr.final);
+            }},"🏆 Announce Winners")
+          ),
+          el("p",{cls:"sh",st:{marginTop:"8px",fontSize:".78rem"}},"Winners are computed from live KPI (50%) + votes (50%). Announcing locks the results and shows the Stars banner to everyone.")
+        );
+      } else if(announced){
+        pdControls=el("div",{cls:"card",st:{background:"#f0f9ec",border:"2px solid #7ab648",marginBottom:"20px",maxWidth:"640px"}},
+          el("div",{st:{display:"flex",gap:"10px",alignItems:"center"}},
+            el("span",{st:{fontSize:"22px"}},"✅"),
+            el("div",null,
+              el("div",{st:{fontWeight:"800",fontSize:".95rem",color:"#2a6020"}},"Winners Announced — "+quarterLabel(q)),
+              el("div",{cls:"sh",st:{fontSize:".8rem"}},"Announced on "+new Date(BEST_STATUS.announced_at).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"}))
+            )
+          )
+        );
+      }
+    }
+
+    // Vote form
+    let voteSection;
+    if(!isOpen&&!announced){
+      voteSection=el("div",{cls:"card",st:{maxWidth:"640px"}},
+        el("div",{st:{textAlign:"center",padding:"24px 0",color:"#8a7060"}},
+          el("div",{st:{fontSize:"36px",marginBottom:"10px"}},"🔒"),
+          el("div",{st:{fontWeight:"700",fontSize:"1rem",color:"#3d2b1f",marginBottom:"6px"}},"Voting is not open yet"),
+          el("div",{cls:"sh"},"The Program Director will open voting before end of "+quarterLabel(q)+". Check back soon.")
+        )
+      );
+    } else if(announced){
+      const sr=resById(BEST_STATUS.senior_resident_id);
+      const jr=resById(BEST_STATUS.junior_resident_id);
+      voteSection=el("div",{cls:"card",st:{maxWidth:"640px",background:"linear-gradient(135deg,#fffbf0,#fff8e6)",border:"2px solid #f5c518"}},
+        el("div",{st:{textAlign:"center",padding:"16px 0 8px"}},
+          el("div",{st:{fontSize:"32px",marginBottom:"8px"}},"🏆"),
+          el("div",{st:{fontWeight:"900",fontSize:"1.1rem",color:"#3d2b1f",marginBottom:"16px"}},"Stars of "+quarterLabel(q)),
+          el("div",{st:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"16px",textAlign:"left"}},
+            el("div",{cls:"star-card sc-senior",st:{cursor:"default"}},
+              el("div",{cls:"star-card-glow"}),
+              el("div",{cls:"star-av-wrap"},el("div",{cls:"star-av-ring"},sr?ini(sr.name):"?"),el("div",{cls:"star-crown"},"👑")),
+              el("div",{cls:"star-info"},el("div",{cls:"star-type-lbl"},"⭐ Best Senior"),el("div",{cls:"star-winner-name"},sr?dname(sr.name):"—"),el("div",{cls:"star-winner-level"},sr?sr.level:""))
+            ),
+            el("div",{cls:"star-card sc-junior",st:{cursor:"default"}},
+              el("div",{cls:"star-card-glow"}),
+              el("div",{cls:"star-av-wrap"},el("div",{cls:"star-av-ring"},jr?ini(jr.name):"?"),el("div",{cls:"star-crown"},"🌟")),
+              el("div",{cls:"star-info"},el("div",{cls:"star-type-lbl"},"🌟 Best Junior"),el("div",{cls:"star-winner-name"},jr?dname(jr.name):"—"),el("div",{cls:"star-winner-level"},jr?jr.level:""))
+            )
+          )
+        )
+      );
+    } else if(myVote){
+      voteSection=el("div",null,
+        el("div",{cls:"card",st:{background:"#f0f9ec",border:"2px solid #7ab648",maxWidth:"640px",marginBottom:"16px"}},
+          el("div",{st:{display:"flex",gap:"10px",alignItems:"center"}},
+            el("span",{st:{fontSize:"22px"}},"✅"),
+            el("div",null,
+              el("div",{st:{fontWeight:"800",fontSize:".95rem",color:"#2a6020"}},"Your vote has been cast!"),
+              el("div",{cls:"sh",st:{fontSize:".8rem"}},"Thank you — results are revealed when the PD announces winners after voting closes on "+
+                (BEST_STATUS?.voting_deadline?new Date(BEST_STATUS.voting_deadline).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"}):"end of "+quarterLabel(q))+".")
+            )
+          )
+        ),
+        el("div",{cls:"sh",st:{fontSize:".8rem",maxWidth:"640px"}},"You voted for: ",
+          el("strong",null,myVote.voted_senior_id?(dname(resById(myVote.voted_senior_id)?.name||"")||"—")+"  (Senior)":"—"),
+          " · ",
+          el("strong",null,myVote.voted_junior_id?(dname(resById(myVote.voted_junior_id)?.name||"")||"—")+"  (Junior)":"—")
+        )
+      );
+    } else {
+      // Active voting form
+      const selfRid=u.rid;
+      const selfRes=selfRid?resById(selfRid):null;
+      const selfLevel=selfRes?.level;
+      let _snrSel=STATE.brVoteSenior||"";
+      let _jnrSel=STATE.brVoteJunior||"";
+      voteSection=el("div",null,
+        el("div",{st:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"16px",maxWidth:"640px",marginBottom:"16px"}},
+          el("div",{cls:"card"},
+            el("div",{cls:"card-title",st:{color:"#B8860B",fontSize:".82rem"}},"🥇 Best Senior Resident"),
+            el("select",{value:_snrSel,onChange:e=>set({brVoteSenior:e.target.value})},
+              el("option",{value:""},"— Select a resident —"),
+              ...seniors.filter(r=>r.id!==selfRid).map(r=>el("option",{value:r.id},dname(r.name)+" ("+r.level+")"))
+            ),
+            el("div",{cls:"sh",st:{fontSize:".78rem",marginTop:"6px"}},"R3 and R4 residents · You cannot vote for yourself")
+          ),
+          el("div",{cls:"card"},
+            el("div",{cls:"card-title",st:{color:"#c0504d",fontSize:".82rem"}},"🥈 Best Junior Resident"),
+            el("select",{value:_jnrSel,onChange:e=>set({brVoteJunior:e.target.value})},
+              el("option",{value:""},"— Select a resident —"),
+              ...juniors.filter(r=>r.id!==selfRid).map(r=>el("option",{value:r.id},dname(r.name)+" ("+r.level+")"))
+            ),
+            el("div",{cls:"sh",st:{fontSize:".78rem",marginTop:"6px"}},"R1 and R2 residents · Anonymous — no one sees who you voted for")
+          )
+        ),
+        el("button",{cls:"sbtn primary",
+          st:{fontSize:".9rem",padding:"12px 28px",background:"linear-gradient(135deg,#c96a4a,#b85a3a)"},
+          async onClick(){
+            if(!_snrSel||!_jnrSel){alert("Please select both a Senior and a Junior before submitting.");return;}
+            await brCastVote(_snrSel,_jnrSel);
+          }
+        },"🗳️ Submit My Vote"),
+        el("p",{cls:"sh",st:{marginTop:"10px",fontSize:".78rem"}},"Votes are anonymous and counted equally regardless of your role.")
+      );
+    }
+
+    return el("div",null,pdControls,voteSection);
+  }
+
+  // ── Rankings tab ──
+  function renderRankTab(){
+    const totalVoters=brTotalVoters();
+    function rankSection(ranked,cls,title,avCls,col){
+      return el("div",{cls:cls},
+        el("div",{st:{fontWeight:"800",fontSize:".88rem",letterSpacing:"1.5px",textTransform:"uppercase",fontFamily:"sans-serif",marginBottom:"12px"}},title),
+        el("div",{cls:"br-rank-list"},
+          ...ranked.map((item,i)=>{
+            const isMe=item.res.id===u.rid;
+            const rkCls="br-rank-row"+(i===0?" rk1":i===1?" rk2":i===2?" rk3":"")+(isMe?" br-you-row":"");
+            return el("div",{cls:rkCls},
+              el("div",{cls:"br-rank-num"},i+1),
+              el("div",{cls:"br-rank-av "+avCls},ini(item.res.name)),
+              el("div",{cls:"br-rank-info"},
+                el("div",{cls:"br-rank-name"},dname(item.res.name),(isMe?el("span",{cls:"br-you-badge"},"YOU"):null)),
+                el("div",{cls:"br-rank-sub"},item.res.level+" · KPI "+item.kpi+"% · Votes "+item.votes+(totalVoters>0?" ("+item.votePct+"%)":"")),
+                el("div",{cls:"br-rank-bar"},el("div",{cls:"br-rank-bar-fill "+avCls,st:{width:item.kpi+"%"}}))
+              ),
+              el("div",{cls:"br-rank-score"},item.final)
+            );
+          })
+        )
+      );
+    }
+    return el("div",null,
+      el("div",{cls:"card",st:{background:"#fff8e6",border:"1.5px solid #f5c518",marginBottom:"20px",maxWidth:"100%"}},
+        el("div",{st:{fontSize:".83rem",color:"#7a5800",fontFamily:"sans-serif"}},
+          "📊 Rankings = ",el("strong",null,"KPI 50%"),
+          " (ongoing score, current data) + ",
+          el("strong",null,"Votes 50%"),
+          " ("+totalVoters+" vote"+(totalVoters!==1?"s":"")+" cast so far). Final score shown on right. ",
+          (announced?"Winners have been announced.":"Scores update live — keep pushing!")
+        )
+      ),
+      el("div",{st:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"20px"}},
+        rankSection(sRanked,"br-snr-sec","🥇 Senior Residents (R3–R4)","snr","senior"),
+        rankSection(jRanked,"br-jnr-sec","🥈 Junior Residents (R1–R2)","jnr","junior")
+      )
+    );
+  }
+
+  // ── Hall of Fame tab ──
+  function renderHofTab(){
+    let allWinners=STATE.brAllWinners||[];
+    // Load if not yet loaded
+    if(!STATE.brHofLoaded){
+      STATE.brHofLoaded=true;
+      loadBestResidentAll().then(data=>{set({brAllWinners:data});});
+    }
+    const withWinners=allWinners.filter(w=>w.announced&&w.senior_resident_id);
+    if(withWinners.length===0){
+      return el("div",{cls:"card",st:{textAlign:"center",padding:"40px 0",color:"#8a7060"}},
+        el("div",{st:{fontSize:"40px",marginBottom:"10px"}},"🏆"),
+        el("div",{st:{fontWeight:"700",color:"#3d2b1f",fontSize:"1.05rem",marginBottom:"6px"}},"No winners yet"),
+        el("div",{cls:"sh"},"The Hall of Fame will fill up once the first quarter winners are announced.")
+      );
+    }
+    return el("div",{st:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"16px"}},
+      ...withWinners.map(w=>{
+        const sr=resById(w.senior_resident_id);
+        const jr=resById(w.junior_resident_id);
+        return el("div",{cls:"hof-card"},
+          el("div",{cls:"hof-q-label"},"⭐ "+quarterLabel(w.quarter)+" · AY "+w.academic_year+"–"+(w.academic_year+1)),
+          el("div",{st:{marginBottom:"10px"}},
+            el("div",{cls:"hof-winner-type"},"🥇 Best Senior"),
+            el("div",{cls:"hof-winner-name"},sr?dname(sr.name):"—"),
+            w.senior_score!=null?el("div",{cls:"hof-winner-score"},"Final score: "+Math.round(w.senior_score)+"/100"):null
+          ),
+          el("div",{cls:"hof-divider"}),
+          el("div",null,
+            el("div",{cls:"hof-winner-type"},"🥈 Best Junior"),
+            el("div",{cls:"hof-winner-name"},jr?dname(jr.name):"—"),
+            w.junior_score!=null?el("div",{cls:"hof-winner-score"},"Final score: "+Math.round(w.junior_score)+"/100"):null
+          )
+        );
+      })
+    );
+  }
+
+  return el("div",{cls:"content"},
+    el("div",{cls:"flex-gap",st:{marginBottom:"16px",flexWrap:"wrap",alignItems:"center"}},
+      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
+      el("div",{cls:"stars-icon-bubble",st:{width:"48px",height:"48px",fontSize:"24px",borderRadius:"12px",animation:"none"}},"⭐"),
+      el("div",null,
+        el("h2",{st:{fontWeight:"900",color:"#111827",fontSize:"1.4rem"}},"Best Resident"),
+        el("p",{cls:"sh",st:{marginTop:"2px"}},"Quarterly recognition — "+quarterLabel(q)+" · AY "+ay+"–"+(ay+1))
+      )
+    ),
+    el("div",{cls:"tab-bar"},
+      el("span",{cls:"tab"+(tab==="vote"?" on":""),onClick:()=>set({brTab:"vote"})},"🗳️ Vote"),
+      el("span",{cls:"tab"+(tab==="rank"?" on":""),onClick:()=>set({brTab:"rank"})},"📊 Live Rankings"),
+      el("span",{cls:"tab"+(tab==="hof"?" on":""),onClick:()=>set({brTab:"hof",brHofLoaded:false})},"🏆 Hall of Fame")
+    ),
+    tab==="vote"?renderVoteTab():tab==="rank"?renderRankTab():renderHofTab()
+  );
+}
+
 // ─── KPI EXECUTIVE OVERVIEW ──────────────────────────────────────────────────
 function renderKPIExecutive(){
   const selYear=STATE.kpiExYear||CURRENT_ACADEMIC_YEAR;
@@ -6646,6 +7209,7 @@ function render(){
         case"overview":content=renderPDOverview();break;
         case"kpi_exec":content=renderKPIExecutive();break;
         case"oncall":content=renderOncall();break;
+        case"best_resident":content=renderBestResident();break;
         default:content=renderModGrid();
       }
     }
@@ -6759,6 +7323,7 @@ function renderProfileTeach(res){
         loadKpiQuarterly();
         loadKpiProposals();
         loadOncallData();
+        loadBestResident();
       }
     }
   }catch(err){
