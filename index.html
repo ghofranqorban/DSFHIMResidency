@@ -92,7 +92,7 @@ tr:hover td{background:#fdf9f5;}
 tr:hover .sticky-col{background:#fdf9f5;}
 .lvl-hdr-cell{position:sticky;left:0;background:#f8fafc;z-index:2;}
 .sched-tbl td,.sched-tbl th{border-right:1px solid #ede5d8;}
-.sched-tbl .wk-cell{background:#faf6f1;font-weight:700;color:#1c1410;text-align:center;vertical-align:middle;border-right:2px solid #ede5d8;white-space:nowrap;position:sticky;left:0;z-index:2;}
+.sched-tbl .wk-cell{background:#faf6f1;font-weight:700;color:#1c1410;text-align:center;vertical-align:middle;border-right:2px solid #ede5d8;white-space:nowrap;}
 .sched-tbl tr td{white-space:normal;}
 /* ── On-Call Schedule table ── */
 .oncall-tbl{width:100%;border-collapse:collapse;}
@@ -2792,7 +2792,7 @@ function renderMMSchedule(){
   const editingSession=(formOpen&&typeof STATE.mmEntrySession==="number")?MM_SESSION_BY_ID[STATE.mmEntrySession]:null;
   const canEditSched=canEditMMSchedule();
   const cols=[
-    {label:"Day / Date",stickyLeft:"36px",minW:"90px",maxW:"90px",render:s=>{
+    {label:"Day / Date",render:s=>{
       if(canEditSched){
         const wrap=document.createElement("div");
         wrap.appendChild(schedInlineText(s.id,"day_label",s.day_label||"",v=>{sb.from("mm_sessions").update({day_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"));
