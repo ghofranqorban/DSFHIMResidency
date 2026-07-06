@@ -1737,8 +1737,9 @@ function renderAccountModal(){
     const{error:authErr}=await sb.auth.updateUser({email:newUser+"@"+AUTH_EMAIL_DOMAIN});
     if(authErr){msg.textContent="Could not update: "+authErr.message;btn.disabled=false;btn.textContent="Update Username";return;}
     const{error:dbErr}=await sb.from("profiles").update({username:newUser}).eq("id",u.profileId);
+    if(dbErr){btn.disabled=false;btn.textContent="Update Username";msg.textContent="Auth updated but profile sync failed: "+dbErr.message;return;}
+    if(u.rid){await sb.from("residents").update({username:newUser}).eq("id",u.rid);}
     btn.disabled=false;btn.textContent="Update Username";
-    if(dbErr){msg.textContent="Auth updated but profile sync failed: "+dbErr.message;return;}
     STATE.user.user=newUser;
     msg.style.color="#2a7a5a";msg.textContent="✓ Username changed to '"+newUser+"'. Use it to sign in from now on.";
   }
