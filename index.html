@@ -5985,9 +5985,34 @@ function renderBestResidentBanner(){
         el("div",{st:{fontSize:"10px",color:"#aaa",fontFamily:"sans-serif"}},"Announced after voting closes")
       );
     }
-    cardsEl=el("div",{cls:"star-cards-row"},
-      blurCard("🏆","Best Senior Resident"),
-      blurCard("🌟","Best Junior Resident")
+    // Countdown to end of current quarter
+    const qEnd=quarterEndDate(q,ay);
+    const msLeft=new Date(qEnd)-new Date();
+    const dLeft=Math.max(0,Math.ceil(msLeft/86400000));
+    const hLeft=Math.max(0,Math.floor((msLeft%86400000)/3600000));
+    const cdStr=dLeft>0?(dLeft+"d "+hLeft+"h remaining"):(msLeft>0?(hLeft+"h remaining"):"Today");
+    const countdownStrip=el("div",{st:{
+      marginTop:"14px",maxWidth:"640px",display:"flex",alignItems:"center",gap:"12px",
+      background:"#fff",border:"1.5px solid #e8c84a",borderRadius:"10px",padding:"10px 16px",
+      boxShadow:"0 2px 8px rgba(232,200,74,.15)"
+    }},
+      el("div",{st:{fontSize:"20px"}},"⏳"),
+      el("div",{st:{flex:"1"}},
+        el("div",{st:{fontFamily:"sans-serif",fontSize:"12px",fontWeight:"800",color:"#3d2b1f",letterSpacing:".5px"}},"COMING SOON"),
+        el("div",{st:{fontFamily:"sans-serif",fontSize:"11px",color:"#9a8060",marginTop:"2px"}},"Results announced by end of "+quarterLabel(q)+" — "+new Date(qEnd).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"}))
+      ),
+      el("div",{st:{
+        fontFamily:"monospace",fontSize:"13px",fontWeight:"700",color:"#B8860B",
+        background:"linear-gradient(135deg,#fff8e6,#fffbf0)",padding:"5px 12px",
+        borderRadius:"8px",border:"1px solid #f5c518",whiteSpace:"nowrap"
+      }},"🕐 "+cdStr)
+    );
+    cardsEl=el("div",null,
+      el("div",{cls:"star-cards-row"},
+        blurCard("🏆","Best Senior Resident"),
+        blurCard("🌟","Best Junior Resident")
+      ),
+      countdownStrip
     );
   }
 
