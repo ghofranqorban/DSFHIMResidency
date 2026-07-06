@@ -464,6 +464,7 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - `blockStartDate(block, academicYear)` adds 1 year for months < 9. Block 11 label = "5/7-1/8" → month 7 < 9 → year = academicYear+1. So block 11 of AY 2025 = **July 2026**, not July 2025. Always use `blockStartDate()` output for date ranges — never hardcode year offsets when inserting oncall data.
 - `oncall_schedule.resident_id` must be `bigint` (not uuid) to match `residents.id` type.
 - When saving from dropdown: `parseInt(resident_id, 10)` required before Supabase insert.
+- **Timezone off-by-one in date generation**: `d.toISOString().split("T")[0]` converts to UTC — in UTC+3, midnight local = 9 PM previous day UTC → all grid dates shifted back one day vs DB dates. Fix: always build date strings from local parts: `d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")`. ⚠️ Apply this pattern anywhere dates are generated from a Date object and compared against DB date strings.
 
 **Still TODO:**
 - Statistics tab visibility: currently PD-only. User will decide when to open it to other roles.
