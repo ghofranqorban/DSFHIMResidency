@@ -220,8 +220,8 @@ Deno.serve(async (req) => {
     }) => {
       const isPresenter = resId && s.presenter_resident_id == resId;
       const isModerator = resId && s.moderator_resident_id == resId;
-      // mm_mine only: skip sessions not assigned to me
-      if (!prefs.mm_all && prefs.mm_mine && !isPresenter && !isModerator) return;
+      // mm_mine only: skip sessions not assigned to me (only filter if user has a resident record)
+      if (!prefs.mm_all && prefs.mm_mine && resId && !isPresenter && !isModerator) return;
       let role = "";
       if (isPresenter) role = " \uD83C\uDFA4 Presenter";
       else if (isModerator) role = " \uD83C\uDF99 Moderator";
