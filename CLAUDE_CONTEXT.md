@@ -515,3 +515,72 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - Historical KPI data 2024-25, 2023-24, 2022-23 (Phase 2 — show "Under Progress 🔒")
 - KPI page full visual redesign (confirmed by user, still deferred)
 - Oncall Statistics tab — currently PD-only; user will decide when to open to other roles
+
+---
+
+### Session — 6 Jul 2026 (Best Resident module)
+
+**Features built:**
+- **⭐ Best Resident module** (mod id: `best_resident`, roles: all). Quarterly recognition system — Best Senior (R3/R4) and Best Junior (R1/R2) per quarter.
+  - **Quarter mapping**: Q1=Oct–Dec, Q2=Jan–Mar, Q3=Apr–Jun, Q4=Jul–Sep (academic year aligned)
+  - **Score formula**: KPI 50% (`kpiOngoingScore(id)` = ongoing KPI normalized to 0–100) + Votes 50% (vote share across all voters). Equal weight for all voter roles. Self-vote blocked.
+  - **🗳️ Vote tab**: Two dropdowns (Senior = R3/R4, Junior = R1/R2). One vote per quarter per profile. After voting shows confirmation with who you voted for. Votes anonymous.
+  - **📊 Live Rankings tab**: Real-time leaderboard per tier (senior/junior). Shows KPI%, vote count, final combined score. Animated bars. "YOU" badge for logged-in resident.
+  - **🏆 Hall of Fame tab**: All announced winners by quarter, loaded lazily via `loadBestResidentAll()`.
+  - **PD controls** (pd/deputy_pd only): Open Voting (optional auto-close datetime), Close Voting, Announce Winners (auto-picks top scorer, asks confirmation).
+  - **Home page Stars banner** (`renderBestResidentBanner()`): gold gradient banner between hero and alerts. Shows winner cards (crown, name, level, score) when announced; blurred mystery cards + pulsing voting strip with countdown when open; quiet placeholder otherwise.
+  - **Confetti on announcement**: Canvas confetti fires once per quarter per user (tracked in `localStorage` key `br_seen_Q_AY`). 120 pieces, warm palette, fades over 3 seconds.
+
+**New Supabase tables** (migration: `supabase/add_best_resident.sql` — ✅ run 6 Jul 2026):
+- `best_resident_votes`: profile_id, academic_year, quarter, voted_senior_id (bigint), voted_junior_id (bigint). UNIQUE(profile_id, academic_year, quarter).
+- `best_resident_winners`: academic_year, quarter, voting_open, voting_deadline (timestamptz), senior/junior_resident_id (bigint), senior/junior_score, announced (bool), announced_at. UNIQUE(academic_year, quarter).
+
+**Key globals / helpers added:**
+- `BEST_VOTES=[]`, `BEST_STATUS=null` — loaded by `loadBestResident()`
+- `currentQuarter()`, `quarterLabel(q)`, `quarterMonthsLabel(q)` — quarter helpers
+- `kpiOngoingScore(id)` — ongoing KPI (quiz+MM+teaching+pres) normalized to 0–100
+- `ini(name)` — initials from display name (strips Dr. prefix) — **promoted to module level** (was already local in kpi_exec)
+- `brVoteCountFor(resId, role)`, `brTotalVoters()`, `brMyVote()`, `brComputeRankings()`, `brVotingIsOpen()`, `brDeadlineCountdown()`
+- `brCastVote()`, `brOpenVoting()`, `brCloseVoting()`, `brAnnounceWinners()`, `loadBestResidentAll()`
+- STATE keys: `STATE.brTab`, `STATE.brVoteSenior`, `STATE.brVoteJunior`, `STATE.brDeadlineInput`, `STATE.brAllWinners`, `STATE.brHofLoaded`
+
+**Design decisions:**
+- Preview complex UI in `/tmp/xxx_preview.html` before applying — confirmed workflow.
+- No charge nurse logins for now — only residents + consultants vote.
+- Voters weighted equally regardless of role.
+
+**Countdown timer design (same session):**
+- Stars banner "not yet announced" state replaced with **Design B**: centered layout, four white countdown blocks (Days : Hours : Min : Sec) with gold underline, live-ticking via `requestAnimationFrame`. Winner placeholder cards slightly hazy (`opacity:.78`, `filter:blur(.6px)`, `border:1.5px solid #f0e8d8`), hover brightens them. CSS classes: `.cdb-block`, `.cdb-num`, `.cdb-unit`, `.cdb-sep`, `.cdb-cards`, `.cdb-pending-card`. Tick loop attaches via `setTimeout(()=>{...},0)` after DOM insert and self-cancels when `.cdb-num` leaves DOM.
+
+**Still TODO:**
+- Run `supabase/add_oncall_resident_name.sql` (free-text oncall) — still not run
+- `kpi-evidence` Supabase Storage bucket — still not created
+- Historical KPI data (Phase 2)
+- KPI page visual redesign (deferred)
+- Oncall Statistics tab visibility (PD decides when to open)
+
+---
+
+### Session — 6 Jul 2026 (Live Calendar Feed) ✅ COMPLETE
+
+**Features built:**
+- **📅 Live Calendar subscription feed** — fully live and tested.
+  - **Edge Function** (`supabase/functions/ical/index.ts`, deployed as `ical`, JWT verification OFF): takes `?token=UUID`, looks up `profiles.calendar_token`, returns RFC-5545 `.ics`. Refreshes hourly.
+  - **SQL migration** (`supabase/add_calendar_token.sql`): ✅ Run. Adds `calendar_token text UNIQUE` and `calendar_prefs jsonb` to `profiles`.
+  - **Prefs** (`profiles.calendar_prefs` jsonb): `{rota, oncall, mm_mine, mm_all, teach_mine, teach_all, deadlines}`. `mm_mine` = only sessions where I'm presenter/moderator. `mm_all` = full schedule. `teach_mine` = sessions where my name appears as presenter (name-match). `teach_all` = full schedule. Backward compat: old `mm`/`teach` keys auto-migrate.
+  - **Non-resident accounts** (PD, DIO): `mm_mine` shows all sessions (no resId to filter by — correct for roles that attend everything). Rota and oncall sections skip gracefully when resId=null.
+  - **Portal UI**: "My Calendar" button in home hero → `renderCalModal()` with 7 checkboxes, generates webcal:// link, Apple Calendar button, Google Calendar button, one-time .ics fallback.
+  - **Per-module download buttons removed** — home hero is the single entry point.
+  - **MM time corrected**: 08:00–09:00 (was 07:00 in old downloadRotationICS too, now fixed).
+
+**Key constants/functions:**
+- `CAL_FEED_FN="ical"` — edge function slug (update if ever redeployed with different slug)
+- `_calPrefsDraft` — module-level mutable draft for modal (avoids render() on checkbox toggle)
+- `generateCalToken()`, `saveCalPrefs(prefs)`, `renderCalModal()`
+- Feed URL: `SUPABASE_URL + "/functions/v1/ical?token=" + STATE.calToken`
+
+**Still TODO (carried forward):**
+- Run `supabase/add_oncall_resident_name.sql` (free-text oncall entries) — NOT YET RUN
+- `kpi-evidence` Supabase Storage bucket — still not created
+- Historical KPI data (Phase 2)
+- KPI page visual redesign (deferred)
