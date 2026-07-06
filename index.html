@@ -776,6 +776,7 @@ function renderKpiProposalModal(){
 // unapproved absences; rota-derived leave lives in the `rotations` table above
 // via leave_weeks/leave_position and is merged in by buildLeaveData()) ───────
 let LEAVE_PENDING_COUNT=0;
+let ONCALL_DATA=[];
 async function loadLeaveRecords(){
   const{data,error}=await sb.from("leave_records").select("*").order("created_at",{ascending:false});
   RESIDENTS.forEach(r=>{if(!LEAVE_DATA[r.id])LEAVE_DATA[r.id]={rota:[],manual:[],absences:[],requests:[]};});
@@ -1074,6 +1075,52 @@ async function deleteAnnouncement(id){
   await sb.from("announcements").delete().eq("id",id);
   await loadAnnouncements();
 }
+// ─── ONCALL DATA LAYER ───────────────────────────────────────────────────────
+const ONCALL_SLOTS=[
+  {key:"er_medical",label:"ER Medical",ctu:false},
+  {key:"bldg1",label:"Building 1",ctu:false},
+  {key:"bldg2",label:"Building 2",ctu:false},
+  {key:"consult",label:"Consult",ctu:false},
+  {key:"ctu1",label:"CTU Cover A",ctu:true},
+  {key:"ctu2",label:"CTU Cover B",ctu:true},
+];
+function isWeekendDate(ds){const[y,m,d]=ds.split("-").map(Number);const dw=new Date(y,m-1,d).getDay();return dw===5||dw===6;}
+function oncallHoursLabel(slotKey,ds){if(slotKey==="ctu1"||slotKey==="ctu2")return"08:00 - 16:00";return isWeekendDate(ds)?"08:00 - 22:00":"16:00 - 22:00";}
+function canEditOncall(){const u=STATE.user;if(!u)return false;if(isPdRole(u.role)||u.role==="chief")return true;return hasPriv(u.profileId,"edit_oncall");}
+async function loadOncallData(){
+  const{data,error}=await sb.from("oncall_schedule").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("schedule_date");
+  if(!error&&data)ONCALL_DATA=data;
+  render();
+}
+async function saveOncallDay(blockNum,date,entries){
+  const{error:de}=await sb.from("oncall_schedule").delete().eq("schedule_date",date).eq("academic_year",CURRENT_ACADEMIC_YEAR);
+  if(de){alert("Error clearing old entries: "+de.message);return;}
+  const rows=entries.filter(e=>e.resident_id).map(e=>({block_number:blockNum,schedule_date:date,slot_key:e.slot_key,resident_id:e.resident_id,is_extra:!!e.is_extra,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null}));
+  if(rows.length){const{error:ie}=await sb.from("oncall_schedule").insert(rows);if(ie){alert("Error saving: "+ie.message);return;}}
+  await loadOncallData();
+}
+function downloadOncallICS(resId){
+  const res=resById(resId);if(!res)return;
+  const entries=ONCALL_DATA.filter(e=>e.resident_id===resId).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date));
+  if(!entries.length){alert("No on-call entries found.");return;}
+  let ics="BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//DSFH IM//Oncall//EN\r\nCALSCALE:GREGORIAN\r\n";
+  entries.forEach(e=>{
+    const sl=ONCALL_SLOTS.find(s=>s.key===e.slot_key);
+    const lbl=sl?sl.label:e.slot_key;
+    const we=isWeekendDate(e.schedule_date);
+    const[sh,eh]=(sl&&sl.ctu)?["08","16"]:we?["08","22"]:["16","22"];
+    const ds=e.schedule_date.replace(/-/g,"");
+    ics+="BEGIN:VEVENT\r\nUID:oncall-"+e.id+"@dsfh.local\r\n";
+    ics+="DTSTART:"+ds+"T"+sh+"0000\r\nDTEND:"+ds+"T"+eh+"0000\r\n";
+    ics+="SUMMARY:On-Call: "+lbl+(e.is_extra?" (Extra Penalty)":"")+"\r\n";
+    ics+="DESCRIPTION:DSFH Internal Medicine On-Call - "+lbl+(e.is_extra?"\\nExtra penalty oncall":"")+"\r\n";
+    ics+="END:VEVENT\r\n";
+  });
+  ics+="END:VCALENDAR";
+  const blob=new Blob([ics],{type:"text/calendar"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download=res.name.replace(/\s+/g,"_")+"_oncall.ics";a.click();
+}
 function hasPriv(profileId,key){return!!(ACCOUNT_PRIVS[profileId]&&ACCOUNT_PRIVS[profileId].has(key));}
 let MENTOR_NOTES={};
 async function loadMentorNotes(residentId){
@@ -1291,6 +1338,7 @@ const MODS=[
   {id:"admin",label:"PD Admin Panel",icon:"⚙️",desc:"Accounts, privileges & settings",color:"#2e3a4e",roles:["pd","deputy_pd"]},
   {id:"overview",label:"Overview Dashboard",icon:"🏠",desc:"Bird's-eye view of all residents' performance",color:"#c96a4a",roles:["pd","deputy_pd","chief"]},
   {id:"kpi_exec",label:"Performance Report",icon:"🏆",desc:"Executive KPI — program health, top performers & resident drill-down",color:"#1a2a4a",roles:["pd","deputy_pd","chief","consultant","resident"]},
+  {id:"oncall",label:"On-Call Schedule",icon:"🏥",desc:"Duty assignments, personal schedule & on-call statistics",color:"#1a4a7a",roles:["pd","deputy_pd","chief","consultant","resident"]},
 ];
 function renderSearchOverlay(){
   const q=(STATE.searchQ||"").trim().toLowerCase();
@@ -1714,6 +1762,25 @@ function renderModGrid(){
         })
       )
     );
+  }
+  // Oncall reminder — next upcoming oncall for this user
+  if(u.rid){
+    const ocToday=new Date().toISOString().slice(0,10);
+    const nextOc=ONCALL_DATA.filter(e=>e.resident_id===u.rid&&e.schedule_date>=ocToday).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date))[0];
+    if(nextOc){
+      const ocSlot=ONCALL_SLOTS.find(s=>s.key===nextOc.slot_key);
+      const ocLabel=ocSlot?ocSlot.label:nextOc.slot_key;
+      const ocHrs=oncallHoursLabel(nextOc.slot_key,nextOc.schedule_date);
+      const[oy,om,od]=nextOc.schedule_date.split("-").map(Number);
+      const DN2=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+      const ocDay=DN2[new Date(oy,om-1,od).getDay()];
+      const isOcToday=nextOc.schedule_date===ocToday;
+      alerts.push(
+        el("div",{cls:nextOc.is_extra?"alert-red":"alert-yellow",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({mod:"oncall",oncallTab:"mine"})},
+          "🏥 "+(isOcToday?"On-Call TODAY":"Next On-Call")+": "+ocLabel+" · "+ocDay+" "+fmtDate(nextOc.schedule_date)+" · "+ocHrs+(nextOc.is_extra?" · ⚠ Extra Penalty":"")+". Click to view your full schedule."
+        )
+      );
+    }
   }
   if(myDuties.length>0) alerts.push(
     el("div",{cls:"alert-yellow",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({mod:"morning",mmTab:"schedule",mmBlock:myDuties[0].session.block_number})},
@@ -4919,7 +4986,8 @@ const PRIV_LABELS_RESIDENT={
   edit_teach_attendance:"Update Teaching attendance",
   edit_mm_schedule:"Enter/edit Morning Meeting schedule (Teaching Committee)",
   edit_teach_schedule:"Enter/edit Teaching schedule (Teaching Committee)",
-  edit_kpi_notes:"Edit KPI notes"
+  edit_kpi_notes:"Edit KPI notes",
+  edit_oncall:"Enter/edit On-Call schedule (Oncall Committee)"
 };
 const PRIV_LABELS_CONSULTANT={
   edit_quiz_marks:"Enter/edit quiz marks (all quizzes)",
@@ -6054,6 +6122,277 @@ function renderKPIExecutive(){
   },0);
   return wrap;
 }
+// ─── ONCALL MODULE ───────────────────────────────────────────────────────────
+function renderOncallEditModal(){
+  if(!STATE.oncallEditDate)return null;
+  const blk=STATE.oncallBlock||CURRENT_PERIOD;
+  const date=STATE.oncallEditDate;
+  const isWe=isWeekendDate(date);
+  const slots=isWe?ONCALL_SLOTS:ONCALL_SLOTS.filter(s=>!s.ctu);
+  const existing={};
+  ONCALL_DATA.filter(e=>e.schedule_date===date).forEach(e=>{existing[e.slot_key]={resId:e.resident_id,isExtra:e.is_extra};});
+  function close(){set({oncallEditDate:null});}
+  async function save(){
+    const entries=slots.map(s=>({
+      slot_key:s.key,
+      resident_id:document.getElementById("oc_"+s.key)?.value||null,
+      is_extra:document.getElementById("oc_extra_"+s.key)?.checked||false
+    }));
+    const btn=document.getElementById("oc_save_btn");
+    if(btn){btn.disabled=true;btn.textContent="Saving...";}
+    await saveOncallDay(blk,date,entries);
+    set({oncallEditDate:null});
+  }
+  const[y,m,d]=date.split("-").map(Number);
+  const DAY_NM=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const dayName=DAY_NM[new Date(y,m-1,d).getDay()];
+  return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
+    el("div",{cls:"modal-card",st:{width:"560px",maxWidth:"100%"}},
+      el("div",{cls:"modal-header"},
+        el("h3",{cls:"modal-title"},(isWe?"🗓":"📋")+" On-Call — "+dayName+", "+fmtDate(date)),
+        el("button",{cls:"modal-close",onClick:close},"✕")
+      ),
+      el("div",{cls:"modal-body"},
+        isWe
+          ?el("div",{cls:"alert-yellow",st:{marginBottom:"16px",fontSize:".83rem"}},"Weekend: ER/Bldg/Consult = 08:00–22:00. CTU Cover = 08:00–16:00 (day cover only).")
+          :el("div",{st:{background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:"8px",padding:"10px 14px",marginBottom:"16px",fontSize:".83rem",color:"#0369a1"}},"Weekday: On-call runs 16:00–22:00."),
+        el("div",{st:{display:"flex",flexDirection:"column",gap:"12px"}},
+          ...slots.map(s=>{
+            const cur=existing[s.key]||{resId:"",isExtra:false};
+            const sel=document.createElement("select");
+            sel.id="oc_"+s.key;sel.className="input";
+            const emp=document.createElement("option");emp.value="";emp.textContent="— Not assigned —";sel.appendChild(emp);
+            RESIDENTS.slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(r=>{
+              const opt=document.createElement("option");
+              opt.value=r.id;opt.textContent=dname(r.name)+" ("+r.level+")";
+              if(r.id===cur.resId)opt.selected=true;
+              sel.appendChild(opt);
+            });
+            const chk=document.createElement("input");
+            chk.type="checkbox";chk.id="oc_extra_"+s.key;chk.checked=!!cur.isExtra;
+            chk.style.cssText="width:16px;height:16px;cursor:pointer;accent-color:#c00;flex-shrink:0;";
+            return el("div",{st:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",background:"#f8fafc",borderRadius:"8px",border:"1px solid #e5e7eb"}},
+              el("div",{st:{minWidth:"110px",fontWeight:"600",fontSize:".83rem",color:"#374151"}},s.label),
+              el("div",{st:{flex:"1"}},sel),
+              el("label",{st:{display:"flex",alignItems:"center",gap:"5px",cursor:"pointer",fontSize:".78rem",color:"#b91c1c",whiteSpace:"nowrap"}},
+                chk,"Extra"
+              )
+            );
+          })
+        )
+      ),
+      el("div",{cls:"modal-footer"},
+        el("button",{cls:"sbtn",onClick:close},"Cancel"),
+        el("button",{cls:"sbtn primary",id:"oc_save_btn",onClick:save},"Save Assignments")
+      )
+    )
+  );
+}
+function renderOncall(){
+  const u=STATE.user;
+  const blk=STATE.oncallBlock||CURRENT_PERIOD;
+  const tab=STATE.oncallTab||"schedule";
+  const canEdit=canEditOncall();
+  // Build full 28-day block date list
+  const allDates=[];
+  const blockStart=blockStartDate(blk,CURRENT_ACADEMIC_YEAR);
+  if(blockStart){
+    const DN=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    for(let i=0;i<28;i++){
+      const d=new Date(blockStart.getTime()+i*86400000);
+      allDates.push({date:d.toISOString().split("T")[0],day:DN[d.getDay()],isWe:d.getDay()===5||d.getDay()===6});
+    }
+  }
+  // Index block data by date+slot
+  const byDate={};
+  ONCALL_DATA.filter(e=>e.block_number===blk).forEach(e=>{
+    if(!byDate[e.schedule_date])byDate[e.schedule_date]={};
+    byDate[e.schedule_date][e.slot_key]=e;
+  });
+  const todayStr=new Date().toISOString().slice(0,10);
+  // Resident's own oncall across all blocks in current year
+  const myEntries=u.rid?ONCALL_DATA.filter(e=>e.resident_id===u.rid).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date)):[];
+  function oncallCell(entry){
+    if(!entry)return el("span",{st:{color:"#d1d5db",fontSize:".78rem"}},"—");
+    const res=resById(entry.resident_id);
+    const name=res?dname(res.name):"?";
+    return el("span",{st:{display:"inline-flex",flexDirection:"column",gap:"2px"}},
+      el("span",{st:{fontWeight:"600",fontSize:".83rem"}},name),
+      entry.is_extra?el("span",{st:{fontSize:".63rem",background:"#fde8e8",color:"#b91c1c",border:"1px solid #fca5a5",borderRadius:"4px",padding:"1px 5px",alignSelf:"flex-start",whiteSpace:"nowrap"}},"⚠ Extra"):null
+    );
+  }
+  // ── Schedule tab ──────────────────────────────────────────────
+  function renderScheduleTab(){
+    if(!blockStart)return el("p",{cls:"sh"},"Block data not available.");
+    const hasData=allDates.some(({date})=>byDate[date]&&Object.keys(byDate[date]).length>0);
+    return el("div",null,
+      canEdit?el("div",{st:{marginBottom:"16px"}},
+        el("button",{cls:"sbtn primary",onClick:()=>set({oncallEditDate:allDates[0]?.date||""})},
+          "✏️ Add / Edit Day")
+      ):null,
+      !hasData?el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},"No on-call data entered for Block "+blk+" yet."+(canEdit?" Use 'Edit' on any row to add assignments.":"")):null,
+      el("div",{st:{overflowX:"auto"}},
+        el("table",{cls:"data-table",st:{minWidth:"820px"}},
+          el("thead",null,
+            el("tr",null,
+              el("th",null,"Date"),
+              el("th",null,"Day"),
+              el("th",null,"ER Medical"),
+              el("th",null,"Building 1"),
+              el("th",null,"Building 2"),
+              el("th",null,"Consult"),
+              el("th",{st:{color:"#1e40af"}},"CTU A"),
+              el("th",{st:{color:"#1e40af"}},"CTU B"),
+              canEdit?el("th",null,""):null
+            )
+          ),
+          el("tbody",null,
+            ...allDates.map(({date,day,isWe})=>{
+              const sl=byDate[date]||{};
+              return el("tr",{st:{background:isWe?"rgba(219,234,254,.35)":""}},
+                el("td",{st:{fontWeight:"600",whiteSpace:"nowrap"}},fmtDate(date)),
+                el("td",{st:{color:isWe?"#1d4ed8":"#374151",fontWeight:isWe?"700":"400",whiteSpace:"nowrap"}},day),
+                el("td",null,oncallCell(sl.er_medical)),
+                el("td",null,oncallCell(sl.bldg1)),
+                el("td",null,oncallCell(sl.bldg2)),
+                el("td",null,oncallCell(sl.consult)),
+                el("td",null,isWe?oncallCell(sl.ctu1):el("span",{st:{color:"#e5e7eb"}},"—")),
+                el("td",null,isWe?oncallCell(sl.ctu2):el("span",{st:{color:"#e5e7eb"}},"—")),
+                canEdit?el("td",null,
+                  el("button",{cls:"sbtn",st:{fontSize:".74rem",padding:"3px 9px"},onClick:()=>set({oncallEditDate:date})},"Edit")
+                ):null
+              );
+            })
+          )
+        )
+      )
+    );
+  }
+  // ── My On-Calls tab ───────────────────────────────────────────
+  function renderMineTab(){
+    if(!u.rid){
+      return el("div",{cls:"card"},
+        el("p",{cls:"sh"},"This tab shows a resident's personal on-call schedule. It is visible when logged in as a resident.")
+      );
+    }
+    const past=myEntries.filter(e=>e.schedule_date<todayStr);
+    const upcoming=myEntries.filter(e=>e.schedule_date>=todayStr);
+    function entryRow(e){
+      const slot=ONCALL_SLOTS.find(s=>s.key===e.slot_key);
+      const label=slot?slot.label:e.slot_key;
+      const hrs=oncallHoursLabel(e.slot_key,e.schedule_date);
+      const[y,m,d]=e.schedule_date.split("-").map(Number);
+      const DN=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+      const dayName=DN[new Date(y,m-1,d).getDay()];
+      const isToday=e.schedule_date===todayStr;
+      return el("div",{st:{display:"flex",alignItems:"center",gap:"12px",padding:"12px 16px",borderBottom:"1px solid #f1f5f9",background:e.is_extra?"#fff5f5":"",borderLeft:isToday?"3px solid #c96a4a":"3px solid transparent"}},
+        el("div",{st:{minWidth:"90px"}},
+          el("div",{st:{fontWeight:"700",fontSize:".88rem",color:isToday?"#c96a4a":"#111827"}},fmtDate(e.schedule_date)),
+          el("div",{st:{fontSize:".74rem",color:"#6b7280"}},dayName+(isToday?" · TODAY":""))
+        ),
+        el("div",{st:{flex:"1"}},
+          el("div",{st:{fontWeight:"600",fontSize:".86rem"}},label),
+          el("div",{st:{fontSize:".76rem",color:"#6b7280"}},hrs)
+        ),
+        e.is_extra?el("span",{st:{fontSize:".7rem",background:"#fde8e8",color:"#b91c1c",border:"1px solid #fca5a5",borderRadius:"6px",padding:"2px 8px",whiteSpace:"nowrap"}},"⚠ Extra Penalty"):null
+      );
+    }
+    return el("div",null,
+      upcoming.length>0
+        ?el("div",{cls:"card",st:{marginBottom:"16px"}},
+            el("div",{cls:"card-title"},"Upcoming On-Calls"),
+            el("div",null,...upcoming.map(entryRow))
+          )
+        :el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},"No upcoming on-calls scheduled for you this academic year."),
+      myEntries.length>0
+        ?el("button",{cls:"sbtn",st:{marginBottom:"24px"},onClick:()=>downloadOncallICS(u.rid)},"📅 Download Calendar (.ics)")
+        :null,
+      past.length>0
+        ?el("div",{cls:"card"},
+            el("div",{cls:"card-title"},"Past On-Calls"),
+            el("div",{st:{opacity:".7"}},...past.slice().reverse().map(entryRow))
+          )
+        :null
+    );
+  }
+  // ── Statistics tab (PD-only initially) ───────────────────────
+  function renderStatsTab(){
+    if(!isPD()){
+      return el("div",{cls:"alert-yellow"},"Statistics are currently visible to the Program Director only.");
+    }
+    const blkEntries=ONCALL_DATA.filter(e=>e.block_number===blk);
+    const allEntries=ONCALL_DATA;
+    const resStats=RESIDENTS.map(r=>({
+      res:r,
+      bReg:blkEntries.filter(e=>e.resident_id===r.id&&!e.is_extra).length,
+      bExtra:blkEntries.filter(e=>e.resident_id===r.id&&e.is_extra).length,
+      aReg:allEntries.filter(e=>e.resident_id===r.id&&!e.is_extra).length,
+      aExtra:allEntries.filter(e=>e.resident_id===r.id&&e.is_extra).length,
+    })).filter(s=>s.bReg+s.bExtra+s.aReg+s.aExtra>0)
+       .sort((a,b)=>(b.bReg+b.bExtra)-(a.bReg+a.bExtra));
+    const totBReg=blkEntries.filter(e=>!e.is_extra).length;
+    const totBExtra=blkEntries.filter(e=>e.is_extra).length;
+    const totAReg=allEntries.filter(e=>!e.is_extra).length;
+    const totAExtra=allEntries.filter(e=>e.is_extra).length;
+    function statCard(val,label,col){
+      return el("div",{cls:"card",st:{flex:"1",minWidth:"150px",textAlign:"center",padding:"18px 12px"}},
+        el("div",{st:{fontSize:"2rem",fontWeight:"800",color:col}},val),
+        el("div",{st:{fontSize:".76rem",color:"#6b7280",marginTop:"4px"}},label)
+      );
+    }
+    return el("div",null,
+      el("div",{st:{display:"flex",gap:"14px",flexWrap:"wrap",marginBottom:"20px"}},
+        statCard(totBReg,"Regular — Block "+blk,"#1a4a7a"),
+        statCard(totBExtra,"Extra (Penalty) — Block "+blk,"#b91c1c"),
+        statCard(totAReg,"Regular — All Blocks","#1a4a7a"),
+        statCard(totAExtra,"Extra — All Blocks","#b91c1c")
+      ),
+      !resStats.length?el("p",{cls:"sh"},"No on-call data to analyze yet."):
+      el("div",{cls:"card"},
+        el("div",{cls:"card-title"},"Per-Resident — Block "+blk),
+        el("div",{st:{overflowX:"auto"}},
+          el("table",{cls:"data-table"},
+            el("thead",null,
+              el("tr",null,
+                el("th",null,"Resident"),el("th",null,"Level"),
+                el("th",{st:{textAlign:"center"}},"Blk "+blk+" Regular"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Extra"),
+                el("th",{st:{textAlign:"center"}},"All Regular"),el("th",{st:{textAlign:"center"}},"All Extra")
+              )
+            ),
+            el("tbody",null,
+              ...resStats.map(s=>el("tr",null,
+                el("td",null,dname(s.res.name)),
+                el("td",null,s.res.level),
+                el("td",{st:{textAlign:"center",fontWeight:"700"}},s.bReg||"—"),
+                el("td",{st:{textAlign:"center",fontWeight:"700",color:s.bExtra?"#b91c1c":""}},s.bExtra||"—"),
+                el("td",{st:{textAlign:"center"}},s.aReg||"—"),
+                el("td",{st:{textAlign:"center",color:s.aExtra?"#b91c1c":""}},s.aExtra||"—")
+              ))
+            )
+          )
+        )
+      )
+    );
+  }
+  return el("div",{cls:"content"},
+    el("div",{cls:"page-header"},
+      el("h2",{cls:"page-title"},"🏥 On-Call Schedule"),
+      el("p",{cls:"page-subtitle"},"Duty assignments · Personal schedule · Statistics")
+    ),
+    el("div",{cls:"card",st:{marginBottom:"16px"}},
+      el("div",{cls:"lbl"},"Select Block"),
+      el("div",{cls:"flex-wrap",st:{marginTop:"6px"}},
+        ...ROTA_PERIODS.map((_,i)=>{const n=i+1;return el("span",{cls:"pill"+(blk===n?" on":""),onClick:()=>set({oncallBlock:n,oncallTab:tab})},"B"+n);})
+      )
+    ),
+    el("div",{cls:"tab-bar"},
+      el("span",{cls:"tab"+(tab==="schedule"?" active":""),onClick:()=>set({oncallTab:"schedule"})},"📅 Schedule"),
+      el("span",{cls:"tab"+(tab==="mine"?" active":""),onClick:()=>set({oncallTab:"mine"})},"👤 My On-Calls"),
+      el("span",{cls:"tab"+(tab==="stats"?" active":""),onClick:()=>set({oncallTab:"stats"})},"📊 Statistics")
+    ),
+    tab==="schedule"?renderScheduleTab():tab==="mine"?renderMineTab():renderStatsTab()
+  );
+}
 // ─── MAIN RENDER ─────────────────────────────────────────────────────────────
 function render(){
   const app=document.getElementById("app");
@@ -6087,6 +6426,7 @@ function render(){
         case"admin":content=renderAdmin();break;
         case"overview":content=renderPDOverview();break;
         case"kpi_exec":content=renderKPIExecutive();break;
+        case"oncall":content=renderOncall();break;
         default:content=renderModGrid();
       }
     }
@@ -6095,6 +6435,7 @@ function render(){
   layout.appendChild(main);
   app.appendChild(layout);
   if(STATE.kpiPropModal)app.appendChild(renderKpiProposalModal());
+  if(STATE.oncallEditDate)app.appendChild(renderOncallEditModal());
   if(STATE.showPromoModal&&isPD())app.appendChild(renderPromoModal());
   if(STATE.showBroadcast)(isPD()||STATE.user?.role==="chief")&&app.appendChild(renderBroadcastModal());
   const srch=renderSearchOverlay();if(srch)app.appendChild(srch);
@@ -6197,6 +6538,7 @@ function renderProfileTeach(res){
         loadAnnouncements();
         loadKpiQuarterly();
         loadKpiProposals();
+        loadOncallData();
       }
     }
   }catch(err){
