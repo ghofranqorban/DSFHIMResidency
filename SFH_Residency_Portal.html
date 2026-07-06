@@ -2381,6 +2381,98 @@ async function generateMMSessions(blk){
   if(error){alert("Could not generate sessions: "+error.message);return;}
   await loadSchedules();
 }
+// ─── Shared inline-edit helpers for schedule tables ──────────────────────────
+function schedInlineText(sid,field,val,saveFn,tbl){
+  const ie=STATE.schedInlineEdit;
+  if(ie&&ie.id===sid&&ie.field===field&&ie.tbl===tbl){
+    const inp=document.createElement("input");
+    inp.type=field==="session_date"?"date":"text";
+    inp.className="input";inp.value=val||"";
+    inp.style.cssText="padding:3px 7px;font-size:.82rem;min-width:90px;";
+    const commit=()=>{const v=inp.value.trim();set({schedInlineEdit:null});if(v!==String(val||""))saveFn(v);};
+    inp.onkeydown=ev=>{if(ev.key==="Enter")commit();if(ev.key==="Escape")set({schedInlineEdit:null});};
+    inp.onblur=()=>setTimeout(commit,150);
+    setTimeout(()=>{inp.focus();inp.select();},0);
+    return inp;
+  }
+  const div=document.createElement("div");
+  div.style.cssText="cursor:pointer;min-height:22px;";
+  div.title="Double-click to edit";
+  div.textContent=field==="session_date"?fmtDate(val):(val||"—");
+  div.ondblclick=()=>set({schedInlineEdit:{id:sid,field,tbl}});
+  return div;
+}
+function schedInlineResident(sid,field,currentResId,currentLabel,saveFn,tbl){
+  const ie=STATE.schedInlineEdit;
+  const dispVal=currentResId?(resById(currentResId)?dname(resById(currentResId).name):"?"):(currentLabel||"—");
+  if(ie&&ie.id===sid&&ie.field===field&&ie.tbl===tbl){
+    const wrap=document.createElement("div");
+    wrap.style.cssText="position:relative;min-width:140px;";
+    const inp=document.createElement("input");
+    inp.type="text";inp.className="input";
+    inp.style.cssText="padding:4px 8px;font-size:.82rem;width:100%;box-sizing:border-box;";
+    inp.placeholder="Type to search...";
+    inp.value=dispVal!=="—"?dispVal:"";
+    const drop=document.createElement("ul");
+    drop.style.cssText="position:absolute;top:100%;left:0;right:0;z-index:9999;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.15);max-height:200px;overflow-y:auto;list-style:none;padding:0;margin:2px 0 0;";
+    function buildDrop(q){
+      drop.innerHTML="";
+      const clr=document.createElement("li");
+      clr.textContent="— None —";
+      clr.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;color:#9ca3af;border-bottom:1px solid #f3f4f6;";
+      clr.onmousedown=ev=>{ev.preventDefault();set({schedInlineEdit:null});saveFn(null,null);};
+      drop.appendChild(clr);
+      const sorted=RESIDENTS.slice().sort((a,b)=>a.name.localeCompare(b.name));
+      const rMatches=q?sorted.filter(r=>dname(r.name).toLowerCase().includes(q.toLowerCase())):sorted;
+      rMatches.forEach(r=>{
+        const li=document.createElement("li");
+        li.textContent=dname(r.name)+" ("+r.level+")";
+        li.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;border-bottom:1px solid #f9fafb;";
+        li.onmouseover=()=>{li.style.background="#f0f9ff";};li.onmouseout=()=>{li.style.background="";};
+        li.onmousedown=ev=>{ev.preventDefault();set({schedInlineEdit:null});saveFn(r.id,null);};
+        drop.appendChild(li);
+      });
+      const cMatches=CONSULTANTS.filter(c=>!q||c.name.toLowerCase().includes(q.toLowerCase()));
+      if(cMatches.length){
+        const sep=document.createElement("li");
+        sep.textContent="Consultants / Supervisors";
+        sep.style.cssText="padding:4px 12px;font-size:.72rem;color:#9ca3af;background:#f9fafb;font-weight:700;pointer-events:none;";
+        drop.appendChild(sep);
+        cMatches.forEach(c=>{
+          const li=document.createElement("li");
+          li.textContent=c.name;
+          li.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;border-bottom:1px solid #f9fafb;";
+          li.onmouseover=()=>{li.style.background="#f0f9ff";};li.onmouseout=()=>{li.style.background="";};
+          li.onmousedown=ev=>{ev.preventDefault();set({schedInlineEdit:null});saveFn(null,c.name);};
+          drop.appendChild(li);
+        });
+      }
+      if(q){
+        const ft=document.createElement("li");
+        ft.textContent="Free text: \""+q+"\"";
+        ft.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;font-style:italic;color:#374151;border-top:1px solid #f3f4f6;";
+        ft.onmousedown=ev=>{ev.preventDefault();set({schedInlineEdit:null});saveFn(null,q);};
+        drop.appendChild(ft);
+      }
+    }
+    buildDrop("");
+    inp.oninput=ev=>buildDrop(ev.target.value);
+    inp.onkeydown=ev=>{
+      if(ev.key==="Escape")set({schedInlineEdit:null});
+      if(ev.key==="Enter"){set({schedInlineEdit:null});saveFn(null,inp.value.trim()||null);}
+    };
+    inp.onblur=()=>setTimeout(()=>set({schedInlineEdit:null}),200);
+    wrap.appendChild(inp);wrap.appendChild(drop);
+    setTimeout(()=>inp.focus(),0);
+    return wrap;
+  }
+  const div=document.createElement("div");
+  div.style.cssText="cursor:pointer;min-height:22px;";
+  div.title="Double-click to edit";
+  div.textContent=dispVal;
+  div.ondblclick=()=>set({schedInlineEdit:{id:sid,field,tbl}});
+  return div;
+}
 function renderMMSchedule(){
   const blk=STATE.mmBlock;
   const sessions=MM_SESSIONS.filter(s=>s.block_number===blk);
@@ -2388,12 +2480,12 @@ function renderMMSchedule(){
   const editingSession=(formOpen&&typeof STATE.mmEntrySession==="number")?MM_SESSION_BY_ID[STATE.mmEntrySession]:null;
   const canEditSched=canEditMMSchedule();
   const cols=[
-    {label:"Day",render:s=>s.day_label||"—"},
-    {label:"Date",render:s=>fmtDate(s.session_date)},
-    {label:"Topic",render:s=>s.topic},
-    {label:"Presenter",render:s=>personLabel(s.presenter_resident_id,s.presenter_label)},
-    {label:"Moderator",render:s=>personLabel(s.moderator_resident_id,s.moderator_label)},
-    {label:"Consultant",render:s=>s.consultant_label||"—"}
+    {label:"Day",render:s=>canEditSched?schedInlineText(s.id,"day_label",s.day_label||"",v=>{sb.from("mm_sessions").update({day_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):s.day_label||"—"},
+    {label:"Date",render:s=>canEditSched?schedInlineText(s.id,"session_date",s.session_date,v=>{if(!v)return;sb.from("mm_sessions").update({session_date:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):fmtDate(s.session_date)},
+    {label:"Topic",render:s=>canEditSched?schedInlineText(s.id,"topic",s.topic,v=>{sb.from("mm_sessions").update({topic:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):s.topic},
+    {label:"Presenter",render:s=>canEditSched?schedInlineResident(s.id,"presenter_resident_id",s.presenter_resident_id,s.presenter_label,(resId,label)=>{sb.from("mm_sessions").update({presenter_resident_id:resId,presenter_label:label}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):personLabel(s.presenter_resident_id,s.presenter_label)},
+    {label:"Moderator",render:s=>canEditSched?schedInlineResident(s.id,"moderator_resident_id",s.moderator_resident_id,s.moderator_label,(resId,label)=>{sb.from("mm_sessions").update({moderator_resident_id:resId,moderator_label:label}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):personLabel(s.moderator_resident_id,s.moderator_label)},
+    {label:"Consultant",render:s=>canEditSched?schedInlineText(s.id,"consultant_label",s.consultant_label||"",v=>{sb.from("mm_sessions").update({consultant_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):s.consultant_label||"—"}
   ];
   if(canEditSched)cols.push({label:"",render:s=>{
     const wrap=el("div",{cls:"flex-gap"});
@@ -2691,11 +2783,11 @@ function renderTeachSchedule(){
   const editingSession=(formOpen&&typeof STATE.teachEntrySession==="number")?TEACH_SESSION_BY_ID[STATE.teachEntrySession]:null;
   const canEditSched=canEditTeachSchedule();
   const cols=[
-    {label:"Day",render:s=>s.day_label||"—"},
-    {label:"Date",render:s=>fmtDate(s.session_date)},
-    {label:"Specialty",render:s=>s.specialty_label||"—"},
-    {label:"Topic",render:s=>s.topic},
-    {label:"Presenter",render:s=>s.presenter_label+(s.role_label?" ("+s.role_label+")":"")}
+    {label:"Day",render:s=>canEditSched?schedInlineText(s.id,"day_label",s.day_label||"",v=>{sb.from("teaching_sessions").update({day_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"teach"):s.day_label||"—"},
+    {label:"Date",render:s=>canEditSched?schedInlineText(s.id,"session_date",s.session_date,v=>{if(!v)return;sb.from("teaching_sessions").update({session_date:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"teach"):fmtDate(s.session_date)},
+    {label:"Specialty",render:s=>canEditSched?schedInlineText(s.id,"specialty_label",s.specialty_label||"",v=>{sb.from("teaching_sessions").update({specialty_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"teach"):s.specialty_label||"—"},
+    {label:"Topic",render:s=>canEditSched?schedInlineText(s.id,"topic",s.topic||"",v=>{sb.from("teaching_sessions").update({topic:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"teach"):s.topic},
+    {label:"Presenter",render:s=>canEditSched?schedInlineText(s.id,"presenter_label",s.presenter_label||"",v=>{sb.from("teaching_sessions").update({presenter_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"teach"):s.presenter_label+(s.role_label?" ("+s.role_label+")":"")}
   ];
   if(canEditSched)cols.push({label:"",render:s=>{
     const wrap=el("div",{cls:"flex-gap"});
