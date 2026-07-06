@@ -1458,7 +1458,7 @@ function renderSidebar(){
       )
     ),
     el("div",{st:{padding:"0 12px 10px"}},
-      el("input",{type:"search",placeholder:"🔍 Search…",cls:"input-sm",st:{width:"100%",boxSizing:"border-box",fontSize:".82rem"},
+      el("input",{id:"search-inp",type:"search",placeholder:"🔍 Search…",cls:"input-sm",st:{width:"100%",boxSizing:"border-box",fontSize:".82rem"},
         value:STATE.searchQ,
         onInput:e=>set({searchQ:e.target.value}),
         onKeyDown:e=>{if(e.key==="Escape")set({searchQ:""});}
@@ -6556,6 +6556,8 @@ function renderOncall(){
 // ─── MAIN RENDER ─────────────────────────────────────────────────────────────
 function render(){
   const app=document.getElementById("app");
+  const _sf=document.activeElement?.id==="search-inp";
+  const _sc=_sf?document.getElementById("search-inp").selectionStart:null;
   app.innerHTML="";
   window.scrollTo(0,0);
   if(!STATE.user){app.appendChild(renderLogin());return;}
@@ -6600,6 +6602,7 @@ function render(){
   if(STATE.showBroadcast)(isPD()||STATE.user?.role==="chief")&&app.appendChild(renderBroadcastModal());
   const srch=renderSearchOverlay();if(srch)app.appendChild(srch);
   appendAccountModal(app);
+  if(_sf){const si=document.getElementById("search-inp");if(si){si.focus();if(_sc!==null)si.setSelectionRange(_sc,_sc);}}
 }
 function appendAccountModal(app){
   const modal=renderAccountModal();
