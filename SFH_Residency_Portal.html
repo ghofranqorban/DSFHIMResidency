@@ -2492,7 +2492,9 @@ function personLabelEl(residentId,label){
   const name=residentId?(resById(residentId)?.name||label||"—"):(label||"—");
   const wrap=document.createElement("span");
   wrap.textContent=name;
-  if(residentId&&u?.rid&&residentId===u.rid){wrap.style.cssText="color:#b45309;font-weight:700;background:#fde68a;padding:2px 10px;border-radius:20px;display:inline-block;";}
+  const myName=u?.rid?dname(resById(u.rid)?.name||""):"";
+  const isSelf=(residentId&&u?.rid&&residentId===u.rid)||(myName&&label&&(label.toLowerCase().includes(myName.toLowerCase())||myName.toLowerCase().includes(label.toLowerCase())));
+  if(isSelf){wrap.style.cssText="color:#b45309;font-weight:700;background:#fde68a;padding:2px 10px;border-radius:20px;display:inline-block;";}
   return wrap;
 }
 function renderScheduleTable(sessions,blk,cols){
@@ -2507,10 +2509,11 @@ function renderScheduleTable(sessions,blk,cols){
   weeks.forEach(w=>{
     const rows=byWeek[w].slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
     rows.forEach((s,i)=>{
+      const rowBg=s.row_highlight?s.row_highlight+"26":"#fff";
       const tds=[];
-      if(i===0)tds.push(el("td",{rowspan:rows.length,cls:"wk-cell"},"Week "+w));
+      if(i===0)tds.push(el("td",{rowspan:rows.length,cls:"wk-cell"},"W"+w));
       cols.forEach(c=>{
-        const stickyStyle=c.stickyLeft?{position:"sticky",left:c.stickyLeft,zIndex:"2",background:"inherit",borderRight:"1px solid #ede5d8"}:{};
+        const stickyStyle=c.stickyLeft?{position:"sticky",left:c.stickyLeft,zIndex:"2",background:rowBg,borderRight:"2px solid #ede5d8",minWidth:c.minW||"auto",maxWidth:c.maxW||"none",overflow:"hidden",whiteSpace:"nowrap"}:{};
         tds.push(el("td",{st:{textAlign:c.center?"center":"left",...stickyStyle}},c.render(s)));
       });
       const rowStyle=s.row_highlight?{background:s.row_highlight+"26",borderLeft:"4px solid "+s.row_highlight}:null;
@@ -2520,8 +2523,8 @@ function renderScheduleTable(sessions,blk,cols){
   return el("div",{cls:"tbl-wrap"},
     el("table",{cls:"sched-tbl"},
       el("thead",null,el("tr",null,
-        el("th",{st:{position:"sticky",top:"0",left:"0",zIndex:"5",background:"#faf6f1"}},"Week"),
-        ...cols.map(c=>el("th",{st:{position:"sticky",top:"0",zIndex:c.stickyLeft?"5":"3",left:c.stickyLeft||"auto",background:"#faf6f1"}},c.label))
+        el("th",{st:{position:"sticky",top:"0",left:"0",zIndex:"5",background:"#faf6f1",minWidth:"36px",maxWidth:"36px"}},"Wk"),
+        ...cols.map(c=>el("th",{st:{position:"sticky",top:"0",zIndex:c.stickyLeft?"5":"3",left:c.stickyLeft||"auto",background:"#faf6f1",minWidth:c.minW||"auto",maxWidth:c.maxW||"none",whiteSpace:"nowrap",overflow:"hidden"}},c.label))
       )),
       sessions.length===0?
         el("tbody",null,el("tr",null,el("td",{colspan:cols.length+1,cls:"sh",st:{textAlign:"center",padding:"14px"}},"No sessions scheduled for this block yet."))):
@@ -2769,7 +2772,16 @@ function schedInlineResident(sid,field,currentResId,currentLabel,saveFn,tbl){
   const div=document.createElement("div");
   div.style.cssText="cursor:pointer;min-height:22px;";
   div.title="Double-click to edit";
-  div.textContent=dispVal;
+  const u=STATE.user;
+  const isSelfRes=!!(u?.rid&&currentResId&&currentResId===u.rid);
+  if(isSelfRes){
+    const nm=document.createElement("span");
+    nm.style.cssText="color:#b45309;font-weight:700;background:#fde68a;padding:2px 10px;border-radius:20px;display:inline-block;";
+    nm.textContent=dispVal;
+    div.appendChild(nm);
+  }else{
+    div.textContent=dispVal;
+  }
   div.ondblclick=()=>set({schedInlineEdit:{id:sid,field,tbl}});
   return div;
 }
@@ -2780,8 +2792,18 @@ function renderMMSchedule(){
   const editingSession=(formOpen&&typeof STATE.mmEntrySession==="number")?MM_SESSION_BY_ID[STATE.mmEntrySession]:null;
   const canEditSched=canEditMMSchedule();
   const cols=[
-    {label:"Day",stickyLeft:"60px",render:s=>canEditSched?schedInlineText(s.id,"day_label",s.day_label||"",v=>{sb.from("mm_sessions").update({day_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):s.day_label||"—"},
-    {label:"Date",stickyLeft:"150px",render:s=>canEditSched?schedInlineText(s.id,"session_date",s.session_date,v=>{if(!v)return;sb.from("mm_sessions").update({session_date:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):shortFmtDate(s.session_date)},
+    {label:"Day / Date",stickyLeft:"36px",minW:"90px",maxW:"90px",render:s=>{
+      if(canEditSched){
+        const wrap=document.createElement("div");
+        wrap.appendChild(schedInlineText(s.id,"day_label",s.day_label||"",v=>{sb.from("mm_sessions").update({day_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"));
+        wrap.appendChild(schedInlineText(s.id,"session_date",s.session_date,v=>{if(!v)return;sb.from("mm_sessions").update({session_date:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"));
+        return wrap;
+      }
+      const wrap=document.createElement("div");
+      const d=document.createElement("div");d.style.cssText="font-weight:600;font-size:.82rem;color:#374151;";d.textContent=(s.day_label||"").slice(0,3)||"—";
+      const dt=document.createElement("div");dt.style.cssText="font-size:.72rem;color:#9ca3af;margin-top:2px;";dt.textContent=shortFmtDate(s.session_date);
+      wrap.appendChild(d);wrap.appendChild(dt);return wrap;
+    }},
     {label:"Topic",render:s=>canEditSched?schedInlineText(s.id,"topic",s.topic,v=>{sb.from("mm_sessions").update({topic:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):s.topic},
     {label:"Presenter",render:s=>canEditSched?schedInlineResident(s.id,"presenter_resident_id",s.presenter_resident_id,s.presenter_label,(resId,label)=>{sb.from("mm_sessions").update({presenter_resident_id:resId,presenter_label:label}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):personLabelEl(s.presenter_resident_id,s.presenter_label)},
     {label:"Moderator",render:s=>canEditSched?schedInlineResident(s.id,"moderator_resident_id",s.moderator_resident_id,s.moderator_label,(resId,label)=>{sb.from("mm_sessions").update({moderator_resident_id:resId,moderator_label:label}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):personLabelEl(s.moderator_resident_id,s.moderator_label)},
