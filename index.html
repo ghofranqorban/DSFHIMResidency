@@ -1030,11 +1030,18 @@ let STATE={
   annShowForm:false,annEditId:null,annTargetType:"all",
   ovLevel:"all",ovSort:"name",
   showPromoModal:false,promoSkip:{},
+  showCalModal:false,
+  calToken:null,
+  calPrefs:{rota:true,oncall:true,mm:true,teach:false,deadlines:true},
 };
 // In-memory scratch state for the rota-import wizard (not part of STATE/render diffing
 // since it holds large parsed workbook data + per-row user picks; wizard steps are
 // driven by STATE.rotaImportStep and a plain `set()` re-render like everything else).
 let ROTA_IMPORT={workbook:null,sheetNames:[],rows:[],cellReview:[],academicYear:CURRENT_ACADEMIC_YEAR};
+// Live-draft for the calendar preferences modal (avoids render() on every checkbox toggle)
+let _calPrefsDraft=null;
+// Set to the deployed edge function slug (may differ from display name in Supabase dashboard)
+const CAL_FEED_FN="ical";
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 function el(tag,props,...kids){
   const e=document.createElement(tag);
@@ -1923,7 +1930,10 @@ function renderModGrid(){
         ),
         el("h1",{cls:"home-title"},firstName),
         el("p",{cls:"home-subtitle"},"Block "+CURRENT_PERIOD+" · "+periodLabel),
-        (isPD()||STATE.user?.role==="chief")?el("button",{cls:"sbtn primary",st:{fontSize:".82rem",marginTop:"16px"},onClick:()=>set({showBroadcast:true})},"📢 Broadcast Announcement"):null
+        el("div",{st:{display:"flex",flexWrap:"wrap",gap:"10px",marginTop:"16px"}},
+          (isPD()||STATE.user?.role==="chief")?el("button",{cls:"sbtn primary",st:{fontSize:".82rem"},onClick:()=>set({showBroadcast:true})},"📢 Broadcast"):null,
+          el("button",{cls:"sbtn ghost",st:{fontSize:".82rem"},onClick:()=>{_calPrefsDraft=Object.assign({},STATE.calPrefs||{rota:true,oncall:true,mm:true,teach:false,deadlines:true});set({showCalModal:true});}},"\uD83D\uDCC5 My Calendar")
+        )
       ),
       infoCard
     )
@@ -7279,6 +7289,7 @@ function render(){
   if(STATE.oncallEditDate)app.appendChild(renderOncallEditModal());
   if(STATE.showPromoModal&&isPD())app.appendChild(renderPromoModal());
   if(STATE.showBroadcast)(isPD()||STATE.user?.role==="chief")&&app.appendChild(renderBroadcastModal());
+  if(STATE.showCalModal)app.appendChild(renderCalModal());
   const srch=renderSearchOverlay();if(srch)app.appendChild(srch);
   appendAccountModal(app);
   if(_sf){const si=document.getElementById("search-inp");if(si){si.focus();if(_sc!==null)si.setSelectionRange(_sc,_sc);}}
@@ -7363,6 +7374,95 @@ function renderProfileTeach(res){
     )
   );
 }
+// ─── LIVE CALENDAR FEED ──────────────────────────────────────────────────────
+async function generateCalToken(){
+  const u=STATE.user;if(!u)return;
+  const token=crypto.randomUUID();
+  const{error}=await sb.from("profiles").update({calendar_token:token}).eq("id",u.profileId);
+  if(error){alert("Could not generate calendar link: "+error.message);return;}
+  STATE.calToken=token;
+  render();
+}
+async function saveCalPrefs(prefs){
+  const u=STATE.user;if(!u)return;
+  const{error}=await sb.from("profiles").update({calendar_prefs:prefs}).eq("id",u.profileId);
+  if(error){alert("Could not save preferences: "+error.message);return;}
+  set({calPrefs:prefs});
+}
+function renderCalModal(){
+  const u=STATE.user;if(!u)return null;
+  if(!_calPrefsDraft)_calPrefsDraft=Object.assign({},STATE.calPrefs||{rota:true,oncall:true,mm:true,teach:false,deadlines:true});
+  const prefs=_calPrefsDraft;
+  const token=STATE.calToken;
+  const feedUrl=token?(SUPABASE_URL+"/functions/v1/"+CAL_FEED_FN+"?token="+token):"";
+  const webcalUrl=feedUrl.replace("https://","webcal://");
+  const gcalUrl=feedUrl?"https://calendar.google.com/calendar/r/settings/addbyurl?url="+encodeURIComponent(feedUrl):"";
+  function close(){_calPrefsDraft=null;set({showCalModal:false});}
+  const PREF_OPTS=[
+    {key:"rota",label:"Rotation Schedule",sub:"28-day block assignments for the current academic year"},
+    {key:"oncall",label:"On-Call Duties",sub:"My assigned on-call shifts (with slot and penalty flag)"},
+    {key:"mm",label:"Morning Meetings",sub:"All MM sessions — my presenter/moderator role highlighted"},
+    {key:"teach",label:"Teaching Sessions",sub:"All scheduled teaching sessions"},
+    {key:"deadlines",label:"Deadlines & Announcements",sub:"Tasks and due dates assigned to me"},
+  ];
+  function mkChkRow(opt){
+    const cb=document.createElement("input");
+    cb.type="checkbox";cb.checked=!!prefs[opt.key];
+    cb.style.cssText="margin-top:3px;flex-shrink:0;cursor:pointer;accent-color:#c96a4a;width:15px;height:15px;";
+    cb.onchange=function(e){prefs[opt.key]=e.target.checked;};
+    return el("label",{st:{display:"flex",alignItems:"flex-start",gap:"10px",padding:"9px 2px",borderBottom:"1px solid #f5f0ec",cursor:"pointer"}},
+      cb,
+      el("div",null,
+        el("div",{st:{fontWeight:"600",fontSize:".87rem",color:"#374151"}},opt.label),
+        el("div",{st:{fontSize:".77rem",color:"#9ca3af",marginTop:"2px"}},opt.sub)
+      )
+    );
+  }
+  let feedSection;
+  if(!token){
+    feedSection=el("div",{st:{marginTop:"18px",padding:"20px",textAlign:"center",background:"#fef9f7",borderRadius:"10px",border:"1px dashed #f0c4b8"}},
+      el("div",{st:{fontSize:".83rem",color:"#6b7280",marginBottom:"14px"}},"No calendar link yet. Generate one to start subscribing."),
+      el("button",{cls:"sbtn primary",onClick:generateCalToken},"Generate My Calendar Link")
+    );
+  }else{
+    feedSection=el("div",{st:{marginTop:"18px"}},
+      el("div",{cls:"lbl",st:{marginBottom:"8px"}},"Your live calendar link"),
+      el("div",{st:{display:"flex",gap:"8px",marginBottom:"14px",alignItems:"center"}},
+        el("input",{type:"text",cls:"input-sm",value:feedUrl,readonly:"",onClick:function(e){e.target.select();},
+          st:{flex:"1",fontSize:".72rem",background:"#f9fafb",color:"#374151"}}),
+        el("button",{cls:"sbtn ghost",st:{fontSize:".8rem",padding:"6px 14px",flexShrink:"0"},
+          onClick:function(e){navigator.clipboard.writeText(feedUrl).then(function(){var b=e.target;b.textContent="Copied!";setTimeout(function(){b.textContent="Copy";},2000);}).catch(function(){prompt("Copy this link:",feedUrl);});}},"Copy")
+      ),
+      el("div",{st:{display:"flex",flexDirection:"column",gap:"8px",marginBottom:"16px"}},
+        el("button",{cls:"sbtn",st:{fontSize:".84rem",background:"#1c1c1e",color:"#fff",border:"none"},
+          onClick:function(){window.location.href=webcalUrl;}},"Add to Apple Calendar / iPhone"),
+        el("a",{href:gcalUrl,target:"_blank",
+          st:{fontSize:".84rem",background:"#4285f4",color:"#fff",border:"none",borderRadius:"8px",padding:"9px 14px",textDecoration:"none",display:"block",textAlign:"center",fontFamily:"inherit",cursor:"pointer"}},
+          "Add to Google Calendar"),
+        el("button",{cls:"sbtn ghost",st:{fontSize:".84rem"},
+          onClick:function(){var rid=u.rid;if(rid)downloadRotationICS(rid);else alert("No rotation record linked to your account.");}},"Download one-time .ics (Outlook / other)")
+      ),
+      el("div",{st:{borderTop:"1px solid #f1ede9",paddingTop:"14px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px",flexWrap:"wrap"}},
+        el("button",{st:{fontSize:".77rem",color:"#b91c1c",background:"none",border:"1px solid #fca5a5",borderRadius:"6px",padding:"5px 12px",cursor:"pointer"},
+          onClick:async function(){if(confirm("Reset your calendar link? Anyone subscribed to the current link will stop receiving updates."))await generateCalToken();}},"Reset link"),
+        el("button",{cls:"sbtn primary",st:{fontSize:".84rem"},
+          onClick:async function(e){e.target.textContent="Saving...";e.target.disabled=true;await saveCalPrefs(Object.assign({},prefs));}},"Save Preferences")
+      )
+    );
+  }
+  return el("div",{cls:"modal-overlay",onClick:function(e){if(e.target===e.currentTarget)close();}},
+    el("div",{cls:"modal-card",st:{width:"500px",maxWidth:"95vw",maxHeight:"88vh",overflowY:"auto"}},
+      el("div",{cls:"modal-title"},"My Live Calendar"),
+      el("div",{st:{fontSize:".82rem",color:"#6b7280",lineHeight:"1.6",marginBottom:"20px"}},
+        "Subscribe once in any calendar app. Events update automatically whenever rotations, on-call shifts, meetings, or deadlines are assigned — no manual downloads needed."
+      ),
+      el("div",{cls:"lbl",st:{marginBottom:"8px"}},"What to include"),
+      ...PREF_OPTS.map(mkChkRow),
+      feedSection,
+      el("button",{cls:"modal-close",onClick:close},"x")
+    )
+  );
+}
 // Initialize
 (async function init(){
   try{
@@ -7371,6 +7471,8 @@ function renderProfileTeach(res){
       const{data:profile}=await sb.from("profiles").select("*").eq("id",session.user.id).single();
       if(profile){
         STATE.user=mapProfileToUser(profile);
+        STATE.calToken=profile.calendar_token||null;
+        STATE.calPrefs=profile.calendar_prefs||{rota:true,oncall:true,mm:true,teach:false,deadlines:true};
         await loadCoreData();
         if(profile.role==="pd")checkPromotionNeeded();
         loadPendingCounselCount();
