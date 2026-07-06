@@ -1723,6 +1723,9 @@ function renderModGrid(){
     el("div",{cls:"home-hero-inner"},
       el("div",{st:{flex:"1",minWidth:"180px",maxWidth:"calc(100% - 330px)"}},
         el("p",{cls:"home-eyebrow"},greeting.toUpperCase()+" · "+dateStr.toUpperCase()+" · "+timeStr),
+        el("div",{st:{fontSize:".58rem",color:"#92680a",lineHeight:"1.5",marginBottom:"12px",padding:"5px 8px",background:"#fef9ec",borderRadius:"6px",border:"1px solid #f0d98a",maxWidth:"480px"}},
+          "⚠ Pilot portal — not an official institutional website. Do not enter patient data or personal information."
+        ),
         el("h1",{cls:"home-title"},firstName),
         el("p",{cls:"home-subtitle"},"Block "+CURRENT_PERIOD+" · "+periodLabel),
         (isPD()||STATE.user?.role==="chief")?el("button",{cls:"sbtn primary",st:{fontSize:".82rem",marginTop:"16px"},onClick:()=>set({showBroadcast:true})},"📢 Broadcast Announcement"):null
