@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS public.oncall_schedule (
   academic_year   integer     NOT NULL,
   schedule_date   date        NOT NULL,
   slot_key        text        NOT NULL,
-  resident_id     uuid        REFERENCES public.residents(id) ON DELETE CASCADE,
+  resident_id     bigint      REFERENCES public.residents(id) ON DELETE CASCADE,
   is_extra        boolean     DEFAULT false,
   created_by      uuid        REFERENCES public.profiles(id),
   created_at      timestamptz DEFAULT now(),

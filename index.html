@@ -1095,7 +1095,7 @@ async function loadOncallData(){
 async function saveOncallDay(blockNum,date,entries){
   const{error:de}=await sb.from("oncall_schedule").delete().eq("schedule_date",date).eq("academic_year",CURRENT_ACADEMIC_YEAR);
   if(de){alert("Error clearing old entries: "+de.message);return;}
-  const rows=entries.filter(e=>e.resident_id).map(e=>({block_number:blockNum,schedule_date:date,slot_key:e.slot_key,resident_id:e.resident_id,is_extra:!!e.is_extra,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null}));
+  const rows=entries.filter(e=>e.resident_id).map(e=>({block_number:blockNum,schedule_date:date,slot_key:e.slot_key,resident_id:parseInt(e.resident_id,10),is_extra:!!e.is_extra,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null}));
   if(rows.length){const{error:ie}=await sb.from("oncall_schedule").insert(rows);if(ie){alert("Error saving: "+ie.message);return;}}
   await loadOncallData();
 }
