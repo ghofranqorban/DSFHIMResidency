@@ -6201,7 +6201,8 @@ function renderOncall(){
     const DN=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
     for(let i=0;i<28;i++){
       const d=new Date(blockStart.getTime()+i*86400000);
-      allDates.push({date:d.toISOString().split("T")[0],day:DN[d.getDay()],isWe:d.getDay()===5||d.getDay()===6});
+      const yr=d.getFullYear(),mo=String(d.getMonth()+1).padStart(2,"0"),dy=String(d.getDate()).padStart(2,"0");
+      allDates.push({date:yr+"-"+mo+"-"+dy,day:DN[d.getDay()],isWe:d.getDay()===5||d.getDay()===6});
     }
   }
   // Index block data by date+slot
