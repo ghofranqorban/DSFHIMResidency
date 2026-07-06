@@ -658,16 +658,20 @@ async function reviewProposal(proposalId,approve){
   }
   render();
 }
-async function revokeKpiApproval(resId,fieldKey){
+async function revokeKpiApproval(resId,fieldKey,proposalId){
   if(!confirm("Remove verification for this achievement?"))return;
-  const p=KPI_PROPOSALS.find(x=>x.resident_id===resId&&x.field_key===fieldKey&&x.quarter==null&&x.status==="approved");
+  const p=KPI_PROPOSALS.find(x=>x.id===proposalId);
   if(p){
     const{error}=await sb.from("kpi_proposals").update({status:"rejected",reviewed_by:STATE.user.profileId,reviewed_at:new Date().toISOString()}).eq("id",p.id);
     if(error){alert("Error: "+error.message);return;}
     p.status="rejected";
   }
-  const fieldMap={publication:"bonusPublished",oral:"bonusOral",poster:"bonusPoster",qi:"qiDone",awards:"awardsHonors",volunteering:"volunteering"};
-  if(fieldMap[fieldKey])await saveKpiScore(resId,{[fieldMap[fieldKey]]:false});
+  // Only flip kpi_scores to false if no other approved proposals remain for this field
+  const stillApproved=KPI_PROPOSALS.filter(x=>x.resident_id===resId&&x.field_key===fieldKey&&x.quarter==null&&x.status==="approved").length>0;
+  if(!stillApproved){
+    const fieldMap={publication:"bonusPublished",oral:"bonusOral",poster:"bonusPoster",qi:"qiDone",awards:"awardsHonors",volunteering:"volunteering"};
+    if(fieldMap[fieldKey])await saveKpiScore(resId,{[fieldMap[fieldKey]]:false});
+  }
   render();
 }
 function parseProposalNote(note){
@@ -3383,9 +3387,11 @@ function renderKPI(){
   function renderAchievement(fieldKey,icon,label,weight,isApproved){
     const pending=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.field_key===fieldKey&&p.quarter==null&&p.status==="pending");
     const rejected=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.field_key===fieldKey&&p.quarter==null&&p.status==="rejected");
-    const approvedProp=KPI_PROPOSALS.find(p=>p.resident_id===res.id&&p.field_key===fieldKey&&p.quarter==null&&p.status==="approved");
+    const approvedProps=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.field_key===fieldKey&&p.quarter==null&&p.status==="approved");
     const border=isApproved?"#bbf7d0":pending.length?"#fde68a":"#e2e8f0";
     const bg=isApproved?"#f0fdf4":pending.length?"#fefce8":"#f8fafc";
+    const submitLabels={publication:"+ Submit Research Publication",oral:"+ Submit Oral Presentation",poster:"+ Submit Poster Presentation",qi:"+ Submit QI Project",awards:"+ Submit Award / Honor",volunteering:"+ Submit Volunteering Activity"};
+    const submitMoreLabels={publication:"+ Submit Another Publication",oral:"+ Submit Another Oral Presentation",poster:"+ Submit Another Poster Presentation",qi:"+ Submit Another QI Project",awards:"+ Submit Another Award / Honor",volunteering:"+ Submit Another Volunteering Activity"};
     return el("div",{st:{background:bg,borderRadius:"12px",padding:"14px 16px",border:"1px solid "+border}},
       el("div",{cls:"flex-gap",st:{marginBottom:"8px"}},
         el("span",{st:{fontSize:"1.3rem"}},icon),
@@ -3393,15 +3399,17 @@ function renderKPI(){
           el("div",{st:{fontWeight:"700",fontSize:".88rem",color:"#111827"}},label),
           el("div",{cls:"sh"},weight+"% weight")
         ),
-        isApproved?el("div",{cls:"flex-gap",st:{gap:"6px",alignItems:"center"}},
-          el("span",{st:{background:"#dcfce7",color:"#166534",borderRadius:"6px",padding:"2px 8px",fontSize:".74rem",fontWeight:"700"}},"✅ Verified"),
-          isPD()?el("button",{cls:"sbtn ghost",st:{fontSize:".7rem",padding:"2px 8px",color:"#dc2626",borderColor:"#fca5a5"},onClick:()=>revokeKpiApproval(res.id,fieldKey)},"↩ Undo"):null
+        isApproved?el("span",{st:{background:"#dcfce7",color:"#166534",borderRadius:"6px",padding:"2px 8px",fontSize:".74rem",fontWeight:"700"}},
+          approvedProps.length>1?"✅ Verified ("+approvedProps.length+")":"✅ Verified"
         ):
         pending.length?el("span",{st:{background:"#fef3c7",color:"#92400e",borderRadius:"6px",padding:"2px 8px",fontSize:".74rem",fontWeight:"700"}},"⏳ Pending"):
         el("span",{st:{background:"#f1f5f9",color:"#64748b",borderRadius:"6px",padding:"2px 8px",fontSize:".74rem"}},"— Not yet")
       ),
-      // Approved proposal details (visible to all)
-      isApproved&&approvedProp?renderProposalDetails(approvedProp):null,
+      // All approved proposals with individual undo buttons
+      ...approvedProps.map(ap=>el("div",{st:{borderTop:"1px solid #dcfce7",paddingTop:"8px",marginTop:"4px"}},
+        renderProposalDetails(ap),
+        isPD()?el("button",{cls:"sbtn ghost",st:{fontSize:".7rem",padding:"2px 8px",color:"#dc2626",borderColor:"#fca5a5",marginTop:"4px"},onClick:()=>revokeKpiApproval(res.id,fieldKey,ap.id)},"↩ Undo"):null
+      )),
       // PD review panel for pending proposals
       isPD()&&pending.length?el("div",{st:{marginTop:"6px"}},
         ...pending.map(p=>el("div",{st:{background:"#fff",border:"1px solid #fde68a",borderRadius:"8px",padding:"8px 10px",marginBottom:"4px"}},
@@ -3416,12 +3424,12 @@ function renderKPI(){
           )
         ))
       ):null,
-      // Submit button (hidden if already approved or pending)
-      !isApproved&&!pending.length&&(canEdit_||canSetMilestone||isMyRes)?
+      // Submit button — always shown so residents can add multiple achievements
+      (canEdit_||canSetMilestone||isMyRes)?
         el("button",{cls:"sbtn ghost",st:{fontSize:".76rem",marginTop:"6px"},onClick:()=>{
           _kpiPropLive={};set({kpiPropModal:{resId:res.id,fieldKey},kpiPropUploading:false});
-        }},{publication:"+ Submit Research Publication",oral:"+ Submit Oral Presentation",poster:"+ Submit Poster Presentation",qi:"+ Submit QI Project",awards:"+ Submit Award / Honor",volunteering:"+ Submit Volunteering Activity"}[fieldKey]||"+ Submit Achievement"):null,
-      // Show rejection note if last submission was rejected
+        }},(isApproved||approvedProps.length)?(submitMoreLabels[fieldKey]||"+ Submit Another"):(submitLabels[fieldKey]||"+ Submit Achievement")):null,
+      // Show rejection note only if nothing approved or pending
       !isApproved&&!pending.length&&rejected.length?
         el("div",{st:{fontSize:".74rem",color:"#dc2626",marginTop:"4px"}},"⚠ Previous submission was rejected"):null
     );
