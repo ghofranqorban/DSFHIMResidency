@@ -4528,80 +4528,172 @@ function renderLeaveDetail(rid,onBack){
   );
 }
 // ─── COUNSELING ──────────────────────────────────────────────────────────────
-function renderCounseling(){
-  const u=STATE.user;
-  const vr=u?.role==="resident"?RESIDENTS.filter(r=>r.id===u.rid):visRes();
-  const selId=STATE.counselSelRes||(vr[0]?.id);
-  const res=resById(selId)||vr[0];
-  if(!res)return el("div",{cls:"content"},el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),el("p",null,"No residents available"));
-  if(COUNSEL_CACHE[res.id]===undefined){
-    COUNSEL_CACHE[res.id]=null;
-    loadCounsel(res.id);
-  }
-  const records=COUNSEL_CACHE[res.id];
-  const loaded=Array.isArray(records);
-  const activeCount=loaded?records.length:0;
-  const alertLv=activeCount===0?"green":activeCount===1?"yellow":"red";
-  return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
-      el("h2",{st:{fontWeight:"800",color:"#111827"}},"Counseling Records")
-    ),
-    el("div",{cls:"card"},
-      el("div",{cls:"lbl"},"Select Resident"),
-      el("select",{onChange:e=>set({counselSelRes:parseInt(e.target.value),counselShowForm:false,counselEditId:null})},
-        ...vr.map(r=>el("option",{value:r.id,...(r.id===selId?{selected:""}:{})},r.name+" ("+r.level+")"))
-      )
-    ),
-    loaded?el("div",{cls:"alert-"+alertLv},
-      activeCount===0?"✅ No counseling records — all clear.":
-      activeCount===1?"⚠️ 1 counseling record — monitoring required.":
-      "🚨 "+activeCount+" counseling records — SCFHS warning threshold reached. Program director review required."
-    ):null,
-    el("div",{cls:"card"},
-      el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
-        el("span",{cls:"card-title",st:{margin:"0"}},"Counseling Records for "+res.name),
-        canEdit()?el("button",{cls:"sbtn primary",onClick:()=>set({counselShowForm:!STATE.counselShowForm,counselEditId:null})},STATE.counselShowForm?"Cancel":"+ Add Record"):null
-      ),
-      STATE.counselShowForm&&canEdit()?renderCounselForm(res.id,null):null,
-      !loaded?el("p",{cls:"sh"},"Loading…"):
-      records.length===0?el("p",{cls:"sh"},"No counseling records."):
-      el("div",null,
-        ...records.map(rec=>{
-          const locked=!!rec.acknowledged_at;
-          const isRecipient=!!(u.profileId&&rec.recipient_profile_id===u.profileId);
-          return el("div",{st:{border:"1px solid #e2e8f0",borderRadius:"10px",padding:"14px",marginBottom:"10px"}},
-            STATE.counselEditId===rec.id&&canEdit()&&!locked?renderCounselForm(res.id,rec):
-            el("div",null,
-              el("div",{cls:"flex-gap",st:{marginBottom:"8px"}},
-                el("div",{st:{flex:"1"}},
-                  el("div",{cls:"name"},rec.reason),
-                  el("div",{cls:"sub"},fmtDate(rec.date)+" · Issued by: "+profileName(rec.issued_by))
-                ),
-                locked?el("span",{cls:"bdg",st:{background:"#dcfce7",color:"#166534"}},"Countersigned"):
-                       el("span",{cls:"bdg",st:{background:"#fef9c3",color:"#854d0e"}},"Pending"),
-                canEdit()&&!locked?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem"},onClick:()=>set({counselEditId:rec.id,counselShowForm:false})},"Edit"):null,
-                canEdit()?el("button",{cls:"sbtn danger",st:{fontSize:".72rem",padding:"3px 7px"},onClick:async()=>{
+function renderCounselRecordsList(res,records,u){
+  // Shared record list renderer used in both PD drawer and resident view
+  if(!Array.isArray(records))return el("p",{cls:"sh"},"Loading...");
+  if(records.length===0&&!STATE.counselShowForm)return el("p",{cls:"sh",st:{padding:"8px 0"}},"No counseling records.");
+  return el("div",null,
+    ...records.map(rec=>{
+      const locked=!!rec.acknowledged_at;
+      const isRecipient=!!(u.profileId&&rec.recipient_profile_id===u.profileId);
+      const expanded=STATE.counselExpandId===rec.id;
+      return el("div",{st:{borderBottom:"1px solid #f0ece6"}},
+        STATE.counselEditId===rec.id&&canEdit()&&!locked
+          ?el("div",{st:{padding:"12px 0"}},renderCounselForm(res.id,rec))
+          :el("div",null,
+            el("div",{st:{display:"flex",alignItems:"flex-start",gap:"8px",padding:"13px 0",cursor:"pointer"},onClick:()=>set({counselExpandId:expanded?null:rec.id,counselEditId:null})},
+              el("div",{st:{flex:"1"}},
+                el("div",{st:{fontWeight:"600",fontSize:".87rem",color:"#111827"}},rec.reason),
+                el("div",{st:{fontSize:".75rem",color:"#6b7280",marginTop:"3px"}},fmtDate(rec.date)+" · "+profileName(rec.issued_by))
+              ),
+              locked
+                ?el("span",{cls:"bdg",st:{background:"#dcfce7",color:"#166534",flexShrink:"0"}},"Countersigned")
+                :el("span",{cls:"bdg",st:{background:"#fef9c3",color:"#854d0e",flexShrink:"0"}},"Pending"),
+              el("span",{st:{color:"#d1d5db",fontSize:".8rem",marginTop:"2px",flexShrink:"0",transition:"transform .15s",transform:expanded?"rotate(90deg)":"rotate(0deg)"}},"›")
+            ),
+            expanded?el("div",{st:{background:"#fdf8f3",border:"1px solid #e8dfd4",borderRadius:"10px",padding:"13px",marginBottom:"12px"}},
+              el("p",{st:{fontSize:".83rem",color:"#374151",lineHeight:"1.6",marginBottom:"10px"}},rec.details||""),
+              el("div",{st:{fontSize:".75rem",color:"#6b7280",paddingTop:"8px",borderTop:"1px solid #e8dfd4",display:"flex",alignItems:"center",gap:"6px",flexWrap:"wrap"}},
+                locked
+                  ?"✅ Countersigned by "+profileName(rec.acknowledged_by)+" on "+fmtDate((rec.acknowledged_at||"").slice(0,10))
+                  :"⏳ Pending countersignature from "+profileName(rec.recipient_profile_id),
+                el("span",{st:{flex:"1"}}),
+                canEdit()&&!locked?el("button",{cls:"sbtn ghost",st:{fontSize:".75rem",padding:"3px 8px"},onClick:e=>{e.stopPropagation();set({counselEditId:rec.id,counselExpandId:null,counselShowForm:false});}},"Edit"):null,
+                canEdit()?el("button",{cls:"sbtn danger",st:{fontSize:".72rem",padding:"3px 7px"},onClick:async e=>{
+                  e.stopPropagation();
                   if(!confirm("Delete this counseling record?"))return;
                   await sb.from("counseling").delete().eq("id",rec.id);
+                  set({counselExpandId:null});
                   loadCounsel(res.id);
                 }},"Del"):null
               ),
-              el("p",{st:{fontSize:".84rem",color:"#475569",lineHeight:"1.5"}},rec.details||""),
-              el("p",{cls:"sh",st:{marginTop:"6px"}},
-                locked?"✅ Countersigned by "+profileName(rec.acknowledged_by)+" on "+fmtDate((rec.acknowledged_at||"").slice(0,10)):
-                "⏳ Pending countersignature from "+profileName(rec.recipient_profile_id)
-              ),
-              !locked&&isRecipient?el("button",{cls:"sbtn success",st:{marginTop:"8px",fontSize:".78rem"},onClick:async()=>{
+              !locked&&isRecipient?el("button",{cls:"sbtn success",st:{marginTop:"10px",fontSize:".78rem"},onClick:async()=>{
                 await sb.rpc("acknowledge_counseling",{counseling_id:rec.id});
                 await loadCounsel(res.id);
                 loadPendingCounselCount();
               }},"Countersign / Acknowledge"):null
-            )
-          );
-        })
-      )
+            ):null
+          )
+      );
+    })
+  );
+}
+
+function renderCounselingDrawer(){
+  const u=STATE.user;
+  const res=resById(STATE.counselDrawerRes);
+  if(!res)return null;
+  if(COUNSEL_CACHE[res.id]===undefined){COUNSEL_CACHE[res.id]=null;loadCounsel(res.id);}
+  const records=COUNSEL_CACHE[res.id];
+  const cnt=Array.isArray(records)?records.length:null;
+  const alertColor=cnt===null?null:cnt===0?"#166534":cnt===1?"#854d0e":"#dc2626";
+  const alertBg=cnt===null?null:cnt===0?"#dcfce7":cnt===1?"#fef9c3":"#fee2e2";
+  return el("div",{st:{position:"fixed",top:"0",right:"0",width:"400px",maxWidth:"100vw",height:"100vh",background:"#fff",boxShadow:"-4px 0 24px rgba(0,0,0,.13)",zIndex:"200",display:"flex",flexDirection:"column",overflowY:"hidden"}},
+    el("div",{st:{padding:"16px 18px",borderBottom:"1px solid #f0ece6",display:"flex",alignItems:"flex-start",gap:"10px",flexShrink:"0"}},
+      el("div",{st:{flex:"1"}},
+        el("div",{st:{fontWeight:"700",fontSize:"1rem",color:"#111827"}},dname(res.name)),
+        el("div",{st:{fontSize:".76rem",color:"#9ca3af",marginTop:"2px"}},res.level+(FULL_ROTA[res.id]&&FULL_ROTA[res.id][CURRENT_PERIOD]?" · "+FULL_ROTA[res.id][CURRENT_PERIOD]:""))
+      ),
+      canEdit()?el("button",{cls:"sbtn primary",st:{flexShrink:"0",fontSize:".78rem"},onClick:()=>set({counselShowForm:!STATE.counselShowForm,counselEditId:null,counselExpandId:null})},STATE.counselShowForm?"Cancel":"+ Add Record"):null,
+      el("button",{st:{background:"none",border:"none",fontSize:"1.2rem",color:"#9ca3af",cursor:"pointer",padding:"2px 6px",lineHeight:"1",flexShrink:"0"},onClick:()=>set({counselDrawerRes:null,counselShowForm:false,counselEditId:null,counselExpandId:null})},"✕")
+    ),
+    cnt!==null?el("div",{st:{margin:"10px 18px 0",padding:"7px 12px",borderRadius:"8px",fontSize:".8rem",fontWeight:"600",background:alertBg,color:alertColor}},
+      cnt===0?"✅ No counseling records — all clear.":cnt===1?"⚠️ 1 counseling record — monitoring required.":"🚨 "+cnt+" counseling records — SCFHS threshold reached."
+    ):null,
+    el("div",{st:{flex:"1",overflowY:"auto",padding:"0 18px 24px"}},
+      STATE.counselShowForm&&canEdit()?el("div",{st:{paddingTop:"14px"}},renderCounselForm(res.id,null)):null,
+      renderCounselRecordsList(res,records,u)
     )
+  );
+}
+
+function renderCounseling(){
+  const u=STATE.user;
+  // ── Resident view: own records only ──────────────────────────────────────
+  if(u?.role==="resident"){
+    const res=resById(u.rid);
+    if(!res)return el("div",{cls:"content"},el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),el("p",null,"No resident record found."));
+    if(COUNSEL_CACHE[res.id]===undefined){COUNSEL_CACHE[res.id]=null;loadCounsel(res.id);}
+    const records=COUNSEL_CACHE[res.id];
+    const cnt=Array.isArray(records)?records.length:0;
+    const alertLv=cnt===0?"green":cnt===1?"yellow":"red";
+    return el("div",{cls:"content"},
+      el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
+        el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"← Back"),
+        el("h2",{st:{fontWeight:"800",color:"#111827"}},"My Counseling Records")
+      ),
+      Array.isArray(records)?el("div",{cls:"alert-"+alertLv},
+        cnt===0?"✅ No counseling records — all clear.":cnt===1?"⚠️ 1 counseling record — monitoring required.":"🚨 "+cnt+" counseling records — SCFHS warning threshold reached."
+      ):null,
+      el("div",{cls:"card"},
+        renderCounselRecordsList(res,records,u)
+      )
+    );
+  }
+  // ── PD / chief / consultant view: roster table + drawer ──────────────────
+  const vr=sortByLevel(visRes());
+  // Bulk-load counseling for all visible residents
+  const anyUnloaded=vr.some(r=>COUNSEL_CACHE[r.id]===undefined);
+  if(anyUnloaded){
+    vr.forEach(r=>{if(COUNSEL_CACHE[r.id]===undefined)COUNSEL_CACHE[r.id]=null;});
+    sb.from("counseling").select("*").order("date",{ascending:false}).then(({data})=>{
+      const fresh={};
+      (data||[]).forEach(rec=>{if(!fresh[rec.resident_id])fresh[rec.resident_id]=[];fresh[rec.resident_id].push(rec);});
+      vr.forEach(r=>{COUNSEL_CACHE[r.id]=fresh[r.id]||[];});
+      set({});
+    });
+  }
+  const drawerOpen=!!STATE.counselDrawerRes;
+  return el("div",{st:{position:"relative"}},
+    el("div",{cls:"content",st:{transition:"margin-right .3s",marginRight:drawerOpen?"416px":"0"}},
+      el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
+        el("button",{cls:"back-btn",onClick:()=>set({mod:null,counselDrawerRes:null})},"← Back"),
+        el("h2",{st:{fontWeight:"800",color:"#111827"}},"Counseling Records")
+      ),
+      el("div",{cls:"card",st:{padding:"0",overflow:"hidden"}},
+        el("table",{st:{width:"100%",borderCollapse:"collapse"}},
+          el("thead",null,
+            el("tr",null,
+              el("th",{st:{padding:"10px 18px",textAlign:"left",fontSize:".76rem",fontWeight:"600",color:"#6b7280",textTransform:"uppercase",letterSpacing:".04em",background:"#faf8f5",borderBottom:"1px solid #f0ece6"}},"Resident"),
+              el("th",{st:{padding:"10px 18px",textAlign:"left",fontSize:".76rem",fontWeight:"600",color:"#6b7280",textTransform:"uppercase",letterSpacing:".04em",background:"#faf8f5",borderBottom:"1px solid #f0ece6"}},"Level"),
+              el("th",{st:{padding:"10px 18px",textAlign:"center",fontSize:".76rem",fontWeight:"600",color:"#6b7280",textTransform:"uppercase",letterSpacing:".04em",background:"#faf8f5",borderBottom:"1px solid #f0ece6"}},"Counseling"),
+              el("th",{st:{background:"#faf8f5",borderBottom:"1px solid #f0ece6",width:"24px"}})
+            )
+          ),
+          el("tbody",null,
+            ...vr.map(r=>{
+              const cRecs=COUNSEL_CACHE[r.id];
+              const cnt=Array.isArray(cRecs)?cRecs.length:null;
+              const isActive=STATE.counselDrawerRes===r.id;
+              const cntEl=cnt===null
+                ?el("span",{st:{fontSize:".8rem",color:"#9ca3af"}},"…")
+                :cnt===0
+                  ?el("span",{st:{fontSize:".8rem",color:"#9ca3af"}},"— None")
+                  :cnt===1
+                    ?el("span",{st:{display:"inline-flex",alignItems:"center",gap:"4px",fontSize:".8rem",fontWeight:"600",color:"#b45309",background:"#fef9c3",padding:"2px 9px",borderRadius:"12px"}},"⚠️ 1")
+                    :el("span",{st:{display:"inline-flex",alignItems:"center",gap:"4px",fontSize:".8rem",fontWeight:"700",color:"#fff",background:"#dc2626",padding:"2px 9px",borderRadius:"12px"}},"🚨 "+cnt);
+              return el("tr",{
+                st:{cursor:"pointer",background:isActive?"#fff3eb":"",transition:"background .12s",borderBottom:"1px solid #f5f2ef"},
+                onMouseOver:e=>{if(!isActive)e.currentTarget.style.background="#fef9f5";},
+                onMouseOut:e=>{if(!isActive)e.currentTarget.style.background="";},
+                onClick:()=>set({counselDrawerRes:isActive?null:r.id,counselShowForm:false,counselEditId:null,counselExpandId:null})
+              },
+                el("td",{st:{padding:"13px 18px"}},
+                  el("div",{st:{fontWeight:"600",color:"#111827",fontSize:".87rem"}},dname(r.name)),
+                  el("div",{st:{fontSize:".75rem",color:"#9ca3af",marginTop:"2px"}},FULL_ROTA[r.id]&&FULL_ROTA[r.id][CURRENT_PERIOD]?FULL_ROTA[r.id][CURRENT_PERIOD]:"")
+                ),
+                el("td",{st:{padding:"13px 18px"}},
+                  el("span",{st:{display:"inline-block",padding:"2px 9px",borderRadius:"20px",fontSize:".72rem",fontWeight:"700",background:"#f0e6d8",color:"#92501a"}},r.level)
+                ),
+                el("td",{st:{padding:"13px 18px",textAlign:"center"}},cntEl),
+                el("td",{st:{padding:"13px 18px",textAlign:"right",color:isActive?"#c96a4a":"#d1d5db",fontSize:".8rem",transition:"transform .2s",transform:isActive?"rotate(90deg)":"rotate(0deg)"}},"›")
+              );
+            })
+          )
+        )
+      )
+    ),
+    drawerOpen?renderCounselingDrawer():null
   );
 }
 function renderCounselForm(rid,existing){
