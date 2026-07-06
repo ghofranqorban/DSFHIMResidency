@@ -83,13 +83,14 @@ body{background:#f5ede0;color:#1c1410;min-height:100vh;}
 /* ── Drop zone ── */
 .drop-zone{border:2px dashed #ede5d8;border-radius:12px;padding:24px;text-align:center;color:#9c8070;background:#faf6f1;}
 /* ── Tables ── */
-.tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid #ede5d8;}
+.tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid #ede5d8;position:relative;}
 table{border-collapse:collapse;width:100%;font-size:.84rem;}
-th{background:#faf6f1;color:#7a6555;font-weight:700;padding:10px 12px;text-align:left;border-bottom:2px solid #ede5d8;white-space:nowrap;font-size:.76rem;letter-spacing:.04em;text-transform:uppercase;}
+th{background:#faf6f1;color:#7a6555;font-weight:700;padding:10px 12px;text-align:left;border-bottom:2px solid #ede5d8;white-space:nowrap;font-size:.76rem;letter-spacing:.04em;text-transform:uppercase;position:sticky;top:0;z-index:3;}
 td{padding:9px 12px;border-bottom:1px solid #faf6f1;vertical-align:middle;}
 tr:hover td{background:#fdf9f5;}
 .sticky-col{position:sticky;left:0;background:#fff;z-index:2;border-right:2px solid #ede5d8;}
 tr:hover .sticky-col{background:#fdf9f5;}
+.lvl-hdr-cell{position:sticky;left:0;background:#f8fafc;z-index:2;}
 .sched-tbl td,.sched-tbl th{border-right:1px solid #ede5d8;}
 .sched-tbl .wk-cell{background:#faf6f1;font-weight:700;color:#1c1410;text-align:center;vertical-align:middle;border-right:2px solid #ede5d8;white-space:nowrap;}
 .sched-tbl tr td{white-space:normal;}
@@ -2343,7 +2344,7 @@ function renderRotaTable(resOverride){
             const lvRes=vr.filter(r=>r.level===lv);
             if(!lvRes.length)return[];
             return[
-              el("tr",null,el("td",{colspan:"14",st:{background:"#f8fafc",fontWeight:"700",fontSize:".75rem",color:"#94a3b8",letterSpacing:".05em",textTransform:"uppercase",padding:"8px 10px"}},lv+" — "+lvRes.length+" residents")),
+              el("tr",null,el("td",{colspan:"14",cls:"lvl-hdr-cell",st:{fontWeight:"700",fontSize:".75rem",color:"#94a3b8",letterSpacing:".05em",textTransform:"uppercase",padding:"8px 10px"}},lv+" — "+lvRes.length+" residents")),
               ...lvRes.map(r=>{const isSelf=STATE.user?.rid&&r.id===STATE.user.rid;return el("tr",{st:{background:isSelf?"#fff8f3":""}},
                 el("td",{cls:"sticky-col",st:{background:isSelf?"#fff8f3":""}},
                   el("div",{cls:"flex-gap"},
