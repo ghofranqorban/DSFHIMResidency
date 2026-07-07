@@ -6540,7 +6540,7 @@ function renderKPIExecutive(){
         transform:"rotate(-90 "+(sz/2)+" "+(sz/2)+")"})
     );
   }
-  function sc(v){return v>=80?"#B8860B":v>=60?"#CD7F32":v>=30?"#9ca3af":"#DC2626";}
+  function sc(v){return v>=80?"#B8860B":v>=60?"#C0C0C0":v>=30?"#CD7F32":"#DC2626";}
   function ini(name){const n=(name||"").replace(/^Dr\.\s*/i,"");return n.split(" ").slice(0,2).map(w=>w[0]||"").join("").toUpperCase();}
   function dname(name){return(name||"").replace(/^Dr\.\s*/i,"");}
   function sbar(label,val,max,color){
