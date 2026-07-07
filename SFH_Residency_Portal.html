@@ -324,61 +324,39 @@ label{display:block;font-size:.8rem;font-weight:600;color:#4a3828;margin-bottom:
 .cdb-pending-card{background:#fff;border-radius:12px;padding:12px 20px;box-shadow:0 2px 12px rgba(61,43,31,.07);display:flex;align-items:center;gap:10px;opacity:.78;filter:blur(.6px);border:1.5px solid #f0e8d8;transition:opacity .2s;}
 .cdb-pending-card:hover{opacity:.9;filter:blur(.3px);}
 @media(max-width:600px){.star-cards-row{grid-template-columns:1fr!important;}.stars-banner{padding:18px 16px!important;}.cdb-timer{gap:5px;}.cdb-block{min-width:54px;padding:10px 10px 8px;}.cdb-num{font-size:26px;}}
+
+/* ── Toast notifications ── */
+@keyframes toastIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
+@keyframes toastOut{from{opacity:1;}to{opacity:0;transform:translateX(20px);}}
+/* ── Loading screen ── */
+.loading-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#e0d4c4 0%,#ede5d8 55%,#d8cbb8 100%);}
+.loading-spinner{width:52px;height:52px;border:4px solid rgba(201,106,74,.2);border-top-color:#c96a4a;border-radius:50%;animation:spin .85s linear infinite;margin-bottom:22px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-text{font-family:'Playfair Display',Georgia,serif;font-size:1.15rem;color:#3d2010;font-weight:700;}
+.loading-sub{font-size:.8rem;color:#9c8070;margin-top:6px;}
+/* ── Notification bell & panel ── */
+.notif-bell-wrap{position:relative;display:inline-flex;cursor:pointer;margin-left:auto;padding:2px 4px;border-radius:8px;transition:background .12s;}
+.notif-bell-wrap:hover{background:rgba(201,106,74,.12);}
+.notif-badge{position:absolute;top:-4px;right:-4px;background:#b52040;color:#fff;font-size:.58rem;font-weight:800;width:15px;height:15px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.notif-panel{position:fixed;top:0;right:0;bottom:0;width:340px;background:#fff;box-shadow:-4px 0 28px rgba(26,20,16,.15);z-index:800;display:flex;flex-direction:column;border-left:1px solid #ede5d8;}
+.notif-panel-header{padding:16px;border-bottom:1px solid #ede5d8;display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.notif-panel-title{font-weight:800;font-size:.92rem;color:#1c1410;flex:1;}
+.notif-item{padding:12px 16px;border-bottom:1px solid #faf6f1;cursor:pointer;transition:background .1s;}
+.notif-item:hover{background:#fdf9f5;}
+.notif-item.unread{background:#fff8f5;border-left:3px solid #c96a4a;}
+.notif-msg{font-size:.84rem;color:#1c1410;line-height:1.4;}
+.notif-time{font-size:.71rem;color:#9c8070;margin-top:3px;}
+.notif-empty{padding:36px 16px;text-align:center;color:#9c8070;font-size:.88rem;}
+@media(max-width:600px){.notif-panel{width:100%;}}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script>
 // ─── DATA ────────────────────────────────────────────────────────────────────
-let RESIDENTS=[
-  {id:1,name:"Dr. Harbi",user:"harbi",level:"R4",ph:"HA"},
-  {id:2,name:"Dr. Joharji",user:"joharji",level:"R4",ph:"JO"},
-  {id:3,name:"Dr. Bashanfar",user:"bashanfar",level:"R4",ph:"BA"},
-  {id:4,name:"Dr. Omar B",user:"omarb",level:"R4",ph:"OB"},
-  {id:5,name:"Dr. Zahra",user:"zahra",level:"R4",ph:"ZA"},
-  {id:6,name:"Dr. Yara",user:"yara",level:"R4",ph:"YA"},
-  {id:7,name:"Dr. Rafal",user:"rafal",level:"R4",ph:"RA"},
-  {id:8,name:"Dr. Abdulmoty",user:"abdulmoty",level:"R3",ph:"AB"},
-  {id:9,name:"Dr. Alhussain",user:"alhussain",level:"R3",ph:"AL"},
-  {id:10,name:"Dr. Omar H",user:"omarh",level:"R3",ph:"OH"},
-  {id:11,name:"Dr. Rowidh",user:"rowidh",level:"R3",ph:"RO"},
-  {id:12,name:"Dr. Nawaf",user:"nawaf",level:"R3",ph:"NA"},
-  {id:13,name:"Dr. Mansour",user:"mansour",level:"R3",ph:"MA"},
-  {id:14,name:"Dr. Raghda",user:"raghda",level:"R3",ph:"RA"},
-  {id:15,name:"Dr. Sarah",user:"sarah",level:"R3",ph:"SA"},
-  {id:16,name:"Dr. Rasha",user:"rasha",level:"R3",ph:"RA"},
-  {id:17,name:"Dr. Bayazeed",user:"bayazeed",level:"R2",ph:"BA"},
-  {id:18,name:"Dr. Nuha",user:"nuha",level:"R2",ph:"NU"},
-  {id:19,name:"Dr. Hamza",user:"hamza",level:"R2",ph:"HA"},
-  {id:20,name:"Dr. Bajubair",user:"bajubair",level:"R2",ph:"BA"},
-  {id:21,name:"Dr. Farid",user:"farid",level:"R2",ph:"FA"},
-  {id:22,name:"Dr. Deema",user:"deema",level:"R2",ph:"DE"},
-  {id:23,name:"Dr. Samah",user:"samah",level:"R2",ph:"SA"},
-  {id:24,name:"Dr. Khalid",user:"khalid",level:"R2",ph:"KH"},
-  {id:25,name:"Dr. Bakur",user:"bakur",level:"R2",ph:"BA"},
-  {id:26,name:"Dr. Shifa",user:"shifa",level:"R2",ph:"SH"},
-  {id:27,name:"Dr. Waad",user:"waad",level:"R2",ph:"WA"},
-  {id:28,name:"Dr. Batool",user:"batool",level:"R1",ph:"BA"},
-  {id:29,name:"Dr. Ghadeer",user:"ghadeer",level:"R1",ph:"GH"},
-  {id:30,name:"Dr. Ahmed",user:"ahmed",level:"R1",ph:"AH"},
-  {id:31,name:"Dr. Ibtihal",user:"ibtihal",level:"R1",ph:"IB"},
-  {id:32,name:"Dr. Abdulmajeed",user:"abdulmajee",level:"R1",ph:"AB"},
-  {id:33,name:"Dr. Safa",user:"safa",level:"R1",ph:"SA"},
-  {id:34,name:"Dr. Lamar",user:"lamar",level:"R1",ph:"LA"},
-  {id:35,name:"Dr. Norah",user:"norah",level:"R1",ph:"NO"},
-  {id:36,name:"Dr. Sumiah",user:"sumiah",level:"R1",ph:"SU"},
-  {id:37,name:"Dr. Ghufran",user:"ghufran",level:"R1",ph:"GH"},
-  {id:38,name:"Dr. Abdulrahim",user:"abdulrahim",level:"R1",ph:"AB"},
-  {id:39,name:"Dr. Moh. Khalaf",user:"mohkhalaf",level:"R1",ph:"MK"},
-  {id:40,name:"Dr. Boshra",user:"boshra",level:"R1",ph:"BO"}
-];
-let CONSULTANTS=[
-  {id:101,name:"Dr. Al-Ansari",user:"consultant1"},
-  {id:102,name:"Dr. Hamdan",user:"consultant2"},
-  {id:103,name:"Dr. Saleh",user:"consultant3"},
-  {id:104,name:"Dr. Zayed",user:"consultant4"}
-];
-let MENTORS={1:101,2:101,3:101,4:101,5:101,6:101,7:101,8:101,9:101,10:101,11:102,12:102,13:102,14:102,15:102,16:102,17:102,18:102,19:102,20:102,21:103,22:103,23:103,24:103,25:103,26:103,27:103,28:103,29:103,30:103,31:104,32:104,33:104,34:104,35:104,36:104,37:104,38:104,39:104,40:104};
+let RESIDENTS=[];
+let CONSULTANTS=[];
+let MENTORS={};
 const ROTA_PERIODS=["28/9-25/10","26/10-22/11","23/11-20/12","21/12-17/1","18/1-14/2","15/2-14/3","15/3-11/4","12/4-9/5","10/5-6/6","7/6-4/7","5/7-1/8","2/8-29/8","30/8-26/9"];
 // Blocks/academic year are computed from today's date instead of hand-updated each month,
 // so the app never falls out of sync with the calendar (each block = 4 fixed weeks;
@@ -422,7 +400,7 @@ const LC={R1:"#4a6a8a",R2:"#5a8a6a",R3:"#c9913a",R4:"#8a4a2a"};
 const ROT_COLORS={"GIM/CTU":{bg:"#ede9fe",tx:"#5b21b6"},"Night Duty":{bg:"#fef2f2",tx:"#991b1b"},"ICU":{bg:"#dbeafe",tx:"#1e40af"},"Cardiology":{bg:"#fce7f3",tx:"#9d174d"},"Pulmonology":{bg:"#e0f2fe",tx:"#0c4a6e"},"Nephrology":{bg:"#d1fae5",tx:"#065f46"},"Gastroenterology":{bg:"#fef3c7",tx:"#92400e"},"Endocrinology":{bg:"#f0fdf4",tx:"#166534"},"Hematology":{bg:"#ffe4e6",tx:"#9f1239"},"Rheumatology":{bg:"#f5f3ff",tx:"#4c1d95"},"Neurology":{bg:"#fdf4ff",tx:"#7e22ce"},"Infectious Disease":{bg:"#fff7ed",tx:"#c2410c"},"Emergency Medicine":{bg:"#fee2e2",tx:"#7f1d1d"},"Oncology":{bg:"#f0f9ff",tx:"#0369a1"},"Outpatient Clinic":{bg:"#f8fafc",tx:"#475569"},"Elective":{bg:"#f0fdf4",tx:"#166534"},"Annual Leave":{bg:"#fefce8",tx:"#854d0e"},"Maternity Leave":{bg:"#fdf4ff",tx:"#701a75"},"Medical Consult":{bg:"#eff6ff",tx:"#1e40af"}};
 const ROT_ABBR={"GIM/CTU":"CTU","Night Duty":"Night","ICU":"ICU","Cardiology":"Cardio","Pulmonology":"Pulmo","Nephrology":"Nephro","Gastroenterology":"Gastro","Endocrinology":"Endo","Hematology":"Hema","Rheumatology":"Rheuma","Neurology":"Neuro","Infectious Disease":"ID","Emergency Medicine":"ER","Oncology":"Onco","Outpatient Clinic":"Clinic","Elective":"Elect","Annual Leave":"Leave","Maternity Leave":"Matern","Medical Consult":"M.Cons"};
 const ALL_ROTATIONS=["GIM/CTU","Night Duty","ICU","Cardiology","Pulmonology","Nephrology","Gastroenterology","Endocrinology","Hematology","Rheumatology","Neurology","Infectious Disease","Emergency Medicine","Oncology","Outpatient Clinic","Elective","Annual Leave","Maternity Leave","Medical Consult"];
-let ROT_H={1:["Endocrinology","GIM/CTU","Hematology","ICU","Infectious Disease","Rheumatology"],2:["Endocrinology","GIM/CTU","Gastroenterology","Hematology","Pulmonology","Rheumatology"],3:["Cardiology","Endocrinology","GIM/CTU","Nephrology","Oncology","Pulmonology"],4:["Cardiology","Endocrinology","GIM/CTU","Gastroenterology","Pulmonology","Rheumatology"],5:["Endocrinology","GIM/CTU","Gastroenterology","ICU","Pulmonology","Rheumatology"],6:["Endocrinology","Infectious Disease","Nephrology","Pulmonology"],7:["GIM/CTU","Gastroenterology","Nephrology","Pulmonology","Rheumatology"],8:["Cardiology","Emergency Medicine","GIM/CTU","Hematology","ICU","Nephrology","Neurology","Oncology"],9:["Endocrinology","GIM/CTU","Gastroenterology","Infectious Disease","Nephrology","Oncology","Rheumatology"],10:["Cardiology","Emergency Medicine","GIM/CTU","Hematology","ICU","Infectious Disease","Nephrology","Pulmonology"],11:["Cardiology","Emergency Medicine","GIM/CTU","Gastroenterology","ICU","Infectious Disease","Oncology","Rheumatology"],12:["Cardiology","Emergency Medicine","GIM/CTU","Gastroenterology","ICU","Infectious Disease","Oncology","Pulmonology"],13:["GIM/CTU","Hematology","ICU","Infectious Disease","Neurology","Pulmonology","Rheumatology"],14:["Cardiology","Emergency Medicine","GIM/CTU","Gastroenterology","ICU","Infectious Disease","Nephrology"],15:["Cardiology","Emergency Medicine","GIM/CTU","Hematology","ICU","Nephrology","Oncology","Pulmonology"],16:["Cardiology","Emergency Medicine","GIM/CTU","Hematology","ICU","Infectious Disease","Neurology","Oncology"],17:["Cardiology","Endocrinology","GIM/CTU","Gastroenterology","ICU"],18:["Cardiology","GIM/CTU","Gastroenterology","ICU","Pulmonology"],19:["Cardiology","Endocrinology","GIM/CTU","ICU","Nephrology"],20:["Emergency Medicine","GIM/CTU","Infectious Disease","Nephrology","Neurology"],21:["Cardiology","Endocrinology","GIM/CTU","ICU","Infectious Disease","Nephrology"],22:["Cardiology","Endocrinology","GIM/CTU","Gastroenterology","ICU","Infectious Disease","Neurology"],23:["Endocrinology","GIM/CTU","Gastroenterology","ICU","Infectious Disease","Nephrology"],24:["GIM/CTU","Gastroenterology","ICU","Infectious Disease","Nephrology","Pulmonology"],25:["Cardiology","Endocrinology","GIM/CTU","Gastroenterology","Neurology"],26:["Cardiology","GIM/CTU","Infectious Disease","Nephrology","Pulmonology"],27:["Cardiology","Endocrinology","GIM/CTU","ICU","Infectious Disease","Nephrology","Neurology"],28:["GIM/CTU","Gastroenterology","Infectious Disease","Nephrology","Neurology"],29:["GIM/CTU","Gastroenterology","Infectious Disease","Nephrology","Neurology"],30:["Cardiology","GIM/CTU","Gastroenterology","Infectious Disease","Nephrology"],31:["GIM/CTU","Gastroenterology","Infectious Disease","Nephrology"],32:["Cardiology","GIM/CTU","Infectious Disease","Nephrology"],33:["Cardiology","GIM/CTU","Gastroenterology","Infectious Disease","Nephrology"],34:["Cardiology","GIM/CTU","Gastroenterology","Infectious Disease","Nephrology"],35:["Cardiology","GIM/CTU","Gastroenterology","Infectious Disease","Nephrology"],36:["Cardiology","GIM/CTU","Gastroenterology","Infectious Disease","Nephrology"],37:["Cardiology","GIM/CTU","Gastroenterology","Infectious Disease","Nephrology","Neurology"],38:["GIM/CTU","Gastroenterology","Nephrology"],39:["Cardiology","GIM/CTU","Gastroenterology","Infectious Disease","Nephrology"],40:["GIM/CTU","Gastroenterology","Infectious Disease","Nephrology"]};
+let ROT_H={};
 // ─── ROTA EXCEL IMPORT — parsing/classification helpers ─────────────────────
 // Pure functions (no DOM, no Supabase) so they can be unit-tested directly.
 // Expected sheet layout (matches the committee's distributed rota spreadsheet):
@@ -602,10 +580,14 @@ async function loadSchedules(){
 }
 async function markMMAttendance(sessionId,residentId,status){
   await sb.from("mm_attendance").upsert({session_id:sessionId,resident_id:residentId,status,marked_by:STATE.user.profileId},{onConflict:"session_id,resident_id"});
+  const s=MM_SESSION_BY_ID[sessionId];const res=resById(residentId);
+  logActivity("att_mm","mm_attendance",sessionId,{resident_name:res?.name||residentId,status,session_date:s?.session_date||""});
   await loadSchedules();
 }
 async function markTeachAttendance(sessionId,residentId,status){
   await sb.from("teaching_attendance").upsert({session_id:sessionId,resident_id:residentId,status,marked_by:STATE.user.profileId},{onConflict:"session_id,resident_id"});
+  const s=TEACH_SESSION_BY_ID[sessionId];const res=resById(residentId);
+  logActivity("att_teach","teaching_attendance",sessionId,{resident_name:res?.name||residentId,status,session_date:s?.session_date||""});
   await loadSchedules();
 }
 // ─── ROTA (DB-backed: table `rotations`) ─────────────────────────────────────
@@ -638,7 +620,7 @@ async function saveRotaCells(entries){
     leave_weeks:e.leaveWeeks||0,leave_position:e.leavePosition||"none"
   }));
   const{error}=await sb.from("rotations").upsert(rows,{onConflict:"resident_id,academic_year,block_number"});
-  if(error){alert("Could not save rota: "+error.message);return false;}
+  if(error){showToast("Could not save rota: "+error.message);return false;}
   await loadRotations();
   return true;
 }
@@ -742,44 +724,55 @@ async function submitKpiProposal(resId,fieldKey,quarter,note){
   const isPdRole_=isPD();
   const prop={resident_id:resId,academic_year:CURRENT_ACADEMIC_YEAR,field_key:fieldKey,quarter:quarter||null,note:note||null,proposed_by:u.profileId,proposed_by_role:u.role,status:isPdRole_?"approved":"pending",reviewed_by:isPdRole_?u.profileId:null,reviewed_at:isPdRole_?new Date().toISOString():null};
   const{data,error}=await sb.from("kpi_proposals").insert(prop).select().single();
-  if(error){alert("Could not submit: "+error.message);return;}
+  if(error){showToast("Could not submit: "+error.message);return;}
   KPI_PROPOSALS.unshift(data);
+  const res=resById(resId);
   if(isPdRole_){
-    // also update kpi_scores directly so calcKPI reflects it
     const fieldMap={publication:"bonusPublished",oral:"bonusOral",poster:"bonusPoster",qi:"qiDone",awards:"awardsHonors",volunteering:"volunteering"};
     if(fieldMap[fieldKey])await saveKpiScore(resId,{[fieldMap[fieldKey]]:true});
+    logActivity("kpi_approved","kpi_proposals",resId,{resident_name:res?.name||resId,field_key:fieldKey});
+  } else {
+    getPdProfileIds().forEach(pid=>createNotification(pid,"kpi_proposal","📋 KPI submission from "+(res?.name||"a resident")+": "+fieldKey+" — pending review","kpi",String(resId)));
+    logActivity("kpi_submit","kpi_proposals",resId,{resident_name:res?.name||resId,field_key:fieldKey});
   }
   render();
 }
 async function reviewProposal(proposalId,approve){
   const u=STATE.user;
   const{error}=await sb.from("kpi_proposals").update({status:approve?"approved":"rejected",reviewed_by:u.profileId,reviewed_at:new Date().toISOString()}).eq("id",proposalId);
-  if(error){alert("Error: "+error.message);return;}
+  if(error){showToast("Error: "+error.message);return;}
   const p=KPI_PROPOSALS.find(x=>x.id===proposalId);
   if(p){
     p.status=approve?"approved":"rejected";
+    const res=resById(p.resident_id);
+    const resProfile=Object.values(PROFILE_BY_ID||{}).find(pr=>pr.resident_id===p.resident_id);
     if(approve){
       const fieldMap={publication:"bonusPublished",oral:"bonusOral",poster:"bonusPoster",qi:"qiDone",awards:"awardsHonors",volunteering:"volunteering"};
       if(fieldMap[p.field_key])await saveKpiScore(p.resident_id,{[fieldMap[p.field_key]]:true});
+      if(resProfile)createNotification(resProfile.id,"kpi_approved","🏆 Your "+p.field_key+" submission was verified!","kpi",String(p.resident_id));
+      logActivity("kpi_approved","kpi_proposals",p.resident_id,{resident_name:res?.name||p.resident_id,field_key:p.field_key});
+    } else {
+      if(resProfile)createNotification(resProfile.id,"kpi_rejected","Your "+p.field_key+" submission was not approved. Contact your PD for details.","kpi",String(p.resident_id));
+      logActivity("kpi_rejected","kpi_proposals",p.resident_id,{resident_name:res?.name||p.resident_id,field_key:p.field_key});
     }
   }
   render();
 }
 async function revokeKpiApproval(resId,fieldKey,proposalId){
-  if(!confirm("Remove verification for this achievement?"))return;
-  const p=KPI_PROPOSALS.find(x=>x.id===proposalId);
-  if(p){
-    const{error}=await sb.from("kpi_proposals").update({status:"rejected",reviewed_by:STATE.user.profileId,reviewed_at:new Date().toISOString()}).eq("id",p.id);
-    if(error){alert("Error: "+error.message);return;}
-    p.status="rejected";
-  }
-  // Only flip kpi_scores to false if no other approved proposals remain for this field
-  const stillApproved=KPI_PROPOSALS.filter(x=>x.resident_id===resId&&x.field_key===fieldKey&&x.quarter==null&&x.status==="approved").length>0;
-  if(!stillApproved){
-    const fieldMap={publication:"bonusPublished",oral:"bonusOral",poster:"bonusPoster",qi:"qiDone",awards:"awardsHonors",volunteering:"volunteering"};
-    if(fieldMap[fieldKey])await saveKpiScore(resId,{[fieldMap[fieldKey]]:false});
-  }
-  render();
+  showConfirm("Remove verification for this achievement? This action will mark it as unverified.",async()=>{
+    const p=KPI_PROPOSALS.find(x=>x.id===proposalId);
+    if(p){
+      const{error}=await sb.from("kpi_proposals").update({status:"rejected",reviewed_by:STATE.user.profileId,reviewed_at:new Date().toISOString()}).eq("id",p.id);
+      if(error){showToast("Error: "+error.message);return;}
+      p.status="rejected";
+    }
+    const stillApproved=KPI_PROPOSALS.filter(x=>x.resident_id===resId&&x.field_key===fieldKey&&x.quarter==null&&x.status==="approved").length>0;
+    if(!stillApproved){
+      const fieldMap={publication:"bonusPublished",oral:"bonusOral",poster:"bonusPoster",qi:"qiDone",awards:"awardsHonors",volunteering:"volunteering"};
+      if(fieldMap[fieldKey])await saveKpiScore(resId,{[fieldMap[fieldKey]]:false});
+    }
+    render();
+  },"Remove Verification","danger");
 }
 function parseProposalNote(note){
   if(!note)return{};
@@ -789,7 +782,7 @@ async function uploadKpiFile(file,resId,fieldKey){
   const ext=file.name.split(".").pop();
   const path=resId+"/"+fieldKey+"_"+Date.now()+"."+ext;
   const{data,error}=await sb.storage.from("kpi-evidence").upload(path,file,{upsert:true});
-  if(error){alert("Upload failed: "+error.message);return null;}
+  if(error){showToast("Upload failed: "+error.message);return null;}
   const{data:urlData}=sb.storage.from("kpi-evidence").getPublicUrl(path);
   return urlData.publicUrl;
 }
@@ -849,7 +842,7 @@ function renderKpiProposalModal(){
 
   async function handleSubmit(){
     const missing=requiredKeys.filter(k=>!(_kpiPropLive[k]||"").trim());
-    if(missing.length){alert("Please fill in all required fields (marked with *).");return;}
+    if(missing.length){showToast("Please fill in all required fields (marked with *).","warning");return;}
     set({kpiPropUploading:true});
     let fileUrl=null;
     if(_kpiPropLive.file_file){
@@ -905,7 +898,7 @@ async function loadLeaveRecords(){
 }
 async function addManualLeave(residentId,from,to,days,comment){
   const{error}=await sb.from("leave_records").insert({resident_id:residentId,type:"manual",source:"manual",from_date:from,to_date:to,days,comment,approved:true,created_by:STATE.user?STATE.user.profileId:null});
-  if(error){alert("Could not save leave: "+error.message);return;}
+  if(error){showToast("Could not save leave: "+error.message);return;}
   await loadLeaveRecords();
 }
 async function deleteLeaveRecord(id){
@@ -914,25 +907,41 @@ async function deleteLeaveRecord(id){
 }
 async function addAbsence(residentId,date,days,comment){
   const{error}=await sb.from("leave_records").insert({resident_id:residentId,type:"unapproved_absence",source:"manual",from_date:date,days,comment,approved:false,created_by:STATE.user?STATE.user.profileId:null});
-  if(error){alert("Could not save absence: "+error.message);return;}
+  if(error){showToast("Could not save absence: "+error.message);return;}
   await loadLeaveRecords();
 }
 async function submitLeaveRequest(residentId,from,to,days,leaveType,reason){
   const comment=(leaveType==="edu"?"[EDU] ":"")+reason;
   const{error}=await sb.from("leave_records").insert({resident_id:residentId,type:"leave_request",source:"resident",from_date:from,to_date:to,days,comment,approved:false,created_by:STATE.user?.profileId||null});
-  if(error){alert("Could not submit request: "+error.message);return;}
+  if(error){showToast("Could not submit request: "+error.message);return;}
+  const res=resById(residentId);
+  getPdProfileIds().forEach(pid=>createNotification(pid,"leave_request","📅 Leave request from "+(res?.name||"a resident")+": "+from+" → "+to+" ("+days+"d)","leave",null));
+  logActivity("leave_request","leave_records",residentId,{resident_name:res?.name||residentId,from,to,days});
+  showToast("Leave request submitted successfully","success");
   await loadLeaveRecords();
 }
 async function approveLeaveRequest(reqId,residentId,from,to,days,comment){
   await sb.from("leave_records").delete().eq("id",reqId);
   const{error}=await sb.from("leave_records").insert({resident_id:residentId,type:"manual",source:"request",from_date:from,to_date:to,days,comment,approved:true,created_by:STATE.user?.profileId||null});
-  if(error){alert("Could not approve: "+error.message);return;}
+  if(error){showToast("Could not approve: "+error.message);return;}
+  const res=resById(residentId);
+  const resProfile=Object.values(PROFILE_BY_ID||{}).find(p=>p.resident_id===residentId);
+  if(resProfile)createNotification(resProfile.id,"leave_approved","✅ Your leave request was approved: "+from+" → "+to+" ("+days+"d)","leave",null);
+  logActivity("leave_approved","leave_records",residentId,{resident_name:res?.name||residentId,from,to,days});
+  showToast("Leave approved for "+(res?.name||"resident"),"success");
   await loadLeaveRecords();
 }
 async function rejectLeaveRequest(reqId,origComment,note){
   const newComment=origComment+(note?"\n[Rejection note: "+note+"]":"");
   const{error}=await sb.from("leave_records").update({type:"leave_rejected",comment:newComment}).eq("id",reqId);
-  if(error){alert("Could not reject: "+error.message);return;}
+  if(error){showToast("Could not reject: "+error.message);return;}
+  const rec=Object.values(LEAVE_DATA).flatMap(ld=>ld.requests||[]).find(r=>r.id===reqId);
+  if(rec){
+    const resProfile=Object.values(PROFILE_BY_ID||{}).find(p=>p.resident_id===rec.residentId);
+    if(resProfile)createNotification(resProfile.id,"leave_rejected","❌ Your leave request was not approved"+(note?" — "+note:""),"leave",null);
+    logActivity("leave_rejected","leave_records",reqId,{message:note||"rejected"});
+  }
+  showToast("Leave request rejected","info");
   await loadLeaveRecords();
 }
 // ─── CALENDAR ICS ────────────────────────────────────────────────────────────
@@ -1016,9 +1025,13 @@ function downloadRotationICS(resId){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+let NOTIFICATIONS=[];
+let NOTIF_UNREAD=0;
+let ACTIVITY_LOG_DATA=[];
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let STATE={
   user:null,mod:null,
+  loading:false,showNotifPanel:false,
   searchQ:"",showBroadcast:false,
   rotaTab:"block",rotaPeriod:CURRENT_PERIOD,rotFilter:"all",rotaEdit:false,rotaTimeRes:1,
   adminTab:"residents",adminProfile:null,adminResTab:"info",adminResFilter:"all",
@@ -1088,7 +1101,7 @@ async function setChiefRole(rid,role){
     }
   }
   const{error}=await sb.from("residents").update({chief_role:role||null}).eq("id",rid);
-  if(error){alert("Could not save chief role: "+error.message);return;}
+  if(error){showToast("Could not save chief role: "+error.message);return;}
   await loadCoreData();
 }
 function avEl(res){return el("div",{cls:"av",st:{background:LC[res.level]||"#94a3b8"}},res.ph);}
@@ -1183,10 +1196,10 @@ function announcementsForResident(resId){
 async function saveAnnouncement(ann,id){
   if(id){
     const{error}=await sb.from("announcements").update(ann).eq("id",id);
-    if(error){alert("Could not save: "+error.message);return;}
+    if(error){showToast("Could not save: "+error.message);return;}
   }else{
     const{error}=await sb.from("announcements").insert({...ann,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null});
-    if(error){alert("Could not save: "+error.message);return;}
+    if(error){showToast("Could not save: "+error.message);return;}
   }
   await loadAnnouncements();
 }
@@ -1214,20 +1227,20 @@ async function brCastVote(seniorId,juniorId){
     voted_senior_id:seniorId?parseInt(seniorId,10):null,
     voted_junior_id:juniorId?parseInt(juniorId,10):null
   },{onConflict:"profile_id,academic_year,quarter"});
-  if(error){alert("Could not save vote: "+error.message);return;}
+  if(error){showToast("Could not save vote: "+error.message);return;}
   await loadBestResident();
 }
 async function brOpenVoting(deadline){
   const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
   const row={academic_year:ay,quarter:q,voting_open:true,voting_deadline:deadline||null,announced:false};
   const{error}=await sb.from("best_resident_winners").upsert(row,{onConflict:"academic_year,quarter"});
-  if(error){alert("Error: "+error.message);return;}
+  if(error){showToast("Error: "+error.message);return;}
   await loadBestResident();
 }
 async function brCloseVoting(){
   const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
   const{error}=await sb.from("best_resident_winners").upsert({academic_year:ay,quarter:q,voting_open:false},{onConflict:"academic_year,quarter"});
-  if(error){alert("Error: "+error.message);return;}
+  if(error){showToast("Error: "+error.message);return;}
   await loadBestResident();
 }
 async function brAnnounceWinners(seniorId,juniorId,seniorScore,juniorScore){
@@ -1239,7 +1252,7 @@ async function brAnnounceWinners(seniorId,juniorId,seniorScore,juniorScore){
     senior_score:seniorScore,junior_score:juniorScore,
     announced:true,announced_at:new Date().toISOString()
   },{onConflict:"academic_year,quarter"});
-  if(error){alert("Error announcing: "+error.message);return;}
+  if(error){showToast("Error announcing: "+error.message);return;}
   await loadBestResident();
 }
 async function loadBestResidentAll(){
@@ -1266,25 +1279,25 @@ async function loadOncallData(){
 }
 async function saveOncallDay(blockNum,date,entries){
   const{error:de}=await sb.from("oncall_schedule").delete().eq("schedule_date",date).eq("academic_year",CURRENT_ACADEMIC_YEAR);
-  if(de){alert("Error clearing old entries: "+de.message);return;}
+  if(de){showToast("Error clearing old entries: "+de.message);return;}
   const rows=entries.filter(e=>e.resident_id||e.resident_name).map(e=>({block_number:blockNum,schedule_date:date,slot_key:e.slot_key,resident_id:e.resident_id?parseInt(e.resident_id,10):null,resident_name:e.resident_name||null,is_extra:!!e.is_extra,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null}));
-  if(rows.length){const{error:ie}=await sb.from("oncall_schedule").insert(rows);if(ie){alert("Error saving: "+ie.message);return;}}
+  if(rows.length){const{error:ie}=await sb.from("oncall_schedule").insert(rows);if(ie){showToast("Error saving: "+ie.message);return;}}
   await loadOncallData();
 }
 async function saveOncallCell(blk,date,slotKey,residentId,residentName){
   const{error:de}=await sb.from("oncall_schedule").delete().eq("schedule_date",date).eq("slot_key",slotKey).eq("academic_year",CURRENT_ACADEMIC_YEAR);
-  if(de){alert("Error: "+de.message);return;}
+  if(de){showToast("Error: "+de.message);return;}
   if(residentId||residentName){
     const existing=ONCALL_DATA.find(e=>e.schedule_date===date&&e.slot_key===slotKey);
     const{error:ie}=await sb.from("oncall_schedule").insert({block_number:blk,schedule_date:date,slot_key:slotKey,resident_id:residentId?parseInt(residentId,10):null,resident_name:residentName||null,is_extra:existing?.is_extra||false,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null});
-    if(ie){alert("Error saving: "+ie.message);return;}
+    if(ie){showToast("Error saving: "+ie.message);return;}
   }
   await loadOncallData();
 }
 function downloadOncallICS(resId){
   const res=resById(resId);if(!res)return;
   const entries=ONCALL_DATA.filter(e=>e.resident_id===resId).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date));
-  if(!entries.length){alert("No on-call entries found.");return;}
+  if(!entries.length){showToast("No on-call entries found.","warning");return;}
   let ics="BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//DSFH IM//Oncall//EN\r\nCALSCALE:GREGORIAN\r\n";
   entries.forEach(e=>{
     const sl=ONCALL_SLOTS.find(s=>s.key===e.slot_key);
@@ -1626,7 +1639,7 @@ function renderBroadcastModal(){
     const desc=document.getElementById("bc_desc").value.trim();
     const target=document.getElementById("bc_target").value;
     const deadline=document.getElementById("bc_deadline").value||null;
-    if(!title){alert("Please enter a message title.");return;}
+    if(!title){showToast("Please enter a message title.","warning");return;}
     const btn=document.getElementById("bc_btn");
     btn.disabled=true;btn.textContent="Sending…";
     const ann={title,description:desc,category:"general",deadline_date:deadline,
@@ -1686,6 +1699,10 @@ function renderSidebar(){
       el("div",{cls:"sidebar-user-info"},
         el("div",{cls:"sidebar-user-name"},u.name),
         el("div",{cls:"sidebar-user-role"},ROLE_LABELS[u.role]||u.role)
+      ),
+      el("div",{cls:"notif-bell-wrap",onClick:()=>set({showNotifPanel:!STATE.showNotifPanel})},
+        el("span",{st:{fontSize:"1.1rem"}},"\uD83D\uDD14"),
+        NOTIF_UNREAD>0?el("span",{cls:"notif-badge"},NOTIF_UNREAD>9?"9+":String(NOTIF_UNREAD)):null
       )
     ),
     el("div",{st:{padding:"0 12px 10px"}},
@@ -2614,7 +2631,7 @@ function renderMMScheduleForm(blk,editingSession){
       el("button",{cls:"sbtn success",onClick:async()=>{
         const date=document.getElementById("mm_f_date").value;
         const topic=document.getElementById("mm_f_topic").value.trim();
-        if(!date||!topic){alert("Date and topic are required.");return;}
+        if(!date||!topic){showToast("Date and topic are required.","warning");return;}
         const week=parseInt(document.getElementById("mm_f_week").value)||1;
         const presRaw=document.getElementById("mm_f_pres_sel").value;
         const presTxt=document.getElementById("mm_f_pres_txt").value.trim();
@@ -2642,7 +2659,7 @@ function renderMMScheduleForm(blk,editingSession){
         let error;
         if(editingSession){({error}=await sb.from("mm_sessions").update(payload).eq("id",editingSession.id));}
         else{payload.created_by=STATE.user.profileId;({error}=await sb.from("mm_sessions").insert(payload));}
-        if(error){alert("Could not save: "+error.message);return;}
+        if(error){showToast("Could not save: "+error.message);return;}
         set({mmShowEntry:false,mmEntrySession:null});
         await loadSchedules();
       }},editingSession?"Save Changes":"Add Session"),
@@ -2674,19 +2691,21 @@ function mmDatesForBlock(blockNum,academicYear){
   return dates;
 }
 async function generateMMSessions(blk){
-  if(!confirm("Auto-generate Sunday–Thursday session slots (20 total) for Block "+blk+"?\nOnly dates not already in the schedule will be added."))return;
-  const dates=mmDatesForBlock(blk,CURRENT_ACADEMIC_YEAR);
-  if(!dates.length){alert("Could not compute dates for Block "+blk);return;}
-  const existingDates=new Set(MM_SESSIONS.filter(s=>s.block_number===blk).map(s=>s.session_date));
-  const toInsert=dates.filter(d=>!existingDates.has(d.date));
-  if(!toInsert.length){alert("All session slots for Block "+blk+" already exist.");return;}
-  const rows=toInsert.map(d=>({
-    academic_year:CURRENT_ACADEMIC_YEAR,block_number:blk,week_number:4*(blk-1)+d.week-1,
-    session_date:d.date,day_label:d.day,topic:"",created_by:STATE.user?.profileId||null
-  }));
-  const{error}=await sb.from("mm_sessions").insert(rows);
-  if(error){alert("Could not generate sessions: "+error.message);return;}
-  await loadSchedules();
+  showConfirm("Auto-generate Sunday–Thursday session slots (20 total) for Block "+blk+"? Only dates not already in the schedule will be added.",async()=>{
+    const dates=mmDatesForBlock(blk,CURRENT_ACADEMIC_YEAR);
+    if(!dates.length){showToast("Could not compute dates for Block "+blk);return;}
+    const existingDates=new Set(MM_SESSIONS.filter(s=>s.block_number===blk).map(s=>s.session_date));
+    const toInsert=dates.filter(d=>!existingDates.has(d.date));
+    if(!toInsert.length){showToast("All session slots for Block "+blk+" already exist.","warning");return;}
+    const rows=toInsert.map(d=>({
+      academic_year:CURRENT_ACADEMIC_YEAR,block_number:blk,week_number:4*(blk-1)+d.week-1,
+      session_date:d.date,day_label:d.day,topic:"",created_by:STATE.user?.profileId||null
+    }));
+    const{error}=await sb.from("mm_sessions").insert(rows);
+    if(error){showToast("Could not generate sessions: "+error.message);return;}
+    await loadSchedules();
+    showToast("Sessions generated for Block "+blk,"success");
+  },"Generate","primary");
 }
 // ─── Shared inline-edit helpers for schedule tables ──────────────────────────
 function schedInlineText(sid,field,val,saveFn,tbl){
@@ -2799,8 +2818,8 @@ function renderMMSchedule(){
     {label:"Day / Date",render:s=>{
       if(canEditSched){
         const wrap=document.createElement("div");
-        wrap.appendChild(schedInlineText(s.id,"day_label",s.day_label||"",v=>{sb.from("mm_sessions").update({day_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"));
-        wrap.appendChild(schedInlineText(s.id,"session_date",s.session_date,v=>{if(!v)return;sb.from("mm_sessions").update({session_date:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"));
+        wrap.appendChild(schedInlineText(s.id,"day_label",s.day_label||"",v=>{sb.from("mm_sessions").update({day_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"mm"));
+        wrap.appendChild(schedInlineText(s.id,"session_date",s.session_date,v=>{if(!v)return;sb.from("mm_sessions").update({session_date:v}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"mm"));
         return wrap;
       }
       const wrap=document.createElement("div");
@@ -2808,21 +2827,20 @@ function renderMMSchedule(){
       const dt=document.createElement("div");dt.style.cssText="font-size:.72rem;color:#9ca3af;margin-top:2px;";dt.textContent=shortFmtDate(s.session_date);
       wrap.appendChild(d);wrap.appendChild(dt);return wrap;
     }},
-    {label:"Topic",render:s=>canEditSched?schedInlineText(s.id,"topic",s.topic,v=>{sb.from("mm_sessions").update({topic:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):s.topic},
-    {label:"Presenter",render:s=>canEditSched?schedInlineResident(s.id,"presenter_resident_id",s.presenter_resident_id,s.presenter_label,(resId,label)=>{sb.from("mm_sessions").update({presenter_resident_id:resId,presenter_label:label}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):personLabelEl(s.presenter_resident_id,s.presenter_label)},
-    {label:"Moderator",render:s=>canEditSched?schedInlineResident(s.id,"moderator_resident_id",s.moderator_resident_id,s.moderator_label,(resId,label)=>{sb.from("mm_sessions").update({moderator_resident_id:resId,moderator_label:label}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):personLabelEl(s.moderator_resident_id,s.moderator_label)},
-    {label:"Consultant",render:s=>canEditSched?schedInlineText(s.id,"consultant_label",s.consultant_label||"",v=>{sb.from("mm_sessions").update({consultant_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"mm"):s.consultant_label||"—"}
+    {label:"Topic",render:s=>canEditSched?schedInlineText(s.id,"topic",s.topic,v=>{sb.from("mm_sessions").update({topic:v}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"mm"):s.topic},
+    {label:"Presenter",render:s=>canEditSched?schedInlineResident(s.id,"presenter_resident_id",s.presenter_resident_id,s.presenter_label,(resId,label)=>{sb.from("mm_sessions").update({presenter_resident_id:resId,presenter_label:label}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"mm"):personLabelEl(s.presenter_resident_id,s.presenter_label)},
+    {label:"Moderator",render:s=>canEditSched?schedInlineResident(s.id,"moderator_resident_id",s.moderator_resident_id,s.moderator_label,(resId,label)=>{sb.from("mm_sessions").update({moderator_resident_id:resId,moderator_label:label}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"mm"):personLabelEl(s.moderator_resident_id,s.moderator_label)},
+    {label:"Consultant",render:s=>canEditSched?schedInlineText(s.id,"consultant_label",s.consultant_label||"",v=>{sb.from("mm_sessions").update({consultant_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"mm"):s.consultant_label||"—"}
   ];
   if(canEditSched)cols.push({label:"",render:s=>{
     const wrap=el("div",{cls:"flex-gap"});
     const editBtn=el("button",{cls:"sbtn ghost",st:{fontSize:".72rem",padding:"3px 8px"}},"Edit");
     editBtn.onclick=()=>set({mmShowEntry:true,mmEntrySession:s.id});
     const delBtn=el("button",{cls:"sbtn danger",st:{fontSize:".72rem",padding:"3px 8px"}},"Delete");
-    delBtn.onclick=async()=>{
-      if(!confirm("Delete this session?"))return;
+    delBtn.onclick=async()=>{showConfirm("Delete this Morning Meeting session?",async()=>{
       await sb.from("mm_sessions").delete().eq("id",s.id);
       await loadSchedules();
-    };
+    },"Delete","danger");};
     wrap.appendChild(editBtn);wrap.appendChild(delBtn);
     return wrap;
   }});
@@ -2930,13 +2948,13 @@ function renderMMEntryForm(blk,sessions){
   loadSession(selSession);
   function findSessionId(dateStr){const s=sessions.find(x=>x.session_date===dateStr);return s?s.id:null;}
   async function saveAtt(){
-    if(!selSession){alert("Please select a session first.");return;}
+    if(!selSession){showToast("Please select a session first.","warning");return;}
     const sessionId=findSessionId(selSession);
-    if(!sessionId){alert("Session not found — please refresh and try again.");return;}
+    if(!sessionId){showToast("Session not found — please refresh and try again.");return;}
     const rows=vr.filter(r=>attMap[r.id]).map(r=>({session_id:sessionId,resident_id:r.id,status:attMap[r.id],comment:cmtMap[r.id]||null,marked_by:STATE.user.profileId}));
-    if(!rows.length){alert("Please mark at least one resident before saving.");return;}
+    if(!rows.length){showToast("Please mark at least one resident before saving.","warning");return;}
     const{error}=await sb.from("mm_attendance").upsert(rows,{onConflict:"session_id,resident_id"});
-    if(error){alert("Could not save attendance:\n"+error.message);return;}
+    if(error){showToast("Could not save attendance:\n"+error.message);return;}
     set({mmShowEntry:false,mmEntrySession:null});
     await loadSchedules();
   }
@@ -3078,7 +3096,7 @@ function renderTeachScheduleForm(blk,editingSession){
         const date=document.getElementById("teach_f_date").value;
         const topic=document.getElementById("teach_f_topic").value.trim();
         const presenter=document.getElementById("teach_f_pres").value.trim();
-        if(!date||!topic||!presenter){alert("Date, topic and presenter are required.");return;}
+        if(!date||!topic||!presenter){showToast("Date, topic and presenter are required.","warning");return;}
         const week=parseInt(document.getElementById("teach_f_week").value)||1;
         const payload={
           academic_year:CURRENT_ACADEMIC_YEAR,
@@ -3094,7 +3112,7 @@ function renderTeachScheduleForm(blk,editingSession){
         let error;
         if(editingSession){({error}=await sb.from("teaching_sessions").update(payload).eq("id",editingSession.id));}
         else{payload.created_by=STATE.user.profileId;({error}=await sb.from("teaching_sessions").insert(payload));}
-        if(error){alert("Could not save: "+error.message);return;}
+        if(error){showToast("Could not save: "+error.message);return;}
         set({teachShowEntry:false,teachEntrySession:null});
         await loadSchedules();
       }},editingSession?"Save Changes":"Add Session"),
@@ -3109,22 +3127,21 @@ function renderTeachSchedule(){
   const editingSession=(formOpen&&typeof STATE.teachEntrySession==="number")?TEACH_SESSION_BY_ID[STATE.teachEntrySession]:null;
   const canEditSched=canEditTeachSchedule();
   const cols=[
-    {label:"Day",render:s=>canEditSched?schedInlineText(s.id,"day_label",s.day_label||"",v=>{sb.from("teaching_sessions").update({day_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"teach"):s.day_label||"—"},
-    {label:"Date",render:s=>canEditSched?schedInlineText(s.id,"session_date",s.session_date,v=>{if(!v)return;sb.from("teaching_sessions").update({session_date:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"teach"):fmtDate(s.session_date)},
-    {label:"Specialty",render:s=>canEditSched?schedInlineText(s.id,"specialty_label",s.specialty_label||"",v=>{sb.from("teaching_sessions").update({specialty_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"teach"):s.specialty_label||"—"},
-    {label:"Topic",render:s=>canEditSched?schedInlineText(s.id,"topic",s.topic||"",v=>{sb.from("teaching_sessions").update({topic:v}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"teach"):s.topic},
-    {label:"Presenter",render:s=>canEditSched?schedInlineText(s.id,"presenter_label",s.presenter_label||"",v=>{sb.from("teaching_sessions").update({presenter_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)alert(e.message);else loadSchedules();});},"teach"):s.presenter_label+(s.role_label?" ("+s.role_label+")":"")}
+    {label:"Day",render:s=>canEditSched?schedInlineText(s.id,"day_label",s.day_label||"",v=>{sb.from("teaching_sessions").update({day_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"teach"):s.day_label||"—"},
+    {label:"Date",render:s=>canEditSched?schedInlineText(s.id,"session_date",s.session_date,v=>{if(!v)return;sb.from("teaching_sessions").update({session_date:v}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"teach"):fmtDate(s.session_date)},
+    {label:"Specialty",render:s=>canEditSched?schedInlineText(s.id,"specialty_label",s.specialty_label||"",v=>{sb.from("teaching_sessions").update({specialty_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"teach"):s.specialty_label||"—"},
+    {label:"Topic",render:s=>canEditSched?schedInlineText(s.id,"topic",s.topic||"",v=>{sb.from("teaching_sessions").update({topic:v}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"teach"):s.topic},
+    {label:"Presenter",render:s=>canEditSched?schedInlineText(s.id,"presenter_label",s.presenter_label||"",v=>{sb.from("teaching_sessions").update({presenter_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"teach"):s.presenter_label+(s.role_label?" ("+s.role_label+")":"")}
   ];
   if(canEditSched)cols.push({label:"",render:s=>{
     const wrap=el("div",{cls:"flex-gap"});
     const editBtn=el("button",{cls:"sbtn ghost",st:{fontSize:".72rem",padding:"3px 8px"}},"Edit");
     editBtn.onclick=()=>set({teachShowEntry:true,teachEntrySession:s.id});
     const delBtn=el("button",{cls:"sbtn danger",st:{fontSize:".72rem",padding:"3px 8px"}},"Delete");
-    delBtn.onclick=async()=>{
-      if(!confirm("Delete this session?"))return;
+    delBtn.onclick=async()=>{showConfirm("Delete this Teaching session?",async()=>{
       await sb.from("teaching_sessions").delete().eq("id",s.id);
       await loadSchedules();
-    };
+    },"Delete","danger");};
     wrap.appendChild(editBtn);wrap.appendChild(delBtn);
     return wrap;
   }});
@@ -3223,13 +3240,13 @@ function renderTeachEntryForm(blk,sessions){
   loadSession(selSession);
   function findSessionId(dateStr){const s=sessions.find(x=>x.session_date===dateStr);return s?s.id:null;}
   async function saveAtt(){
-    if(!selSession){alert("Please select a session first.");return;}
+    if(!selSession){showToast("Please select a session first.");return;}
     const sessionId=findSessionId(selSession);
-    if(!sessionId){alert("Session not found — please refresh and try again.");return;}
+    if(!sessionId){showToast("Session not found — please refresh and try again.");return;}
     const rows=vr.filter(r=>attMap[r.id]).map(r=>({session_id:sessionId,resident_id:r.id,status:attMap[r.id],comment:cmtMap[r.id]||null,marked_by:STATE.user.profileId}));
-    if(!rows.length){alert("Please mark at least one resident before saving.");return;}
+    if(!rows.length){showToast("Please mark at least one resident before saving.");return;}
     const{error}=await sb.from("teaching_attendance").upsert(rows,{onConflict:"session_id,resident_id"});
-    if(error){alert("Could not save attendance:\n"+error.message);return;}
+    if(error){showToast("Could not save attendance:\n"+error.message);return;}
     set({teachShowEntry:false,teachEntrySession:null});
     await loadSchedules();
   }
@@ -3464,10 +3481,11 @@ function renderQuiz(){
             )
           ):assignedMentor?el("div",{cls:"sub"},"Assessor: "+assignedMentor.name):null,
           canEdit()?el("button",{cls:"sbtn danger",st:{fontSize:".78rem"},onClick:async()=>{
-            if(!confirm('Delete "'+selQ.title+'" and all its scores? This cannot be undone.'))return;
-            const{error}=await sb.from("quizzes").delete().eq("id",selQ.id);
-            if(error){alert("Could not delete: "+error.message);return;}
-            const idx=QUIZZES.indexOf(selQ);if(idx>-1)QUIZZES.splice(idx,1);set({quizSelQuiz:null});
+            showConfirm('Delete "'+selQ.title+'" and all its scores? This cannot be undone.',async()=>{
+              const{error}=await sb.from("quizzes").delete().eq("id",selQ.id);
+              if(error){showToast("Could not delete: "+error.message);return;}
+              const idx=QUIZZES.indexOf(selQ);if(idx>-1)QUIZZES.splice(idx,1);set({quizSelQuiz:null});
+            },"Delete","danger");
           }},"Delete Quiz"):null
         )
       ),
@@ -3505,7 +3523,7 @@ function renderQuiz(){
                 render();
                 if(toSave.length)await sb.from("quiz_scores").upsert(toSave,{onConflict:"quiz_id,resident_id"});
                 const msg=matched+" score"+(matched!==1?"s":"")+" imported."+( skipped.length?" Could not match: "+skipped.join(", "):"");
-                alert(msg);
+                showToast(msg);
               };
               reader.readAsArrayBuffer(file);
             }})
@@ -3586,7 +3604,7 @@ function renderQuiz(){
           const mid=document.getElementById("qz_mentor").value;
           if(!t||!d)return;
           const{data,error}=await sb.from("quizzes").insert({title:t,date:d,block_number:CURRENT_PERIOD,max_score:m,published:false,assigned_mentor_id:mid?parseInt(mid):null,academic_year:CURRENT_ACADEMIC_YEAR}).select().single();
-          if(error){alert("Could not save quiz: "+error.message);return;}
+          if(error){showToast("Could not save quiz: "+error.message);return;}
           QUIZZES.push({id:data.id,title:t,date:d,block:CURRENT_PERIOD,max:m,published:false,assigned_mentor_id:mid?parseInt(mid):null,sc:{}});
           set({quizShowAdd:false});
         }},"Save Quiz"),
@@ -4295,8 +4313,9 @@ function renderLeaveRequests(){
       rejected&&rejNote?el("div",{st:{fontSize:".78rem",color:"#b91c1c",marginTop:"4px"}},"❌ Rejected: "+rejNote):null,
       showActions?el("div",{cls:"flex-gap",st:{marginTop:"8px",gap:"8px"}},
         el("button",{cls:"sbtn success",st:{fontSize:".78rem"},onClick:async()=>{
-          if(!confirm("Approve this leave request for "+req.res.name+"?"))return;
-          await approveLeaveRequest(req.id,req.res.id,req.from,req.to,req.days,req.comment);
+          showConfirm("Approve this leave request for "+req.res.name+"?",async()=>{
+            await approveLeaveRequest(req.id,req.res.id,req.from,req.to,req.days,req.comment);
+          },"Approve","success");
         }},"✓ Approve"),
         el("button",{cls:"sbtn danger",st:{fontSize:".78rem"},onClick:async()=>{
           const note=prompt("Rejection note (optional):");
@@ -4346,7 +4365,7 @@ function renderLeaveDetail(rid,onBack){
   // Helper: approve a rota leave entry
   async function approveRotaLeave(l){
     const blockStart=blockStartDate(l.period,CURRENT_ACADEMIC_YEAR);
-    if(!blockStart){alert("Cannot compute dates for this block.");return;}
+    if(!blockStart){showToast("Cannot compute dates for this block.");return;}
     const days=l.partial?l.weeks*7:28;
     let fromDate,toDate;
     if(!l.partial){
@@ -4539,9 +4558,9 @@ function renderLeaveDetail(rid,onBack){
               const to=document.getElementById("req_to").value;
               const reason=document.getElementById("req_reason").value.trim();
               const ltype=document.getElementById("req_type").value;
-              if(!from||!to){alert("Please select both from and to dates.");return;}
-              if(to<from){alert("'To' date must be on or after 'From' date.");return;}
-              if(!reason){alert("Please enter a reason.");return;}
+              if(!from||!to){showToast("Please select both from and to dates.","warning");return;}
+              if(to<from){showToast("'To' date must be on or after 'From' date.","warning");return;}
+              if(!reason){showToast("Please enter a reason.","warning");return;}
               await submitLeaveRequest(rid,from,to,diffDays(from,to),ltype,reason);
               set({leaveShowReq:false});
             }},"Submit Request"),
@@ -4566,8 +4585,9 @@ function renderLeaveDetail(rid,onBack){
             isRejected&&rejNote?el("div",{st:{fontSize:".78rem",color:"#b91c1c",marginTop:"4px"}},"Note: "+rejNote):null,
             isPending&&canEdit()?el("div",{cls:"flex-gap",st:{marginTop:"8px",gap:"8px"}},
               el("button",{cls:"sbtn success",st:{fontSize:".76rem"},onClick:async()=>{
-                if(!confirm("Approve this request?"))return;
-                await approveLeaveRequest(req.id,rid,req.from,req.to,req.days,req.comment);
+                showConfirm("Approve this leave request?",async()=>{
+                  await approveLeaveRequest(req.id,rid,req.from,req.to,req.days,req.comment);
+                },"Approve","success");
               }},"✓ Approve"),
               el("button",{cls:"sbtn danger",st:{fontSize:".76rem"},onClick:async()=>{
                 const note=prompt("Rejection note (optional):");
@@ -4615,10 +4635,11 @@ function renderCounselRecordsList(res,records,u){
                 canEdit()&&!locked?el("button",{cls:"sbtn ghost",st:{fontSize:".75rem",padding:"3px 8px"},onClick:e=>{e.stopPropagation();set({counselEditId:rec.id,counselExpandId:null,counselShowForm:false});}},"Edit"):null,
                 canEdit()?el("button",{cls:"sbtn danger",st:{fontSize:".72rem",padding:"3px 7px"},onClick:async e=>{
                   e.stopPropagation();
-                  if(!confirm("Delete this counseling record?"))return;
-                  await sb.from("counseling").delete().eq("id",rec.id);
-                  set({counselExpandId:null});
-                  loadCounsel(res.id);
+                  showConfirm("Delete this counseling record? This cannot be undone.",async()=>{
+                    await sb.from("counseling").delete().eq("id",rec.id);
+                    set({counselExpandId:null});
+                    loadCounsel(res.id);
+                  },"Delete","danger");
                 }},"Del"):null
               ),
               !locked&&isRecipient?el("button",{cls:"sbtn success",st:{marginTop:"10px",fontSize:".78rem"},onClick:async()=>{
@@ -4892,11 +4913,12 @@ function renderMentorNotes(){
       el("div",{cls:"flex-gap"},
         el("span",{cls:"sh",st:{fontSize:".76rem"}},"By "+consultantName(detailNote.mentor_id)+" · "+fmtDate((detailNote.created_at||"").slice(0,10))),
         (isConsultant()&&detailNote.mentor_id===u.cid)?el("button",{cls:"sbtn danger",st:{fontSize:".74rem",padding:"2px 8px"},onClick:async()=>{
-          if(!confirm("Delete this note?"))return;
-          await sb.from("mentor_notes").delete().eq("id",detailNote.id);
-          MENTOR_NOTES[detail.resId]=null;
-          set({notesDetail:null});
-          loadMentorNotes(detail.resId);
+          showConfirm("Delete this mentor note?",async()=>{
+            await sb.from("mentor_notes").delete().eq("id",detailNote.id);
+            MENTOR_NOTES[detail.resId]=null;
+            set({notesDetail:null});
+            loadMentorNotes(detail.resId);
+          },"Delete","danger");
         }},"Delete"):null
       )
     ):null
@@ -5137,7 +5159,7 @@ function renderAdminDeadlines(){
     const targetType=document.getElementById("ann_target_type")?.value||"all";
     const targetLevel=document.getElementById("ann_target_level")?.value||null;
     const targetRes=parseInt(document.getElementById("ann_target_res")?.value)||null;
-    if(!title){alert("Title is required.");return;}
+    if(!title){showToast("Title is required.","warning");return;}
     const ann={
       title,description:desc||null,deadline_date:deadline||null,category:cat,
       target_all:targetType==="all",
@@ -5230,7 +5252,7 @@ function renderAdminDeadlines(){
             ),
             el("div",{cls:"flex-gap",st:{gap:"6px",flexShrink:"0"}},
               el("button",{cls:"sbtn ghost",st:{fontSize:".75rem"},onClick:()=>set({annEditId:a.id,annShowForm:false})},"Edit"),
-              el("button",{cls:"sbtn danger",st:{fontSize:".75rem"},onClick:async()=>{if(!confirm("Delete this announcement?"))return;await deleteAnnouncement(a.id);}},"Del")
+              el("button",{cls:"sbtn danger",st:{fontSize:".75rem"},onClick:async()=>{showConfirm("Delete this announcement?",async()=>{await deleteAnnouncement(a.id);},"Delete","danger");}},"Del")
             )
           ),
           isEditing?el("div",{st:{padding:"10px 14px",borderTop:"1px solid #e2e8f0",background:"#f8fafc"}},annForm(a)):null
@@ -5248,14 +5270,15 @@ function renderAdmin(){
       el("h2",{st:{fontWeight:"800",color:"#111827"}},"PD Admin Panel")
     ),
     el("div",{cls:"tab-bar",st:{overflowX:"auto",display:"flex",flexWrap:"nowrap"}},
-      ["residents","mentors","accounts","deadlines","rotaImport"].map(t=>el("span",{cls:"tab"+((STATE.adminTab||"residents")===t?" on":""),onClick:()=>set({adminTab:t,adminProfile:null})},
-        t==="residents"?"Residents":t==="mentors"?"Mentors":t==="accounts"?"Accounts":t==="deadlines"?"Deadlines & Tasks":"Import Rota"
+      ["residents","mentors","accounts","deadlines","rotaImport","actlog"].map(t=>el("span",{cls:"tab"+((STATE.adminTab||"residents")===t?" on":""),onClick:()=>{set({adminTab:t,adminProfile:null});if(t==="actlog")loadActivityLog();}},
+        t==="residents"?"Residents":t==="mentors"?"Mentors":t==="accounts"?"Accounts":t==="deadlines"?"Deadlines & Tasks":t==="actlog"?"📋 Activity Log":"Import Rota"
       ))
     ),
     (STATE.adminTab||"residents")==="residents"?renderAdminResidents():
     STATE.adminTab==="mentors"?renderAdminMentors():
     STATE.adminTab==="rotaImport"?renderAdminRotaImport():
     STATE.adminTab==="deadlines"?renderAdminDeadlines():
+    STATE.adminTab==="actlog"?renderActivityLog():
     renderAdminAccounts()
   );
 }
@@ -5263,14 +5286,14 @@ async function createLoginFor(kind,record){
   // kind: "resident" | "consultant"
   const{data:sess}=await sb.auth.getSession();
   const token=sess?.session?.access_token;
-  if(!token){alert("Your session expired — please sign in again.");return;}
+  if(!token){showToast("Your session expired — please sign in again.");return;}
   const{data,error}=await sb.functions.invoke(CREATE_LOGIN_FN,{
     body:{type:kind,recordId:record.id,username:record.user,displayName:record.name},
     headers:{Authorization:"Bearer "+token}
   });
-  if(error){alert("Could not create login: "+(error.message||error));return;}
-  if(data?.error){alert("Could not create login: "+data.error);return;}
-  alert("Login created!\n\nUsername: "+data.username+"\nTemporary password: "+data.password+"\n\nWrite this down now — it will not be shown again. Give it to "+record.name+" and ask them to change it after first sign-in (My Account menu).");
+  if(error){showToast("Could not create login: "+(error.message||error));return;}
+  if(data?.error){showToast("Could not create login: "+data.error);return;}
+  showInfoModal("Login Created — "+record.name,"Username: "+data.username+"\nTemporary password: "+data.password+"\n\nGive this to "+record.name+" and ask them to change their password after first sign-in (My Account button).");
   await loadCoreData();render();
 }
 function renderAdminResidents(){
@@ -5352,7 +5375,7 @@ function renderAdminResidents(){
                         const level=document.getElementById("er_level_"+r.id).value;
                         const m=parseInt(document.getElementById("er_mentor_"+r.id).value)||null;
                         const{error}=await sb.from("residents").update({name,level,mentor_id:m}).eq("id",r.id);
-                        if(error){alert("Could not save: "+error.message);return;}
+                        if(error){showToast("Could not save: "+error.message);return;}
                         await loadCoreData();
                         set({adminEditResId:null});
                       }},"Save"),
@@ -5389,10 +5412,11 @@ function renderAdminResidents(){
                     el("button",{cls:"sbtn ghost",st:{fontSize:".75rem",padding:"3px 8px"},onClick:()=>set({adminEditResId:r.id})},"✏️"),
                     el("button",{cls:"sbtn ghost",st:{fontSize:".75rem",padding:"3px 8px"},onClick:()=>set({adminProfile:r.id})},"👁️"),
                     el("button",{cls:"sbtn danger",st:{fontSize:".75rem",padding:"3px 8px"},onClick:async()=>{
-                      if(!confirm("Withdraw/remove "+r.name+"? Their history is kept but they'll no longer appear in active lists."))return;
-                      const{error}=await sb.from("residents").update({active:false,archived_at:new Date().toISOString()}).eq("id",r.id);
-                      if(error){alert("Could not remove: "+error.message);return;}
-                      await loadCoreData();render();
+                      showConfirm("Withdraw "+r.name+"? Their history is kept but they will no longer appear in active lists.",async()=>{
+                        const{error}=await sb.from("residents").update({active:false,archived_at:new Date().toISOString()}).eq("id",r.id);
+                        if(error){showToast("Could not remove: "+error.message);return;}
+                        await loadCoreData();render();
+                      },"Withdraw","danger");
                     }},"🗑️")
                   )
                 )
@@ -5418,7 +5442,7 @@ function renderAdminMentors(){
   }
   async function setMentorFor(rid,cid){
     const{error}=await sb.from("residents").update({mentor_id:cid}).eq("id",rid);
-    if(error){alert("Could not update assignment: "+error.message);return;}
+    if(error){showToast("Could not update assignment: "+error.message);return;}
     await loadCoreData();render();
   }
   return el("div",null,
@@ -5453,7 +5477,7 @@ function renderAdminMentors(){
                 el("button",{cls:"sbtn success",st:{fontSize:".78rem"},onClick:async()=>{
                   const name=document.getElementById("em_name_"+c.id).value.trim()||c.name;
                   const{error}=await sb.from("consultants").update({name}).eq("id",c.id);
-                  if(error){alert("Could not save: "+error.message);return;}
+                  if(error){showToast("Could not save: "+error.message);return;}
                   await loadCoreData();
                   set({adminEditMentorId:null});
                 }},"Save"),
@@ -5473,11 +5497,12 @@ function renderAdminMentors(){
               el("button",{cls:"sbtn ghost",st:{fontSize:".75rem"},onClick:()=>set({adminEditMentorId:c.id})},"Edit"),
               el("button",{cls:"sbtn ghost",st:{fontSize:".75rem"},onClick:()=>set({adminAssignMentor:STATE.adminAssignMentor===c.id?null:c.id})},"Assign"),
               el("button",{cls:"sbtn danger",st:{fontSize:".75rem",padding:"3px 8px"},onClick:async()=>{
-                if(!confirm("Remove "+c.name+" from active mentors? Residents currently assigned to them will become unassigned."))return;
-                const{error}=await sb.from("consultants").update({active:false}).eq("id",c.id);
-                if(error){alert("Could not remove: "+error.message);return;}
-                await sb.from("residents").update({mentor_id:null}).eq("mentor_id",c.id);
-                await loadCoreData();render();
+                showConfirm("Remove "+c.name+" from active mentors? Residents currently assigned to them will become unassigned.",async()=>{
+                  const{error}=await sb.from("consultants").update({active:false}).eq("id",c.id);
+                  if(error){showToast("Could not remove: "+error.message);return;}
+                  await sb.from("residents").update({mentor_id:null}).eq("mentor_id",c.id);
+                  await loadCoreData();render();
+                },"Remove","danger");
               }},"Del")
             ),
             STATE.adminAssignMentor===c.id?el("div",null,
@@ -5519,10 +5544,10 @@ const PRIV_LABELS_CONSULTANT={
 async function togglePriv(profileId,key,grant){
   if(grant){
     const{error}=await sb.from("account_privileges").insert({profile_id:profileId,privilege_key:key,granted_by:STATE.user.profileId});
-    if(error){alert("Could not grant privilege: "+error.message);return;}
+    if(error){showToast("Could not grant privilege: "+error.message);return;}
   }else{
     const{error}=await sb.from("account_privileges").delete().eq("profile_id",profileId).eq("privilege_key",key);
-    if(error){alert("Could not remove privilege: "+error.message);return;}
+    if(error){showToast("Could not remove privilege: "+error.message);return;}
   }
   await loadCoreData();render();
 }
@@ -5613,7 +5638,7 @@ async function handleRotaFileSelected(file){
     ROTA_IMPORT.fileName=file.name;
     render();
   }catch(e){
-    alert("Could not read that file: "+(e.message||e));
+    showToast("Could not read that file: "+(e.message||e));
   }
 }
 function parseSelectedRotaSheet(){
@@ -5631,7 +5656,7 @@ function parseSelectedRotaSheet(){
     });
     set({rotaImportStep:2});
   }catch(e){
-    alert("Could not parse that sheet: "+(e.message||e));
+    showToast("Could not parse that sheet: "+(e.message||e));
   }
 }
 function rotaImportUnknownCells(){
@@ -5646,7 +5671,7 @@ function rotaImportUnknownCells(){
 }
 function goToRotaImportStep3or4(){
   const unresolved=ROTA_IMPORT.rows.filter(r=>!r.skip&&!r.matchedResidentId);
-  if(unresolved.length){alert("Please match or skip every resident row before continuing ("+unresolved.length+" unresolved).");return;}
+  if(unresolved.length){showToast("Please match or skip every resident row before continuing ("+unresolved.length+" unresolved).","warning");return;}
   const unknown=rotaImportUnknownCells();
   set({rotaImportStep:unknown.length?3:4});
 }
@@ -5696,7 +5721,7 @@ async function commitRotaImport(){
       }
     });
   });
-  if(!entries.length){alert("Nothing to import — no matched residents with rota cells to write.");return;}
+  if(!entries.length){showToast("Nothing to import — no matched residents with rota cells to write.","warning");return;}
   const ok=await saveRotaCells(entries);
   if(ok)set({rotaImportStep:5});
 }
@@ -6074,9 +6099,10 @@ function renderProfileCounsel(res){
               locked?el("span",{cls:"bdg",st:{background:"#dcfce7",color:"#166534"}},"Countersigned"):el("span",{cls:"bdg",st:{background:"#fef9c3",color:"#854d0e"}},"Pending"),
               !locked?el("button",{cls:"sbtn ghost",st:{fontSize:".75rem",padding:"3px 8px"},onClick:()=>set({counselEditId:rec.id,counselShowForm:false})},"Edit"):null,
               el("button",{cls:"sbtn danger",st:{fontSize:".75rem",padding:"3px 8px"},onClick:async()=>{
-                if(!confirm("Delete this counseling record?"))return;
-                await sb.from("counseling").delete().eq("id",rec.id);
-                loadCounsel(res.id);
+                showConfirm("Delete this counseling record? This cannot be undone.",async()=>{
+                  await sb.from("counseling").delete().eq("id",rec.id);
+                  loadCounsel(res.id);
+                },"Delete","danger");
               }},"Del")
             ),
             el("p",{st:{fontSize:".82rem",color:"#475569"}},rec.details),
@@ -6271,11 +6297,12 @@ function renderBestResident(){
             cd?el("span",{cls:"pill",st:{background:"#f5c518",color:"#3d2b1f"}},cd):null
           ),
           el("div",{st:{display:"flex",gap:"12px",flexWrap:"wrap"}},
-            el("button",{cls:"sbtn ghost",async onClick(){if(confirm("Close voting now? Votes will be locked."))await brCloseVoting();}},"🔒 Close Voting"),
+            el("button",{cls:"sbtn ghost",async onClick(){showConfirm("Close voting now? Votes will be locked and no further votes can be submitted.",async()=>{await brCloseVoting();},"Close Voting","warn");}},"🔒 Close Voting"),
             el("button",{cls:"sbtn primary",st:{background:"#2a7a4a"},async onClick(){
-              if(!topSr||!topJr){alert("No votes yet — cannot announce.");return;}
-              if(!confirm("Announce "+dname(topSr.res.name)+" (Senior) and "+dname(topJr.res.name)+" (Junior) as winners?"))return;
-              await brAnnounceWinners(topSr.res.id,topJr.res.id,topSr.final,topJr.final);
+              if(!topSr||!topJr){showToast("No votes yet — cannot announce.","warning");return;}
+              showConfirm("Announce "+dname(topSr.res.name)+" (Senior) and "+dname(topJr.res.name)+" (Junior) as winners? This will show results to all users.",async()=>{
+                await brAnnounceWinners(topSr.res.id,topJr.res.id,topSr.final,topJr.final);
+              },"Announce","primary");
             }},"🏆 Announce Winners")
           ),
           el("p",{cls:"sh",st:{marginTop:"8px",fontSize:".78rem"}},"Winners are computed from live KPI (50%) + votes (50%). Announcing locks the results and shows the Stars banner to everyone.")
@@ -6371,7 +6398,7 @@ function renderBestResident(){
         el("button",{cls:"sbtn primary",
           st:{fontSize:".9rem",padding:"12px 28px",background:"linear-gradient(135deg,#c96a4a,#b85a3a)"},
           async onClick(){
-            if(!_snrSel||!_jnrSel){alert("Please select both a Senior and a Junior before submitting.");return;}
+            if(!_snrSel||!_jnrSel){showToast("Please select both a Senior and a Junior before submitting.","warning");return;}
             await brCastVote(_snrSel,_jnrSel);
           }
         },"🗳️ Submit My Vote"),
@@ -7391,13 +7418,156 @@ function renderOncall(){
   );
 }
 // ─── MAIN RENDER ─────────────────────────────────────────────────────────────
+// \u2500\u2500\u2500 UI UTILITIES \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function renderLoading(){
+  const d=document.createElement("div");d.className="loading-screen";
+  const sp=document.createElement("div");sp.className="loading-spinner";
+  const t=document.createElement("div");t.className="loading-text";t.textContent="DSFH Residency Portal";
+  const s=document.createElement("div");s.className="loading-sub";s.textContent="Loading your data...";
+  d.appendChild(sp);d.appendChild(t);d.appendChild(s);return d;
+}
+function showToast(msg,type){
+  if(type===undefined)type="error";
+  let container=document.getElementById("toast-root");
+  if(!container){container=document.createElement("div");container.id="toast-root";container.style.cssText="position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:360px;width:calc(100% - 40px);";document.body.appendChild(container);}
+  const cfg={error:{bg:"#fdf2f2",border:"#fca5a5",ico:"\u274c",color:"#991b1b"},success:{bg:"#f0fdf4",border:"#86efac",ico:"\u2714",color:"#166534"},warning:{bg:"#fffbeb",border:"#fcd34d",ico:"\u26a0",color:"#92400e"},info:{bg:"#eff6ff",border:"#93c5fd",ico:"\u2139",color:"#1d4ed8"}}[type]||{bg:"#fdf2f2",border:"#fca5a5",ico:"\u274c",color:"#991b1b"};
+  const t=document.createElement("div");
+  t.style.cssText="background:"+cfg.bg+";border:1.5px solid "+cfg.border+";color:"+cfg.color+";padding:12px 14px;border-radius:10px;font-size:.86rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.12);pointer-events:all;display:flex;align-items:flex-start;gap:8px;animation:toastIn .2s ease;";
+  const ico=document.createElement("span");ico.textContent=cfg.ico;ico.style.flexShrink="0";
+  const msgEl=document.createElement("span");msgEl.style.flex="1";msgEl.textContent=String(msg);
+  const cls=document.createElement("span");cls.style.cssText="cursor:pointer;margin-left:4px;opacity:.5;";cls.textContent="\u2715";cls.onclick=()=>t.remove();
+  t.appendChild(ico);t.appendChild(msgEl);t.appendChild(cls);
+  container.appendChild(t);
+  setTimeout(()=>{t.style.animation="toastOut .3s ease forwards";setTimeout(()=>t.remove(),300);},5000);
+}
+function showConfirm(msg,onYes,btnLabel,btnClass){
+  if(!btnLabel)btnLabel="Confirm";if(!btnClass)btnClass="danger";
+  const bgClr={danger:"#b52040",primary:"#c96a4a",warn:"#c9913a",success:"#2a7a5a"}[btnClass]||"#b52040";
+  const overlay=document.createElement("div");
+  overlay.style.cssText="position:fixed;inset:0;background:rgba(26,20,16,.55);display:flex;align-items:center;justify-content:center;z-index:9500;padding:16px;";
+  const card=document.createElement("div");
+  card.style.cssText="background:#fff;border-radius:16px;padding:28px 24px;max-width:400px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.2);";
+  const title=document.createElement("div");title.style.cssText="font-weight:800;font-size:1rem;color:#1c1410;margin-bottom:10px;";title.textContent="Are you sure?";
+  const body=document.createElement("p");body.style.cssText="color:#4a3828;font-size:.88rem;line-height:1.55;margin-bottom:22px;";body.textContent=msg;
+  const btns=document.createElement("div");btns.style.cssText="display:flex;gap:10px;justify-content:flex-end;";
+  const cancelBtn=document.createElement("button");cancelBtn.style.cssText="padding:9px 18px;border-radius:9px;border:1.5px solid #ede5d8;background:#faf6f1;color:#4a3828;cursor:pointer;font-weight:700;font-size:.85rem;";cancelBtn.textContent="Cancel";cancelBtn.onclick=()=>overlay.remove();
+  const yesBtn=document.createElement("button");yesBtn.style.cssText="padding:9px 18px;border-radius:9px;border:none;background:"+bgClr+";color:#fff;cursor:pointer;font-weight:700;font-size:.85rem;";yesBtn.textContent=btnLabel;
+  yesBtn.onclick=async()=>{overlay.remove();if(onYes)await onYes();};
+  btns.appendChild(cancelBtn);btns.appendChild(yesBtn);
+  card.appendChild(title);card.appendChild(body);card.appendChild(btns);
+  overlay.appendChild(card);document.body.appendChild(overlay);
+  overlay.onclick=e=>{if(e.target===overlay)overlay.remove();};
+}
+function showInfoModal(title,lines){
+  const overlay=document.createElement("div");
+  overlay.style.cssText="position:fixed;inset:0;background:rgba(26,20,16,.55);display:flex;align-items:center;justify-content:center;z-index:9500;padding:16px;";
+  const card=document.createElement("div");
+  card.style.cssText="background:#fff;border-radius:16px;padding:28px 24px;max-width:440px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.2);";
+  const tEl=document.createElement("div");tEl.style.cssText="font-weight:800;font-size:1rem;color:#1c1410;margin-bottom:14px;";tEl.textContent=title;
+  const bodyEl=document.createElement("div");bodyEl.style.cssText="background:#faf6f1;border-radius:10px;padding:14px 16px;font-family:monospace;font-size:.88rem;color:#1c1410;line-height:1.8;margin-bottom:14px;white-space:pre-wrap;border:1.5px solid #ede5d8;";bodyEl.textContent=lines;
+  const note=document.createElement("p");note.style.cssText="font-size:.8rem;color:#b52040;font-weight:700;margin-bottom:18px;";note.textContent="Write this down now \u2014 it will not be shown again.";
+  const okBtn=document.createElement("button");okBtn.style.cssText="width:100%;padding:10px;border-radius:9px;border:none;background:#c96a4a;color:#fff;cursor:pointer;font-weight:700;font-size:.9rem;";okBtn.textContent="I have written this down \u2713";okBtn.onclick=()=>overlay.remove();
+  card.appendChild(tEl);card.appendChild(bodyEl);card.appendChild(note);card.appendChild(okBtn);
+  overlay.appendChild(card);document.body.appendChild(overlay);
+}
+// \u2500\u2500\u2500 NOTIFICATIONS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+async function loadNotifications(){
+  const u=STATE.user;if(!u)return;
+  const{data,error}=await sb.from("notifications").select("*").eq("profile_id",u.profileId).order("created_at",{ascending:false}).limit(50);
+  if(error){console.warn("notifications load error",error.message);NOTIFICATIONS=[];NOTIF_UNREAD=0;return;}
+  NOTIFICATIONS=data||[];NOTIF_UNREAD=NOTIFICATIONS.filter(n=>!n.read).length;render();
+}
+async function createNotification(profileId,type,message,linkMod,linkParam){
+  if(!profileId)return;
+  const{error}=await sb.from("notifications").insert({profile_id:profileId,type:type||"info",message,link_mod:linkMod||null,link_param:linkParam?String(linkParam):null,read:false});
+  if(error)console.warn("createNotif error",error.message);
+}
+async function markNotifRead(id){
+  const n=NOTIFICATIONS.find(x=>x.id===id);if(n&&!n.read){n.read=true;NOTIF_UNREAD=Math.max(0,NOTIF_UNREAD-1);sb.from("notifications").update({read:true}).eq("id",id).then(()=>{});}
+  render();
+}
+async function markAllNotifsRead(){
+  const u=STATE.user;if(!u)return;
+  NOTIFICATIONS.forEach(n=>n.read=true);NOTIF_UNREAD=0;
+  await sb.from("notifications").update({read:true}).eq("profile_id",u.profileId).eq("read",false);
+  render();
+}
+function getPdProfileIds(){
+  return Object.values(PROFILE_BY_ID||{}).filter(p=>["pd","deputy_pd","dio"].includes(p.role)).map(p=>p.id);
+}
+function timeAgo(isoStr){
+  if(!isoStr)return"";
+  const diff=Date.now()-new Date(isoStr).getTime();const m=Math.floor(diff/60000);
+  if(m<1)return"just now";if(m<60)return m+"m ago";const h=Math.floor(m/60);
+  if(h<24)return h+"h ago";return Math.floor(h/24)+"d ago";
+}
+function renderNotifPanel(){
+  if(!STATE.showNotifPanel)return null;
+  const close=()=>set({showNotifPanel:false});
+  const items=NOTIFICATIONS.length===0?
+    [el("div",{cls:"notif-empty"},"No notifications yet \ud83d\udd14")]:
+    NOTIFICATIONS.map(n=>el("div",{cls:"notif-item"+(n.read?"":" unread"),onClick:async()=>{
+      if(!n.read)await markNotifRead(n.id);
+      if(n.link_mod){set({showNotifPanel:false,mod:n.link_mod,...(n.link_param?{kpiSelRes:parseInt(n.link_param)||STATE.kpiSelRes}:{})});}
+    }},
+      el("div",{cls:"notif-msg"},n.message),
+      el("div",{cls:"notif-time"},timeAgo(n.created_at))
+    ));
+  return el("div",{st:{position:"fixed",inset:"0",zIndex:"799"},onClick:e=>{if(e.target===e.currentTarget)close();}},
+    el("div",{cls:"notif-panel"},
+      el("div",{cls:"notif-panel-header"},
+        el("div",{cls:"notif-panel-title"},"\ud83d\udd14 Notifications"),
+        NOTIF_UNREAD>0?el("button",{cls:"sbtn ghost",st:{fontSize:".75rem",padding:"4px 10px"},onClick:markAllNotifsRead},"Mark all read"):null,
+        el("button",{cls:"sbtn ghost",st:{padding:"4px 10px",fontSize:".8rem"},onClick:close},"\u2715")
+      ),
+      el("div",{st:{flex:"1",overflowY:"auto"}},...items)
+    )
+  );
+}
+// \u2500\u2500\u2500 ACTIVITY LOG \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+async function logActivity(actionType,entityType,entityId,details){
+  const u=STATE.user;if(!u)return;
+  sb.from("activity_log").insert({profile_id:u.profileId,display_name:u.name,action_type:actionType,entity_type:entityType||null,entity_id:entityId?String(entityId):null,details:details||{}}).then(({error:e})=>{if(e)console.warn("logActivity error",e.message);});
+}
+async function loadActivityLog(){
+  const{data,error}=await sb.from("activity_log").select("*").order("created_at",{ascending:false}).limit(200);
+  if(error){console.warn("loadActivityLog error",error.message);return;}
+  ACTIVITY_LOG_DATA=data||[];render();
+}
+function renderActivityLog(){
+  const ACTION_LBL={att_mm:"\ud83d\udccb MM Attendance",att_teach:"\ud83d\udcd6 Teaching Att.",leave_approved:"\u2705 Leave Approved",leave_rejected:"\u274c Leave Rejected",kpi_approved:"\ud83c\udfc6 KPI Verified",kpi_rejected:"\u2716 KPI Rejected",kpi_score:"\ud83d\udcca KPI Score",oncall_save:"\ud83c\udfe5 On-Call Saved",counsel_add:"\ud83d\udcdd Counseling Added",counsel_del:"\ud83d\uddd1 Counseling Deleted"};
+  return el("div",{cls:"card"},
+    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
+      el("div",{cls:"card-title",st:{margin:"0"}},"Activity Log"),
+      el("button",{cls:"sbtn ghost",st:{marginLeft:"auto"},onClick:loadActivityLog},"Refresh")
+    ),
+    ACTIVITY_LOG_DATA.length===0?el("p",{cls:"sh"},"No activity yet. Log entries will appear here after actions are taken."):
+    el("div",{cls:"tbl-wrap"},
+      el("table",null,
+        el("thead",null,el("tr",null,el("th",null,"Time"),el("th",null,"Who"),el("th",null,"Action"),el("th",null,"Details"))),
+        el("tbody",null,...ACTIVITY_LOG_DATA.map(a=>{
+          const d=a.details||{};
+          const det=[d.resident_name,d.status?"\u2192 "+d.status:null,d.session_date?"on "+d.session_date:null,d.field_key?"("+d.field_key+")":null,d.from&&d.to?d.from+"\u2192"+d.to:null,d.message||null].filter(Boolean).join(" ");
+          return el("tr",null,
+            el("td",{cls:"sh",st:{whiteSpace:"nowrap"}},timeAgo(a.created_at)),
+            el("td",null,el("span",{st:{fontWeight:"700",fontSize:".84rem"}},a.display_name||"\u2014")),
+            el("td",{cls:"sh"},ACTION_LBL[a.action_type]||a.action_type),
+            el("td",{cls:"sh"},det||"\u2014")
+          );
+        }))
+      )
+    )
+  );
+}
 function render(){
   const app=document.getElementById("app");
   const _sf=document.activeElement?.id==="search-inp";
   const _sc=_sf?document.getElementById("search-inp").selectionStart:null;
   app.innerHTML="";
   window.scrollTo(0,0);
+  if(STATE.loading&&!STATE.user){app.appendChild(renderLoading());return;}
   if(!STATE.user){app.appendChild(renderLogin());return;}
+  if(STATE.loading){app.appendChild(renderLoading());return;}
   const u=STATE.user;
   // Sidebar layout
   const layout=el("div",{cls:"app-layout"});
@@ -7439,6 +7609,7 @@ function render(){
   if(STATE.showPromoModal&&isPD())app.appendChild(renderPromoModal());
   if(STATE.showBroadcast)(isPD()||STATE.user?.role==="chief")&&app.appendChild(renderBroadcastModal());
   if(STATE.showCalModal)app.appendChild(renderCalModal());
+  const _np=renderNotifPanel();if(_np)app.appendChild(_np);
   const srch=renderSearchOverlay();if(srch)app.appendChild(srch);
   appendAccountModal(app);
   if(_sf){const si=document.getElementById("search-inp");if(si){si.focus();if(_sc!==null)si.setSelectionRange(_sc,_sc);}}
@@ -7528,14 +7699,14 @@ async function generateCalToken(){
   const u=STATE.user;if(!u)return;
   const token=crypto.randomUUID();
   const{error}=await sb.from("profiles").update({calendar_token:token}).eq("id",u.profileId);
-  if(error){alert("Could not generate calendar link: "+error.message);return;}
+  if(error){showToast("Could not generate calendar link: "+error.message);return;}
   STATE.calToken=token;
   render();
 }
 async function saveCalPrefs(prefs){
   const u=STATE.user;if(!u)return;
   const{error}=await sb.from("profiles").update({calendar_prefs:prefs}).eq("id",u.profileId);
-  if(error){alert("Could not save preferences: "+error.message);return;}
+  if(error){showToast("Could not save preferences: "+error.message);return;}
   set({calPrefs:prefs});
 }
 function renderCalModal(){
@@ -7602,11 +7773,11 @@ function renderCalModal(){
           st:{fontSize:".84rem",background:"#4285f4",color:"#fff",border:"none",borderRadius:"8px",padding:"9px 14px",textDecoration:"none",display:"block",textAlign:"center",fontFamily:"inherit",cursor:"pointer"}},
           "Add to Google Calendar"),
         el("button",{cls:"sbtn ghost",st:{fontSize:".84rem"},
-          onClick:function(){var rid=u.rid;if(rid)downloadRotationICS(rid);else alert("No rotation record linked to your account.");}},"Download one-time .ics (Outlook / other)")
+          onClick:function(){var rid=u.rid;if(rid)downloadRotationICS(rid);else showToast("No rotation record linked to your account.");}},"Download one-time .ics (Outlook / other)")
       ),
       el("div",{st:{borderTop:"1px solid #f1ede9",paddingTop:"14px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px",flexWrap:"wrap"}},
         el("button",{st:{fontSize:".77rem",color:"#b91c1c",background:"none",border:"1px solid #fca5a5",borderRadius:"6px",padding:"5px 12px",cursor:"pointer"},
-          onClick:async function(){if(confirm("Reset your calendar link? Anyone subscribed to the current link will stop receiving updates."))await generateCalToken();}},"Reset link"),
+          onClick:async function(){showConfirm("Reset your calendar link? Anyone subscribed to the current link will stop receiving updates and will need to re-subscribe.",async()=>{await generateCalToken();},"Reset Link","danger");}},"Reset link"),
         el("button",{cls:"sbtn primary",st:{fontSize:".84rem"},
           onClick:async function(e){e.target.textContent="Saving...";e.target.disabled=true;await saveCalPrefs(Object.assign({},prefs));}},"Save Preferences")
       )
@@ -7627,6 +7798,7 @@ function renderCalModal(){
 }
 // Initialize
 (async function init(){
+  STATE.loading=true;render();
   try{
     const{data:{session}}=await sb.auth.getSession();
     if(session){
@@ -7646,12 +7818,13 @@ function renderCalModal(){
         loadKpiProposals();
         loadOncallData();
         loadBestResident();
+        loadNotifications();
       }
     }
   }catch(err){
     console.error("Init error:",err);
   }
-  render();
+  STATE.loading=false;render();
 })();
 </script>
 </body>
