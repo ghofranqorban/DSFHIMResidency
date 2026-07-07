@@ -6526,6 +6526,13 @@ function renderKPIExecutive(){
 ".kpix-yr-active:hover{box-shadow:0 8px 40px rgba(180,140,20,.22)!important}"+
 "@keyframes kpix-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(7px)}}"+
 "@keyframes kpix-gold-pulse{0%,100%{box-shadow:0 4px 20px rgba(180,140,20,.15),0 2px 12px rgba(0,0,0,.06)}50%{box-shadow:0 4px 40px rgba(180,140,20,.4),0 2px 12px rgba(0,0,0,.06)}}"+
+"@keyframes kpix-blobLR{0%,100%{transform:translateX(0) scale(1)}50%{transform:translateX(22px) scale(1.04)}}"+
+"@keyframes kpix-blobRL{0%,100%{transform:translateX(0) scale(1)}50%{transform:translateX(-18px) scale(.97)}}"+
+"@keyframes kpix-dotBob{0%,100%{transform:translateX(0)}50%{transform:translateX(10px)}}"+
+"@keyframes kpix-dotBob2{0%,100%{transform:translateX(0)}50%{transform:translateX(-10px)}}"+
+".kpix-blob{position:absolute;border-radius:50%;pointer-events:none;z-index:0}"+
+".kpix-dot{position:absolute;pointer-events:none;z-index:0}"+
+"#kpix-s4{position:relative;overflow:hidden}"+
 "@media(max-width:768px){.kpix-section{padding:28px 18px;min-height:auto;padding-top:48px;padding-bottom:48px}}"+
 "@media(max-width:640px){#kpix-s1{height:auto!important;min-height:100vh!important;padding:16px 14px 14px!important;gap:10px!important;}"+
 ".kpix-s1-pods{gap:6px!important;}.kpix-s1-pod-card{padding:10px 10px!important;gap:8px!important;}"+
@@ -6728,7 +6735,7 @@ function renderKPIExecutive(){
   // ── Section 2 ──
   const YEARS=["2025-26","2024-25","2023-24","2022-23"];
   const sec2=el("div",{cls:"kpix-section kpix-fade",id:"kpix-s2",st:{
-    background:"#ede5d8",borderBottom:"1px solid rgba(0,0,0,.07)"
+    background:"#f5ede0",borderBottom:"1px solid rgba(0,0,0,.07)"
   }},
     el("div",{st:{textAlign:"center",marginBottom:"36px"}},
       el("div",{st:{fontSize:".72rem",color:"#D4AF37",letterSpacing:".2em",fontWeight:"700",textTransform:"uppercase",marginBottom:"10px"}},"Program History"),
@@ -6831,10 +6838,21 @@ function renderKPIExecutive(){
   // ── Section 4 ──
   const LEVELS=["R4","R3","R2","R1"];
   const sec4=el("div",{cls:"kpix-section kpix-fade",id:"kpix-s4",st:{
-    background:"#ede5d8",
+    background:"#f5ede0",
     borderBottom:selResId?"1px solid rgba(0,0,0,.07)":"none"
   }},
-    el("div",{st:{marginBottom:"24px"}},
+    el("div",{cls:"kpix-blob",st:{top:"-40px",left:"-30px",width:"180px",height:"180px",background:"radial-gradient(circle,rgba(212,175,55,.18),rgba(212,175,55,0) 70%)",animation:"kpix-blobLR 6s ease-in-out infinite"}}),
+    el("div",{cls:"kpix-blob",st:{bottom:"-50px",right:"-40px",width:"220px",height:"220px",background:"radial-gradient(circle,rgba(205,127,50,.16),rgba(205,127,50,0) 70%)",animation:"kpix-blobRL 7s ease-in-out infinite 1s"}}),
+    el("div",{cls:"kpix-blob",st:{top:"30%",right:"-20px",width:"140px",height:"140px",background:"radial-gradient(circle,rgba(201,106,74,.12),rgba(201,106,74,0) 70%)",animation:"kpix-blobLR 5.5s ease-in-out infinite 0.5s"}}),
+    el("div",{cls:"kpix-dot",st:{top:"12%",left:"4%",width:"8px",height:"8px",borderRadius:"50%",background:"#D4AF37",opacity:".5",animation:"kpix-dotBob 3.5s ease-in-out infinite"}}),
+    el("div",{cls:"kpix-dot",st:{top:"22%",right:"5%",width:"6px",height:"6px",borderRadius:"50%",background:"#CD7F32",opacity:".45",animation:"kpix-dotBob2 4s ease-in-out infinite 0.5s"}}),
+    el("div",{cls:"kpix-dot",st:{bottom:"14%",left:"5%",width:"10px",height:"10px",borderRadius:"50%",background:"#c96a4a",opacity:".35",animation:"kpix-dotBob 3.8s ease-in-out infinite 1s"}}),
+    el("div",{cls:"kpix-dot",st:{bottom:"24%",right:"4%",width:"7px",height:"7px",borderRadius:"50%",background:"#D4AF37",opacity:".4",animation:"kpix-dotBob2 4.2s ease-in-out infinite 0.3s"}}),
+    el("div",{cls:"kpix-dot",st:{top:"50%",left:"2%",width:"12px",height:"12px",background:"#D4AF37",opacity:".18",borderRadius:"3px",transform:"rotate(20deg)",animation:"kpix-blobRL 5s ease-in-out infinite"}}),
+    el("div",{cls:"kpix-dot",st:{top:"36%",right:"3%",width:"9px",height:"9px",background:"#CD7F32",opacity:".22",transform:"rotate(45deg)",animation:"kpix-blobLR 4.5s ease-in-out infinite 0.8s"}}),
+    el("div",{cls:"kpix-dot",st:{bottom:"36%",right:"6%",width:"0",height:"0",borderLeft:"7px solid transparent",borderRight:"7px solid transparent",borderBottom:"12px solid rgba(212,175,55,.22)",animation:"kpix-dotBob2 5.2s ease-in-out infinite"}}),
+    el("div",{st:{position:"relative",zIndex:"1"}},
+      el("div",{st:{marginBottom:"24px"}},
       el("div",{st:{fontSize:".72rem",color:"#D4AF37",letterSpacing:".2em",fontWeight:"700",textTransform:"uppercase",marginBottom:"8px"}},"Residents \u00B7 "+selYear),
       el("h2",{st:{fontSize:"clamp(1.3rem,3vw,2rem)",fontWeight:"900",color:"#111827",margin:"0 0 6px"}},"Individual Performance"),
       el("div",{st:{color:"#475569",fontSize:".8rem"}},"Tap a resident to view their full KPI profile \u00B7 🥇 \u226580% Outstanding \u00B7 🥈 60\u201379% Strong Progress \u00B7 🥉 30\u201359% Developing \u00B7 🔴 <30% Needs Improvement")
@@ -6894,6 +6912,7 @@ function renderKPIExecutive(){
           )
         );
       }).filter(Boolean)
+    )
     )
   );
   // ── Section 5 ──
