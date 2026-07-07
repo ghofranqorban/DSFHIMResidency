@@ -6532,7 +6532,8 @@ function renderKPIExecutive(){
 "@keyframes kpix-dotBob2{0%,100%{transform:translateX(0)}50%{transform:translateX(-10px)}}"+
 ".kpix-blob{position:absolute;border-radius:50%;pointer-events:none;z-index:0}"+
 ".kpix-dot{position:absolute;pointer-events:none;z-index:0}"+
-"#kpix-s4{position:relative;overflow:hidden}"+
+"#kpix-s2,#kpix-s3,#kpix-s4{position:relative;overflow:hidden}"+
+"@keyframes kpix-drift{0%,100%{transform:translate(0,0)}50%{transform:translate(18px,-12px)}}"+
 "@media(max-width:768px){.kpix-section{padding:28px 18px;min-height:auto;padding-top:48px;padding-bottom:48px}}"+
 "@media(max-width:640px){#kpix-s1{height:auto!important;min-height:100vh!important;padding:16px 14px 14px!important;gap:10px!important;}"+
 ".kpix-s1-pods{gap:6px!important;}.kpix-s1-pod-card{padding:10px 10px!important;gap:8px!important;}"+
@@ -6737,6 +6738,8 @@ function renderKPIExecutive(){
   const sec2=el("div",{cls:"kpix-section kpix-fade",id:"kpix-s2",st:{
     background:"#f5ede0"
   }},
+    el("div",{st:{position:"absolute",borderRadius:"50%",bottom:"-160px",right:"-160px",width:"520px",height:"520px",background:"radial-gradient(circle,rgba(255,195,120,.45),rgba(255,195,120,0) 65%)",animation:"kpix-drift 9s ease-in-out infinite",pointerEvents:"none",zIndex:"0"}}),
+    el("div",{st:{position:"relative",zIndex:"1"}},
     el("div",{st:{textAlign:"center",marginBottom:"36px"}},
       el("div",{st:{fontSize:".72rem",color:"#D4AF37",letterSpacing:".2em",fontWeight:"700",textTransform:"uppercase",marginBottom:"10px"}},"Program History"),
       el("h2",{st:{fontSize:"clamp(1.3rem,3vw,2rem)",fontWeight:"900",color:"#111827",margin:"0 0 8px"}},"Academic Years"),
@@ -6791,6 +6794,7 @@ function renderKPIExecutive(){
         );
       })
     )
+    )
   );
   // ── Section 3 ──
   const mmTotalSessions=Object.values(MM_ATT).reduce((s,b)=>s+Object.keys(b).length,0);
@@ -6798,6 +6802,8 @@ function renderKPIExecutive(){
   const sec3=el("div",{cls:"kpix-section kpix-fade",id:"kpix-s3",st:{
     background:"#f5ede0"
   }},
+    el("div",{st:{position:"absolute",borderRadius:"50%",bottom:"-160px",right:"-160px",width:"520px",height:"520px",background:"radial-gradient(circle,rgba(255,195,120,.45),rgba(255,195,120,0) 65%)",animation:"kpix-drift 9s ease-in-out infinite",pointerEvents:"none",zIndex:"0"}}),
+    el("div",{st:{position:"relative",zIndex:"1"}},
     el("div",{st:{marginBottom:"28px"}},
       el("div",{st:{fontSize:".72rem",color:"#D4AF37",letterSpacing:".2em",fontWeight:"700",textTransform:"uppercase",marginBottom:"8px"}},"Year Breakdown \u00B7 "+selYear),
       el("h2",{st:{fontSize:"clamp(1.3rem,3vw,2rem)",fontWeight:"900",color:"#111827",margin:"0"}},"Cohort KPI Summary")
@@ -6833,6 +6839,7 @@ function renderKPIExecutive(){
       )
     ),
     el("div",{st:{textAlign:"center",marginTop:"22px",color:"#9ca3af",fontSize:".78rem"}},"↓ Scroll to see individual residents")
+    )
   );
   // ── Section 4 ──
   const LEVELS=["R4","R3","R2","R1"];
