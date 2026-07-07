@@ -6579,8 +6579,8 @@ function renderKPIExecutive(){
   const avgComm=Math.round(scored.reduce((s,r)=>{const ks=KPI_SCORES[r.id]||{};return s+(ks.commScore||0);},0)/total);
   function perfTier(v){
     if(v>=80)return{label:"🥇 Outstanding",clr:"#B8860B",bg:"rgba(184,134,11,.12)",border:"rgba(184,134,11,.35)"};
-    if(v>=60)return{label:"🥉 Strong Progress",clr:"#CD7F32",bg:"rgba(205,127,50,.1)",border:"rgba(205,127,50,.35)"};
-    if(v>=30)return{label:"🥈 Developing",clr:"#6b7280",bg:"rgba(156,163,175,.12)",border:"rgba(156,163,175,.4)"};
+    if(v>=60)return{label:"🥈 Strong Progress",clr:"#C0C0C0",bg:"rgba(192,192,192,.1)",border:"rgba(192,192,192,.35)"};
+    if(v>=30)return{label:"🥉 Developing",clr:"#CD7F32",bg:"rgba(205,127,50,.1)",border:"rgba(205,127,50,.35)"};
     return{label:"Needs Improvement",clr:"#dc2626",bg:"rgba(220,38,38,.09)",border:"rgba(220,38,38,.3)"};
   }
   function podCard(res,medal,medalIcon,ringColor,sz,padX,padY,fontSize,extraSt){
@@ -6837,7 +6837,7 @@ function renderKPIExecutive(){
     el("div",{st:{marginBottom:"24px"}},
       el("div",{st:{fontSize:".72rem",color:"#D4AF37",letterSpacing:".2em",fontWeight:"700",textTransform:"uppercase",marginBottom:"8px"}},"Residents \u00B7 "+selYear),
       el("h2",{st:{fontSize:"clamp(1.3rem,3vw,2rem)",fontWeight:"900",color:"#111827",margin:"0 0 6px"}},"Individual Performance"),
-      el("div",{st:{color:"#475569",fontSize:".8rem"}},"Tap a resident to view their full KPI profile \u00B7 🥇 \u226580% Outstanding \u00B7 🥉 60\u201379% Strong Progress \u00B7 🥈 30\u201359% Developing \u00B7 🔴 &lt;30% Needs Improvement")
+      el("div",{st:{color:"#475569",fontSize:".8rem"}},"Tap a resident to view their full KPI profile \u00B7 🥇 \u226580% Outstanding \u00B7 🥈 60\u201379% Strong Progress \u00B7 🥉 30\u201359% Developing \u00B7 🔴 <30% Needs Improvement")
     ),
     el("div",{st:{display:"flex",flexDirection:"column",gap:"26px"}},
       ...LEVELS.map(lvl=>{
