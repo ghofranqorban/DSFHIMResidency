@@ -18,6 +18,10 @@ create table if not exists announcements (
 
 alter table announcements enable row level security;
 
+-- Drop existing policies if they exist (safe to re-run)
+drop policy if exists ann_all on announcements;
+drop policy if exists ann_select on announcements;
+
 -- PD / chief / deputy_pd: full access
 create policy ann_all on announcements for all to authenticated
   using (is_pd_or_chief())

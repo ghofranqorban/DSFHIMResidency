@@ -186,7 +186,9 @@ QUIZZES_LOAD_ERR // string|null — set if quizzes table missing in Supabase
 | `add_promotion_log.sql` | ✅ Partially run | promotion_log table exists (policy already existed error — table is present) |
 | `add_kpi_quarterly_proposals.sql` | ✅ Partially run | kpi_quarterly + kpi_proposals tables exist (policy already existed error — tables are present) |
 | `fix_attendance_rls_and_deputy_pd.sql` | ⛔ Do NOT run | Adds consultants to attendance write policy — not needed. Attendance committee = privileged residents only, already covered by `has_priv('edit_mm_attendance')` in the original migration_003 policy. |
-| `add_oncall_resident_name.sql` | ⚠️ NOT YET RUN | Adds `resident_name text` column to `oncall_schedule` for free-text / outside-rotator entries. Run before using free-text in oncall cells. |
+| `add_oncall_resident_name.sql` | ✅ Run | Adds `resident_name text` column to `oncall_schedule` for free-text / outside-rotator entries. |
+| `add_notifications.sql` | ✅ Run | In-app notification bell — `notifications` table with RLS (users see own only, any auth can insert) |
+| `add_activity_log.sql` | ✅ Run | Audit trail — `activity_log` table, immutable (no UPDATE/DELETE policies), PD/chief/dio can read all |
 
 ---
 
@@ -618,7 +620,111 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - `renderScheduleTable()` — updated to support `stickyLeft`, `minW`, `maxW` on cols; wk-cell shows "W1" not "Week 1"
 
 **Still TODO (carried forward):**
-- Run `supabase/add_oncall_resident_name.sql` (free-text oncall entries) — NOT YET RUN
+- ~~Run `supabase/add_oncall_resident_name.sql`~~ ✅ Done
+- `kpi-evidence` Supabase Storage bucket — still not created
+- Historical KPI data (Phase 2)
+- KPI page visual redesign (deferred)
+- Oncall Statistics tab visibility (PD decides when to open to other roles)
+
+---
+
+### Session — 7 Jul 2026 (RLS fixes + consultant access)
+
+**Bugs fixed:**
+- **Oncall schedule showing "?" for all names** (reported for Dr. Joharji and Dr. Zahra): DB `resident_id` values are in the 80s–110s range; hardcoded fallback `RESIDENTS` uses ids 1–29. When `loadCoreData()` failed (due to RLS errors on `profiles` or `account_privileges` for some users), `RESIDENTS` was never updated from the DB, so `anyResById(93)` found nothing → "?". Two-part fix:
+  1. **Code**: `loadCoreData()` no longer aborts on `profiles`/`account_privileges` errors — only fails on `residents`/`consultants` errors. Non-critical errors are `console.warn`.
+  2. **SQL migration** `supabase/fix_read_rls_for_all.sql` ✅ Run: opens SELECT for all authenticated users on `residents`, `consultants`, `profiles`, `account_privileges`, `oncall_schedule`. No role restrictions on reads.
+- **Rota Timeline — consultants saw only assigned residents**: `renderRotaTimeline()` was using `visRes()` which filters to assigned residents for the consultant role. Fixed to use `RESIDENTS` (all) for any non-plain-resident role.
+
+**SQL migrations run this session:**
+- `supabase/fix_read_rls_for_all.sql` ✅ — open read RLS on 5 core tables
+- `supabase/add_oncall_resident_name.sql` ✅ — confirmed already run (column verified)
+
+**Consultant access confirmed working:**
+- KPI (assigned residents only) ✅
+- All rota views (Block, Timeline, Full Table) ✅
+- Oncall schedule (full) ✅
+- Morning Meeting schedule ✅
+- Teaching schedule ✅
+
+**Also fixed this session:**
+- **Username change syncs `residents.username`**: `saveUsername()` previously only updated `profiles.username` + auth email. Now also runs `sb.from("residents").update({username:newUser}).eq("id",u.rid)` when `u.rid` exists. Schedules unaffected (use numeric FK). Contact email (`profiles.contact_email`) is safe for residents to set to their real email — no auth side effects.
+
+**Teaching attendance notes:**
+- `canLogTeachAttendance()`: PD/chief/consultant always; residents need `edit_teach_attendance` privilege
+- No date lock — any session can be edited anytime
+- Session must exist in `teaching_sessions` schedule before attendance can be logged
+
+**Still TODO (carried forward):**
+- `kpi-evidence` Supabase Storage bucket — still not created
+- Historical KPI data (Phase 2)
+- KPI page visual redesign (deferred)
+- Oncall Statistics tab visibility (PD decides when to open to other roles)
+
+---
+
+### Session — 7 Jul 2026 (Loading screen, toast/confirm system, notifications, audit trail)
+
+**Features built / improved:**
+
+- **Hardcoded data removed**: `RESIDENTS`, `CONSULTANTS`, `MENTORS`, `ROT_H` arrays cleared to empty. DB is the sole source of truth. `loadCoreData()` already populated them; no logic change needed.
+- **Loading screen** (`renderLoading()`): Shown while session check + `loadCoreData()` run on startup. `STATE.loading` flag — set `true` at init start, `false` after. Spinner + "Loading your data…" text. Prevents blank white flash.
+- **Toast system** (`showToast(msg, type)`): Replaces all 78 `alert()` calls. Color-coded floating banners (error=red, warning=yellow, success=green, info=blue). Auto-dismiss 5s, manual ✕ close. Appends to `#toast-root` div created on demand.
+- **Confirm dialogs** (`showConfirm(msg, onYes, btnLabel, btnClass)`): Replaces all 16 `confirm()` calls. Styled modal with Cancel + action button. Async `onYes` callback.
+- **Info modal** (`showInfoModal(title, lines)`): Used for "Login Created" credentials — stays open until admin clicks "I have written this down ✓". Never auto-dismisses.
+- **Notification bell** in sidebar: 🔔 icon next to username, red badge shows unread count. Click opens `renderNotifPanel()` — right-side drawer listing notifications. "Mark all read" button. Notifications stored in `notifications` Supabase table.
+- **Notifications triggered on**: leave request submitted (→ notify all PD profiles), leave approved (→ notify resident), leave rejected (→ notify resident), KPI proposal submitted (→ notify PD), KPI approved (→ notify resident), KPI rejected (→ notify resident).
+- **Activity log** (`logActivity(actionType, entityType, entityId, details)`): Fire-and-forget insert to `activity_log` table. Called on: MM attendance marked, Teaching attendance marked, leave submitted/approved/rejected, KPI submitted/approved/rejected.
+- **Activity Log tab** in Admin panel: "📋 Activity Log" tab next to existing tabs. Calls `loadActivityLog()` on tab click. Shows last 200 entries: time ago, who, action type, details.
+
+**New functions:**
+- `renderLoading()`, `showToast()`, `showConfirm()`, `showInfoModal()` — UI utilities
+- `loadNotifications()`, `createNotification()`, `markNotifRead()`, `markAllNotifsRead()` — notification layer
+- `getPdProfileIds()` — returns array of profile IDs with pd/deputy_pd/dio role
+- `timeAgo(isoStr)` — "5m ago", "2h ago", "3d ago" formatter
+- `renderNotifPanel()` — notification drawer
+- `logActivity()`, `loadActivityLog()`, `renderActivityLog()` — audit trail
+
+**SQL migrations run (7 Jul 2026):**
+- `supabase/add_notifications.sql` ✅ — notifications table + RLS
+- `supabase/add_activity_log.sql` ✅ — activity_log table + RLS (immutable, PD/chief/dio read all)
+
+**Still TODO (carried forward):**
+- `kpi-evidence` Supabase Storage bucket — still not created
+- Historical KPI data (Phase 2)
+- KPI page visual redesign (deferred)
+- Oncall Statistics tab visibility (PD decides when to open to other roles)
+
+---
+
+### Session — 7 Jul 2026 (Performance Report visual redesign)
+
+**Bugs fixed:**
+- **Silver/bronze medal swap** (3 places): `sc()` (line ~6543) — fixed color order: `v>=80→#B8860B` (gold), `v>=60→#C0C0C0` (silver), `v>=30→#CD7F32` (bronze), `else→#DC2626` (red). Same swap fixed in `perfTier()` (label + bg + border). Legend text also fixed.
+- **`&lt;30%` rendered as literal HTML entity** in legend — replaced with literal `<30%` inside `el()` string.
+
+**Visual changes — Performance Report (all in `renderKPIExecutive()`):**
+
+- **Tier-based resident card coloring**: Each card in the roster (sec4) now has a colored stripe at top + matching background + border + shadow based on score tier:
+  - Gold (≥80%): `linear-gradient(90deg,#f7e98e,#D4AF37)` stripe, `#fdf8ec` bg
+  - Silver (60–79%): `linear-gradient(90deg,#ddd,#b0b0b0)` stripe, `#f5f5f5` bg
+  - Bronze (30–59%): `linear-gradient(90deg,#f0c080,#CD7F32)` stripe, `#fdf3e8` bg
+  - Red (<30%): `linear-gradient(90deg,#fca5a5,#ef4444)` stripe, `#fdf2f2` bg
+  - Card uses `overflow:"hidden"`, `padding:"0"`. First child = 7px stripe div. Second child = body wrapper with `padding:"12px 10px 14px"`.
+
+- **Unified beige background** across all sections: sec2 `"#ede5d8"` → `"#f5ede0"`, sec4 `"#ede5d8"` → `"#f5ede0"`. sec3 was already `"#f5ede0"`. All horizontal `borderBottom` lines removed (sec2, sec3) for seamless single-page feel.
+
+- **Floating background decorations (sec4)**: 8 large blobs (pastel radial gradients), 38 dots in 6 horizontal rows, 6 rotating squares, 6 triangles — all `position:absolute`, `opacity:.55–.70`, behind content via `zIndex:0`. Content wrapped in `el("div",{st:{position:"relative",zIndex:"1"}},...)`.
+  - Blob colors: `rgba(255,220,150,...)` / `rgba(255,180,130,...)` / `rgba(255,200,160,...)` etc.
+  - Dot colors: `#f5c77e` (soft gold) and `#f0a87a` (peach) — Option A chosen by user.
+  - Keyframes added to kpix-css: `kpix-blobLR`, `kpix-blobRL`, `kpix-dotBob`, `kpix-dotBob2`, `kpix-drift`.
+  - CSS rules added: `#kpix-s2,#kpix-s3,#kpix-s4{position:relative;overflow:hidden}`, `.kpix-blob{position:absolute;border-radius:50%;pointer-events:none;z-index:0}`, `.kpix-dot{position:absolute;pointer-events:none;z-index:0}`.
+
+- **Hazy centered glow (sec2 + sec3)**: Single 900px radial gradient dot centered behind content. `top:"calc(50% - 450px)"`, `left:"calc(50% - 450px)"`, `background:"radial-gradient(circle,rgba(255,200,130,.45),rgba(255,200,130,0) 65%)"`, `animation:"kpix-drift 9s ease-in-out infinite"`. Content wrapped in `zIndex:1` div to stay above glow. Centered using `calc()` rather than `transform:translate(-50%,-50%)` to avoid conflict with the drift animation.
+
+**Key pattern used**: `calc(50% - 450px)` for centering absolutely-positioned animated elements (avoids transform conflict with existing animation).
+
+**Still TODO (carried forward):**
 - `kpi-evidence` Supabase Storage bucket — still not created
 - Historical KPI data (Phase 2)
 - KPI page visual redesign (deferred)
