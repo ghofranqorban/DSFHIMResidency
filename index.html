@@ -1688,9 +1688,12 @@ function renderSidebar(){
   const initials=(u.name||"").split(" ").map(w=>w[0]||"").slice(0,2).join("").toUpperCase();
   const roleBg={pd:"#c96a4a",deputy_pd:"#c96a4a",dio:"#c96a4a",chief:"#c9913a",consultant:"#7a5a3a",resident:"#4a6a8a"}[u.role]||"#c96a4a";
   return el("aside",{cls:"sidebar"+(STATE.showMobileNav?" mob-open":"")},
-    el("div",{cls:"sidebar-brand"},
-      el("h1",null,"DSFH Residency"),
-      el("p",null,"Internal Medicine")
+    el("div",{cls:"sidebar-brand",st:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
+      el("div",null,
+        el("h1",null,"DSFH Residency"),
+        el("p",null,"Internal Medicine")
+      ),
+      STATE.showMobileNav?el("button",{onClick:()=>set({showMobileNav:false}),st:{background:"rgba(255,255,255,.1)",border:"none",color:"#FEFBF3",width:"28px",height:"28px",borderRadius:"50%",cursor:"pointer",fontSize:"1.1rem",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:"0"}},"\u00D7"):null
     ),
     el("div",{cls:"sidebar-user"},
       el("div",{cls:"av",st:{background:roleBg,borderRadius:"10px",width:"34px",height:"34px",fontSize:".72rem",flexShrink:"0"}},initials),
@@ -1728,18 +1731,19 @@ function renderSidebar(){
 }
 function renderMobileTopBar(){
   const u=STATE.user;
-  const hamIcon=el("button",{cls:"mob-ham","aria-label":"Menu",onClick:()=>set({showMobileNav:true})},
-    el("span"),el("span"),el("span")
-  );
-  const acctIcon=(()=>{
+  const hamIcon=(()=>{
     const NS="http://www.w3.org/2000/svg";
     function s(tag,a){const e=document.createElementNS(NS,tag);if(a)Object.entries(a).forEach(([k,v])=>e.setAttribute(k,v));return e;}
-    const svg=s("svg",{width:"18",height:"18",viewBox:"0 0 24 24",fill:"none",stroke:"rgba(254,251,243,.8)","stroke-width":"2","stroke-linecap":"round","stroke-linejoin":"round"});
-    const c=s("circle",{cx:"12",cy:"8",r:"4"});
-    const p=s("path",{d:"M4 20c0-4 3.6-7 8-7s8 3 8 7"});
-    svg.appendChild(c);svg.appendChild(p);return svg;
+    const svg=s("svg",{width:"22",height:"22",viewBox:"0 0 24 24",fill:"none",stroke:"#FEFBF3","stroke-width":"2","stroke-linecap":"round"});
+    svg.appendChild(s("line",{x1:"3",y1:"6",x2:"21",y2:"6"}));
+    svg.appendChild(s("line",{x1:"3",y1:"12",x2:"21",y2:"12"}));
+    svg.appendChild(s("line",{x1:"3",y1:"18",x2:"21",y2:"18"}));
+    const btn=el("button",{"aria-label":"Menu",onClick:()=>set({showMobileNav:true})});
+    btn.style.cssText="background:none;border:none;cursor:pointer;padding:4px;display:flex;align-items:center;";
+    btn.appendChild(svg);
+    return btn;
   })();
-  const acctBtn=el("button",{st:{background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",padding:"6px 8px",borderRadius:"8px",cursor:"pointer",display:"flex",alignItems:"center"},onClick:()=>set({showAccount:true})},acctIcon);
+  const acctBtn=el("button",{st:{background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.2)",color:"#FEFBF3",padding:"6px 10px",borderRadius:"8px",cursor:"pointer",fontSize:".8rem",fontWeight:"600"},onClick:()=>set({showAccount:true})},"Account");
   return el("div",{cls:"mob-topbar"},
     hamIcon,
     el("span",{cls:"mob-topbar-brand"},STATE.mod?(MODS.find(m=>m.id===STATE.mod)||{label:"DSFH"}).label:"DSFH Residency"),
