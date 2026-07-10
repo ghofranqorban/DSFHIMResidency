@@ -1705,7 +1705,6 @@ function renderBroadcastModal(){
     )
   );
 }
-function renderNav(){return null;}// legacy — replaced by sidebar
 function renderSidebar(){
   const u=STATE.user;
   const avail=MODS.filter(m=>m.roles.includes(effectiveRole(u.role)));
@@ -1795,7 +1794,7 @@ function renderAccountModal(){
     if(dbErr){btn.disabled=false;btn.textContent="Update Username";msg.textContent="Auth updated but profile sync failed: "+dbErr.message;return;}
     if(u.rid){await sb.from("residents").update({username:newUser}).eq("id",u.rid);}
     btn.disabled=false;btn.textContent="Update Username";
-    STATE.user.user=newUser;
+    set({user:{...STATE.user,user:newUser}});
     msg.style.color="#2a7a5a";msg.textContent=" Username changed to '"+newUser+"'. Use it to sign in from now on.";
   }
   async function savePassword(){
@@ -1823,7 +1822,7 @@ function renderAccountModal(){
     const{error}=await sb.from("profiles").update({display_name:name}).eq("id",u.profileId);
     btn.disabled=false;btn.textContent="Save Name";
     if(error){msg.textContent="Could not save: "+error.message;return;}
-    STATE.user.name=name;
+    set({user:{...STATE.user,name:name}});
     msg.style.color="#26523A";msg.textContent="Name updated.";
   }
   async function saveEmail(){
@@ -1835,7 +1834,7 @@ function renderAccountModal(){
     const{error}=await sb.rpc("update_my_contact_email",{new_email:email||null});
     btn.disabled=false;btn.textContent="Save Email";
     if(error){msg.textContent="Could not save email: "+error.message;return;}
-    STATE.user.contactEmail=email;
+    set({user:{...STATE.user,contactEmail:email}});
     msg.style.color="#26523A";msg.textContent="Contact email saved.";
   }
   return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
@@ -7985,10 +7984,12 @@ function renderCalModal(){
         loadOncallData();
         loadBestResident();
         loadNotifications();
+        loadQuizzes().catch(e=>console.warn("Quiz load failed:",e));
       }
     }
   }catch(err){
     console.error("Init error:",err);
+    document.body.innerHTML='<div style="padding:40px;text-align:center;font-family:system-ui"><h2 style="color:#b52040">Failed to load portal</h2><p style="color:#666">'+err.message+'</p><button onclick="location.reload()" style="margin-top:16px;padding:10px 24px;background:#c96a4a;color:#fff;border:none;border-radius:999px;cursor:pointer;font-size:1rem">Retry</button></div>';
   }
   STATE.loading=false;render();
 })();
