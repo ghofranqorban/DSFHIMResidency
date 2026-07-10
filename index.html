@@ -679,6 +679,8 @@ RESIDENTS.forEach(r=>{COMM_MEM[r.id]=[];COMM_SC[r.id]=0;});
 let KPI_SCORES={};
 let KPI_QUARTERLY={}; // {resident_id: {quarter: row}}
 let KPI_PROPOSALS=[]; // [{id,resident_id,field_key,quarter,note,proposed_by,proposed_by_role,proposed_at,status,...}]
+let CUMULATIVE_KPI={}; // {resId: {year: {scores:{...}, quarterly:{q:{...}}}}}
+let CUMULATIVE_KPI_LOADING=false;
 async function loadKpiQuarterly(){
   const{data,error}=await sb.from("kpi_quarterly").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR);
   if(error){console.warn("kpi_quarterly load error",error.message);return;}
@@ -689,6 +691,28 @@ async function loadKpiProposals(){
   const{data,error}=await sb.from("kpi_proposals").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("proposed_at",{ascending:false});
   if(error){console.warn("kpi_proposals load error",error.message);return;}
   KPI_PROPOSALS=data||[];
+}
+async function loadCumulativeKpi(resId){
+  if(CUMULATIVE_KPI_LOADING)return;
+  CUMULATIVE_KPI_LOADING=true;
+  const res=resById(resId);
+  if(!res){CUMULATIVE_KPI_LOADING=false;return;}
+  const startYear=res.yearStarted||CURRENT_ACADEMIC_YEAR;
+  const years=[];
+  for(let y=startYear;y<=CURRENT_ACADEMIC_YEAR;y++)years.push(y);
+  const[scRes,qRes,prRes]=await Promise.all([
+    sb.from("kpi_scores").select("*").eq("resident_id",resId).in("academic_year",years),
+    sb.from("kpi_quarterly").select("*").eq("resident_id",resId).in("academic_year",years),
+    sb.from("kpi_proposals").select("*").eq("resident_id",resId).in("academic_year",years)
+  ]);
+  const byYear={};
+  years.forEach(y=>{byYear[y]={scores:null,quarterly:{},proposals:[]};});
+  (scRes.data||[]).forEach(r=>{if(byYear[r.academic_year])byYear[r.academic_year].scores=r;});
+  (qRes.data||[]).forEach(r=>{if(byYear[r.academic_year])byYear[r.academic_year].quarterly[r.quarter]=r;});
+  (prRes.data||[]).forEach(r=>{if(byYear[r.academic_year])byYear[r.academic_year].proposals.push(r);});
+  CUMULATIVE_KPI[resId]=byYear;
+  CUMULATIVE_KPI_LOADING=false;
+  render();
 }
 function getApprovedFields(resId){
   const s=new Set();
@@ -1438,7 +1462,6 @@ const _LVL_ORD={R4:0,R3:1,R2:2,R1:3};
 function sortByLevel(arr){return arr.slice().sort((a,b)=>(_LVL_ORD[a.level]??9)-(_LVL_ORD[b.level]??9)||a.name.localeCompare(b.name));}
 function consultById(id){return CONSULTANTS.find(c=>c.id===id);}
 // ─── BEST RESIDENT HELPERS ───────────────────────────────────────────────────
-function currentQuarter(){const m=new Date().getMonth()+1;if(m>=10)return 1;if(m>=7)return 4;if(m>=4)return 3;return 2;}
 function quarterLabel(q){return["","Q1 (Oct–Dec)","Q2 (Jan–Mar)","Q3 (Apr–Jun)","Q4 (Jul–Sep)"][q]||"";}
 function quarterMonthsLabel(q){return["","October · November · December","January · February · March","April · May · June","July · August · September"][q]||"";}
 function quarterEndDate(q,ay){const ends={1:ay+"-12-31",2:(ay+1)+"-03-31",3:(ay+1)+"-06-30",4:(ay+1)+"-09-30"};return ends[q];}
@@ -1593,6 +1616,7 @@ const MODS=[
   {id:"admin",label:"PD Admin Panel",icon:"",desc:"Accounts, privileges & settings",color:"#2e3a4e",roles:["pd","deputy_pd"]},
   {id:"overview",label:"Overview Dashboard",icon:"",desc:"Bird's-eye view of all residents' performance",color:"#c96a4a",roles:["pd","deputy_pd","chief"]},
   {id:"kpi_exec",label:"Performance Report",icon:"",desc:"Executive KPI — program health, top performers & resident drill-down",color:"#1a2a4a",roles:["pd","deputy_pd","chief","consultant","resident"]},
+  {id:"cumulative_kpi",label:"Training Record",icon:"",desc:"Full academic history — yearly achievements & quarterly milestones per year",color:"#26523A",roles:["pd","deputy_pd","chief"]},
   {id:"best_resident",label:"Best Resident",icon:"",desc:"Quarterly voting, live KPI rankings & Hall of Fame",color:"#B8860B",roles:["pd","deputy_pd","chief","consultant","resident"]},
 ];
 function renderSearchOverlay(){
@@ -3729,47 +3753,30 @@ function calcKPIQ(id,qBlocks){
 function renderQuarterlyKPICard(resId){
   const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
   const q=STATE.mentorQ||currentQuarter();
-  return el("div",{cls:"card",st:{marginTop:"12px"}},
-    el("div",{cls:"flex-gap",st:{marginBottom:"10px",flexWrap:"wrap",gap:"6px"}},
-      el("span",{cls:"card-title",st:{margin:"0"}},"Quarterly Breakdown"),
-      el("div",{cls:"flex-wrap",st:{gap:"4px"}},
-        [1,2,3,4].map(n=>el("span",{cls:"pill"+(q===n?" on":""),onClick:()=>set({mentorQ:n})},QUARTER_LABELS[n]))
+  const qBlocks=QUARTER_BLOCKS[q];
+  const kq=calcKPIQ(resId,qBlocks);
+  const miniStat=(label,val,detail)=>el("div",{st:{flex:"1",minWidth:"0"}},
+    el("div",{st:{fontSize:".63rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.32)",marginBottom:"6px"}},label),
+    val!=null
+      ?el("div",null,
+        el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1.3rem",fontWeight:"700",color:kpiColor(val),lineHeight:"1",marginBottom:"3px"}},val+"%"),
+        el("div",{st:{fontSize:".67rem",color:"rgba(31,26,18,.35)"}},detail)
+      )
+      :el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.28)",fontStyle:"italic"}},"No data")
+  );
+  return el("div",{st:{marginTop:"28px",borderTop:"1px solid rgba(31,26,18,.07)",paddingTop:"20px"}},
+    el("div",{st:{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"8px",marginBottom:"16px"}},
+      el("div",{st:{fontSize:".68rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".08em",color:"rgba(31,26,18,.3)"}},"Quarterly Breakdown"),
+      el("div",{st:{display:"flex",gap:"4px"}},
+        [1,2,3,4].map(n=>{const active=q===n;return el("span",{st:{padding:"4px 11px",borderRadius:"9999px",fontSize:".7rem",fontWeight:"600",background:active?"#c96a4a":"#F6EFE2",color:active?"#FEFBF3":"rgba(31,26,18,.45)",cursor:"pointer",transition:"all .15s"},onClick:()=>set({mentorQ:n})},QUARTER_LABELS[n]);})
       )
     ),
-    (()=>{
-      const qBlocks=QUARTER_BLOCKS[q];
-      const kq=calcKPIQ(resId,qBlocks);
-      return el("div",null,
-        el("p",{cls:"sh",st:{marginBottom:"8px"}},"Blocks "+qBlocks.join(", ")+" · "+QUARTER_LABELS[q]),
-        el("div",{cls:"grid-3",st:{gap:"10px"}},
-          el("div",{cls:"card",st:{background:"#f0f9ff",border:"1px solid #bae6fd",padding:"12px"}},
-            el("div",{cls:"lbl",st:{marginBottom:"4px"}},"Morning Meeting"),
-            kq.mmPct!=null
-              ?el("div",null,
-                  el("div",{st:{fontSize:"1.4rem",fontWeight:"900",color:kpiColor(kq.mmPct)}},kq.mmPct+"%"),
-                  el("div",{cls:"sh"},kq.mmAtt+"/"+kq.mmTotal+" sessions"),
-                  el("div",{cls:"sh",st:{marginTop:"4px",color:"#7c3aed"}},kq.presCount+" presentation"+(kq.presCount!==1?"s":"")))
-              :el("div",{cls:"sh"},"No data yet")
-          ),
-          el("div",{cls:"card",st:{background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"12px"}},
-            el("div",{cls:"lbl",st:{marginBottom:"4px"}},"Teaching"),
-            kq.tPct!=null
-              ?el("div",null,
-                  el("div",{st:{fontSize:"1.4rem",fontWeight:"900",color:kpiColor(kq.tPct)}},kq.tPct+"%"),
-                  el("div",{cls:"sh"},kq.tAtt+"/"+kq.tTotal+" sessions"))
-              :el("div",{cls:"sh"},"No data yet")
-          ),
-          el("div",{cls:"card",st:{background:"#fefce8",border:"1px solid #fef08a",padding:"12px"}},
-            el("div",{cls:"lbl",st:{marginBottom:"4px"}},"Quiz Average"),
-            kq.qAvg!=null
-              ?el("div",null,
-                  el("div",{st:{fontSize:"1.4rem",fontWeight:"900",color:kpiColor(kq.qAvg)}},kq.qAvg+"%"),
-                  el("div",{cls:"sh"},kq.quizCount+" quiz"+(kq.quizCount!==1?"zes":"")))
-              :el("div",{cls:"sh"},"No quizzes this quarter")
-          )
-        )
-      );
-    })()
+    el("div",{st:{fontSize:".7rem",color:"rgba(31,26,18,.35)",marginBottom:"14px"}},"Blocks "+qBlocks.join(", ")+" · "+QUARTER_LABELS[q]),
+    el("div",{st:{display:"flex",gap:"0",background:"#F6EFE2",borderRadius:"12px",overflow:"hidden"}},
+      el("div",{st:{flex:"1",padding:"14px 16px",borderRight:"1px solid rgba(31,26,18,.07)"}},miniStat("Morning Meeting",kq.mmPct!=null?kq.mmPct:null,kq.mmPct!=null?(kq.mmAtt+"/"+kq.mmTotal+" sessions"):null)),
+      el("div",{st:{flex:"1",padding:"14px 16px",borderRight:"1px solid rgba(31,26,18,.07)"}},miniStat("Teaching",kq.tPct!=null?kq.tPct:null,kq.tPct!=null?(kq.tAtt+"/"+kq.tTotal+" sessions"):null)),
+      el("div",{st:{flex:"1",padding:"14px 16px"}},miniStat("Quiz Avg",kq.qAvg!=null?kq.qAvg:null,kq.qAvg!=null?(kq.quizCount+" quiz"+(kq.quizCount!==1?"zes":"")):null))
+    )
   );
 }
 // ─── MENTOR "MY RESIDENTS" VIEW ──────────────────────────────────────────────
@@ -3878,6 +3885,148 @@ function exportKpiPDF(res,k){
   </body></html>`;
   const w=window.open("","_blank");w.document.write(html);w.document.close();w.focus();setTimeout(()=>w.print(),400);
 }
+// ─── CUMULATIVE KPI (TRAINING RECORD) ────────────────────────────────────────
+function renderCumulativeKPI(){
+  const u=STATE.user;
+  const vr=visRes();
+  let selId=isResident()?u.rid:(STATE.cumKpiRes||vr[0]?.id);
+  const res=resById(selId)||vr[0];
+  if(!res)return el("div",{cls:"content"},el("p",{cls:"sh"},"No residents found."));
+  if(!CUMULATIVE_KPI[res.id]&&!CUMULATIVE_KPI_LOADING){
+    loadCumulativeKpi(res.id);
+    return el("div",{cls:"content"},
+      el("div",{st:{marginBottom:"28px"}},
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Academic History"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Training Record")
+      ),
+      el("p",{st:{color:"rgba(31,26,18,.45)",fontSize:".88rem"}},"Loading training history...")
+    );
+  }
+  if(CUMULATIVE_KPI_LOADING&&!CUMULATIVE_KPI[res.id]){
+    return el("div",{cls:"content"},
+      el("div",{st:{marginBottom:"28px"}},
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Academic History"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Training Record")
+      ),
+      el("p",{st:{color:"rgba(31,26,18,.45)",fontSize:".88rem"}},"Loading training history...")
+    );
+  }
+  const data=CUMULATIVE_KPI[res.id]||{};
+  const startYear=res.yearStarted||CURRENT_ACADEMIC_YEAR;
+  const years=[];
+  for(let y=startYear;y<=CURRENT_ACADEMIC_YEAR;y++)years.push(y);
+  const yearsDesc=[...years].reverse();
+  const expandedYear=STATE.cumKpiYear;
+  const lvlNums={R1:1,R2:2,R3:3,R4:4};
+  const lvlNames={1:"R1",2:"R2",3:"R3",4:"R4"};
+  function levelForYear(year){
+    const cur=lvlNums[res.level]||1;
+    const n=cur-(CURRENT_ACADEMIC_YEAR-year);
+    return lvlNames[Math.max(1,Math.min(4,n))];
+  }
+  function svi(paths,w,h){
+    const ns="http://www.w3.org/2000/svg";
+    const svg=document.createElementNS(ns,"svg");
+    svg.setAttribute("width",String(w||12));svg.setAttribute("height",String(h||12));
+    svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("fill","none");
+    svg.setAttribute("stroke","currentColor");svg.setAttribute("stroke-width","2");
+    svg.setAttribute("stroke-linecap","round");svg.setAttribute("stroke-linejoin","round");
+    svg.style.display="inline-block";svg.style.verticalAlign="middle";svg.style.flexShrink="0";
+    svg.innerHTML=paths;
+    return svg;
+  }
+  const achFields=[
+    {pk:"publication",label:"Publication",icon:'<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>'},
+    {pk:"qi",label:"QI Project",icon:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'},
+    {pk:"oral",label:"Oral Pres.",icon:'<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'},
+    {pk:"poster",label:"Poster",icon:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>'},
+    {pk:"awards",label:"Award",icon:'<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>'},
+    {pk:"volunteering",label:"Volunteer",icon:'<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/>'}
+  ];
+  function yearCard(year){
+    const yd=data[year]||{scores:null,quarterly:{},proposals:[]};
+    const sc=yd.scores;
+    const isCurrent=year===CURRENT_ACADEMIC_YEAR;
+    const isExpanded=expandedYear===year;
+    const lvl=levelForYear(year);
+    const lvlColor={R1:"#c96a4a",R2:"#A47A28",R3:"#26523A",R4:"#2a4a7a"}[lvl]||"#888";
+    const approved=new Set(yd.proposals.filter(p=>p.status==="approved"&&p.quarter==null).map(p=>p.field_key));
+    if(sc){
+      if(sc.bonus_published)approved.add("publication");
+      if(sc.qi_participated)approved.add("qi");
+      if(sc.bonus_oral)approved.add("oral");
+      if(sc.bonus_poster)approved.add("poster");
+      if(sc.awards_honors)approved.add("awards");
+      if(sc.volunteering)approved.add("volunteering");
+    }
+    const commScore=sc?sc.committee_score||0:null;
+    const hdr=el("div",{st:{display:"flex",alignItems:"center",gap:"14px",padding:"16px 20px",cursor:"pointer",userSelect:"none",background:isExpanded?"#F6EFE2":"transparent",transition:"background .15s"},onClick:()=>set({cumKpiYear:isExpanded?null:year})},
+      el("div",{st:{textAlign:"center",minWidth:"54px"}},
+        el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1rem",fontWeight:"700",color:isCurrent?"#c96a4a":"#1F1A12",lineHeight:"1"}},year+"-"+(year+1).toString().slice(2)),
+        el("span",{st:{marginTop:"5px",display:"inline-block",fontSize:".62rem",fontWeight:"700",padding:"2px 8px",borderRadius:"9999px",background:lvlColor+"1a",color:lvlColor}},lvl)
+      ),
+      el("div",{st:{flex:"1",display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap"}},
+        ...achFields.map(f=>el("div",{st:{display:"flex",alignItems:"center",gap:"3px",padding:"3px 8px",borderRadius:"9999px",background:approved.has(f.pk)?"rgba(127,184,156,.18)":"rgba(31,26,18,.05)",color:approved.has(f.pk)?"#26523A":"rgba(31,26,18,.22)",fontSize:".62rem",fontWeight:approved.has(f.pk)?"700":"400",whiteSpace:"nowrap"}},
+          svi(f.icon,9,9),el("span",null,f.label)
+        ))
+      ),
+      commScore!=null?el("div",{st:{textAlign:"center",minWidth:"38px"}},
+        el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:".95rem",fontWeight:"700",color:"#A47A28"}},commScore),
+        el("div",{st:{fontSize:".58rem",textTransform:"uppercase",letterSpacing:".05em",color:"rgba(31,26,18,.3)"}},"Comm.")
+      ):null,
+      isCurrent?el("button",{cls:"sbtn ghost",st:{fontSize:".7rem",padding:"3px 9px",whiteSpace:"nowrap"},onClick:e=>{e.stopPropagation();set({mod:"kpi",kpiSelRes:res.id,kpiTab:"ongoing"})}},"Full KPI"):null,
+      el("div",{st:{color:"rgba(31,26,18,.3)",transform:isExpanded?"rotate(180deg)":"rotate(0deg)",transition:"transform .2s",marginLeft:"4px"}},svi('<polyline points="6 9 12 15 18 9"/>',14,14))
+    );
+    if(!isExpanded)return el("div",{st:{borderBottom:"1px solid rgba(31,26,18,.07)"}},hdr);
+    const body=el("div",{st:{borderBottom:"1px solid rgba(31,26,18,.07)"}},
+      hdr,
+      el("div",{st:{padding:"0 20px 20px",background:"#F6EFE2"}},
+        el("div",{st:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:"10px"}},
+          ...[1,2,3,4].map(q=>{
+            const qd=yd.quarterly[q]||{};
+            const ql=QUARTER_LABELS[q]||("Q"+q);
+            const research=qd.research_milestone||"";
+            const improvement=qd.improvement_area||"";
+            return el("div",{st:{background:"#FEFBF3",borderRadius:"10px",padding:"12px 14px"}},
+              el("div",{st:{fontSize:".63rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"#c96a4a",marginBottom:"8px"}},ql),
+              el("div",{st:{marginBottom:"8px"}},
+                el("div",{st:{fontSize:".63rem",fontWeight:"700",color:"rgba(31,26,18,.33)",marginBottom:"3px"}},"Research Milestone"),
+                research?el("div",null,
+                  el("div",{st:{fontSize:".76rem",color:"#1F1A12",fontStyle:"italic",lineHeight:"1.45"}},"\u201c"+research+"\u201d"),
+                  qd.research_achieved?el("div",{st:{fontSize:".63rem",fontWeight:"700",color:"#26523A",marginTop:"3px"}},"Achieved"):null
+                ):el("div",{st:{fontSize:".7rem",color:"rgba(31,26,18,.25)",fontStyle:"italic"}},"Not set")
+              ),
+              el("div",null,
+                el("div",{st:{fontSize:".63rem",fontWeight:"700",color:"rgba(31,26,18,.33)",marginBottom:"3px"}},"Area of Improvement"),
+                improvement?el("div",null,
+                  el("div",{st:{fontSize:".76rem",color:"#1F1A12",fontStyle:"italic",lineHeight:"1.45"}},"\u201c"+improvement+"\u201d"),
+                  qd.improvement_achieved?el("div",{st:{fontSize:".63rem",fontWeight:"700",color:"#26523A",marginTop:"3px"}},"Achieved"):null
+                ):el("div",{st:{fontSize:".7rem",color:"rgba(31,26,18,.25)",fontStyle:"italic"}},"Not set")
+              )
+            );
+          })
+        )
+      )
+    );
+    return body;
+  }
+  return el("div",{cls:"content"},
+    el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
+      el("div",null,
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Academic History"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Training Record"),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},dname(res.name)+" · "+years.length+" year"+(years.length!==1?"s":"")+" · AY "+startYear+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2))
+      ),
+      !isResident()?el("select",{cls:"input",st:{width:"auto",fontSize:".84rem"},onChange:e=>{const id=parseInt(e.target.value);CUMULATIVE_KPI_LOADING=false;set({cumKpiRes:id,cumKpiYear:null});loadCumulativeKpi(id);}},
+        ...sortByLevel(vr).map(r=>el("option",{value:r.id,...(r.id===res.id?{selected:""}:{})},dname(r.name)+" ("+r.level+")"))
+      ):null
+    ),
+    el("div",{st:{border:"1px solid rgba(31,26,18,.09)",borderRadius:"14px",overflow:"hidden"}},
+      ...yearsDesc.map(y=>yearCard(y))
+    )
+  );
+}
+// ─── KPI DASHBOARD ───────────────────────────────────────────────────────────
 function renderKPI(){
   const vr=visRes();
   const u=STATE.user;
@@ -3961,76 +4110,65 @@ function renderKPI(){
   }
 
   // ── Quarterly milestone card ──────────────────────────────────
-  function milestoneCard(type,icon,textKey,achievedKey,placeholder){
+  function milestoneCard(type,iconPaths,textKey,achievedKey,placeholder){
     const q=STATE.mentorQ||currentQuarter();
     const qd=(KPI_QUARTERLY[res.id]||{})[q]||{};
     const text=qd[textKey]||"";
     const achieved=!!qd[achievedKey];
     const pendingProp=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.field_key===achievedKey&&p.quarter===q&&p.status==="pending");
-    return el("div",{cls:"card",st:{marginTop:"12px"}},
-      el("div",{cls:"flex-gap",st:{marginBottom:"10px"}},
-        el("span",{st:{fontSize:"1.2rem"}},icon),
-        el("div",{st:{flex:"1"}},
-          el("div",{cls:"card-title",st:{margin:"0"}},type==="research"?"Research Project Milestone":"Area of Improvement"),
-          el("div",{cls:"sh"},"Set by mentor or PD · Visible to resident")
+    const title=type==="research"?"Research Project Milestone":"Area of Improvement";
+    const statusPill=achieved
+      ?el("span",{st:{fontSize:".65rem",fontWeight:"700",padding:"3px 10px",borderRadius:"9999px",background:"rgba(127,184,156,.2)",color:"#26523A",whiteSpace:"nowrap"}},"Achieved")
+      :pendingProp.length?el("span",{st:{fontSize:".65rem",fontWeight:"700",padding:"3px 10px",borderRadius:"9999px",background:"rgba(203,161,85,.18)",color:"#7a5a10",whiteSpace:"nowrap"}},"Pending Review")
+      :null;
+    return el("div",{st:{marginTop:"20px",borderTop:"1px solid rgba(31,26,18,.07)",paddingTop:"20px"}},
+      el("div",{st:{display:"flex",alignItems:"center",gap:"10px",marginBottom:"14px"}},
+        el("div",{st:{width:"30px",height:"30px",borderRadius:"8px",background:"#F6EFE2",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:"0"}},
+          svgIcon(iconPaths,14,14)
         ),
-        achieved?el("span",{st:{background:"#dcfce7",color:"#166534",borderRadius:"8px",padding:"4px 10px",fontSize:".76rem",fontWeight:"700"}}," Achieved"):
-        pendingProp.length?el("span",{st:{background:"rgba(164,122,40,.12)",color:"#6a4c10",borderRadius:"8px",padding:"4px 10px",fontSize:".76rem",fontWeight:"700"}},"Pending Review"):null
+        el("div",{st:{flex:"1"}},
+          el("div",{st:{fontWeight:"600",fontSize:".86rem",color:"#1F1A12"}},title),
+          el("div",{st:{fontSize:".7rem",color:"rgba(31,26,18,.38)",marginTop:"1px"}},"Set by mentor or PD · visible to resident")
+        ),
+        statusPill
       ),
       canSetMilestone?el("div",null,
-        el("div",{cls:"lbl",st:{marginBottom:"4px"}},"Define the goal for this quarter"),
-        el("div",{cls:"flex-gap",st:{gap:"8px",alignItems:"flex-start"}},
-          el("textarea",{id:"q_"+type+"_"+q,cls:"input",rows:"2",st:{flex:"1",resize:"vertical"},placeholder},text),
-          el("button",{cls:"sbtn primary",st:{fontSize:".8rem",whiteSpace:"nowrap"},onClick:async()=>{
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.35)",marginBottom:"6px"}},"Define goal for this quarter"),
+        el("div",{st:{display:"flex",gap:"8px",alignItems:"flex-start"}},
+          el("textarea",{id:"q_"+type+"_"+q,cls:"input",rows:"2",st:{flex:"1",resize:"vertical",fontSize:".84rem"},placeholder},text),
+          el("button",{cls:"sbtn primary",st:{fontSize:".78rem",whiteSpace:"nowrap"},onClick:async()=>{
             const val=document.getElementById("q_"+type+"_"+q).value.trim();
             await saveKpiQuarterly(res.id,q,{[textKey]:val});
           }},"Save")
         )
-      ):text?el("div",{st:{background:"#F6EFE2",borderRadius:"8px",padding:"10px 12px",fontSize:".88rem",color:"#1F1A12",border:"1px solid #e2e8f0",fontStyle:"italic"}},text):
-      el("div",{cls:"sh"},"No milestone defined yet for this quarter."),
-      text?el("div",{st:{marginTop:"12px"}},
-        el("div",{cls:"lbl",st:{marginBottom:"6px"}},"Achievement Status"),
-        achieved?el("div",{cls:"flex-gap",st:{gap:"8px"}},
-          el("span",{st:{background:"#dcfce7",color:"#166534",borderRadius:"8px",padding:"6px 12px",fontWeight:"700",fontSize:".84rem"}}," Achieved this quarter"),
-          canSetMilestone||isPD()?el("button",{cls:"sbtn ghost",st:{fontSize:".74rem"},onClick:()=>saveKpiQuarterly(res.id,q,{[achievedKey]:false})},"Undo"):null
+      ):text?el("div",{st:{background:"#F6EFE2",borderRadius:"10px",padding:"12px 14px",fontSize:".86rem",color:"#1F1A12",fontStyle:"italic",lineHeight:"1.5"}},"\u201c"+text+"\u201d"):
+      el("div",{st:{fontSize:".78rem",color:"rgba(31,26,18,.3)",fontStyle:"italic"}},"No milestone defined yet for this quarter."),
+      text?el("div",{st:{marginTop:"14px"}},
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.35)",marginBottom:"8px"}},"Achievement Status"),
+        achieved?el("div",{st:{display:"flex",alignItems:"center",gap:"8px"}},
+          el("span",{st:{fontSize:".82rem",fontWeight:"600",color:"#26523A"}},"Achieved this quarter"),
+          canSetMilestone||isPD()?el("button",{cls:"sbtn ghost",st:{fontSize:".72rem",padding:"3px 10px"},onClick:()=>saveKpiQuarterly(res.id,q,{[achievedKey]:false})},"Undo"):null
         ):pendingProp.length?el("div",null,
-          isPD()?el("div",null,...pendingProp.map(p=>el("div",{st:{background:"#fefce8",border:"1px solid #fde68a",borderRadius:"8px",padding:"8px 12px",marginBottom:"6px"}},
-            el("div",{st:{fontSize:".8rem",fontWeight:"600",marginBottom:"4px"}}, "Claimed by "+(p.proposed_by_role==="resident"?"the resident":p.proposed_by_role==="consultant"?"the mentor":"Chief Resident")+ " · "+new Date(p.proposed_at).toLocaleDateString("en-GB",{day:"numeric",month:"short"})
+          isPD()?el("div",null,...pendingProp.map(p=>el("div",{st:{background:"rgba(203,161,85,.08)",border:"1px solid rgba(203,161,85,.3)",borderRadius:"10px",padding:"10px 12px",marginBottom:"6px"}},
+            el("div",{st:{fontSize:".74rem",fontWeight:"600",marginBottom:"6px",color:"rgba(31,26,18,.55)"}}, "Claimed by "+(p.proposed_by_role==="resident"?"the resident":p.proposed_by_role==="consultant"?"the mentor":"Chief Resident")+" · "+new Date(p.proposed_at).toLocaleDateString("en-GB",{day:"numeric",month:"short"})
             ),
-            p.note?el("div",{cls:"sh",st:{marginBottom:"6px",fontStyle:"italic"}},"\""+p.note+"\""):null,
-            el("div",{cls:"flex-gap",st:{gap:"6px"}},
-              el("button",{cls:"sbtn primary",st:{fontSize:".74rem"},onClick:async()=>{await reviewProposal(p.id,true);await saveKpiQuarterly(res.id,q,{[achievedKey]:true});}},"Approve"),
-              el("button",{cls:"sbtn ghost",st:{fontSize:".74rem",color:"#dc2626",borderColor:"#dc2626"},onClick:()=>reviewProposal(p.id,false)},"Reject")
+            p.note?el("div",{st:{fontSize:".8rem",marginBottom:"8px",fontStyle:"italic",color:"rgba(31,26,18,.6)"}},"\""+p.note+"\""):null,
+            el("div",{st:{display:"flex",gap:"6px"}},
+              el("button",{cls:"sbtn primary",st:{fontSize:".72rem",padding:"3px 10px"},onClick:async()=>{await reviewProposal(p.id,true);await saveKpiQuarterly(res.id,q,{[achievedKey]:true});}},"Approve"),
+              el("button",{cls:"sbtn ghost",st:{fontSize:".72rem",padding:"3px 10px",color:"#dc2626",borderColor:"#dc2626"},onClick:()=>reviewProposal(p.id,false)},"Reject")
             )
-          ))):el("div",{cls:"sh",st:{color:"#6a4c10"}},"Submitted — awaiting PD review")
-        ):el("div",{cls:"flex-gap",st:{gap:"8px",flexWrap:"wrap"}},
-          isPD()||canSetMilestone?el("button",{cls:"sbtn primary",st:{fontSize:".8rem"},onClick:async()=>{
+          ))):el("div",{st:{fontSize:".8rem",color:"#7a5a10"}},"Submitted — awaiting PD review")
+        ):el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap"}},
+          isPD()||canSetMilestone?el("button",{cls:"sbtn primary",st:{fontSize:".78rem"},onClick:async()=>{
             if(isPD()){await saveKpiQuarterly(res.id,q,{[achievedKey]:true});}
             else{const note=window.prompt("Optional note:","");if(note===null)return;await submitKpiProposal(res.id,achievedKey,q,note||null);}
-          }},isPD()?" Mark Achieved":" Submit as Achieved"):null,
-          isMyRes&&!canSetMilestone?el("button",{cls:"sbtn ghost",st:{fontSize:".8rem"},onClick:async()=>{
+          }},isPD()?"Mark Achieved":"Submit as Achieved"):null,
+          isMyRes&&!canSetMilestone?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem"},onClick:async()=>{
             const note=window.prompt("Optional supporting note:","");if(note===null)return;
             await submitKpiProposal(res.id,achievedKey,q,note||null);
-          }}," I achieved this"):null
+          }},"I achieved this"):null
         )
       ):null
-    );
-  }
-
-  // ── Ongoing tab ───────────────────────────────────────────────
-  function renderOngoing(){
-    return el("div",null,
-      el("div",{cls:"card"},
-        el("div",{cls:"card-title"}," Ongoing Performance"),
-        el("div",{cls:"sh",st:{marginBottom:"14px"}},"Auto-tracked throughout the year · "+QUIZZES.filter(q=>q.published&&q.sc[res.id]!=null).length+" quizzes recorded"),
-        el("div",{cls:"grid-2",st:{gap:"12px"}},
-          kpiRow("Quiz Average","",k.qAvg,KPI_W.quiz,kpiColor(k.qAvg),QUIZZES.filter(q=>q.published&&q.sc[res.id]!=null).length+" published quizzes"),
-          kpiRow("Morning Meeting Att.","",k.mmPct,KPI_W.mm,kpiColor(k.mmPct),k.mmAtt+"/"+k.mmTotal+" sessions"),
-          kpiRow("Teaching Sessions","",k.tPct,KPI_W.teach,kpiColor(k.tPct),k.tAtt+"/"+k.tTotal+" sessions"),
-          kpiRow("Presenter / Moderator","",k.pres?100:0,KPI_W.pres,k.pres?"#059669":"#dc2626",k.presCount+" session"+(k.presCount!==1?"s":""))
-        )
-      ),
-      renderQuarterlyKPICard(res.id)
     );
   }
 
@@ -4039,69 +4177,29 @@ function renderKPI(){
     const q=STATE.mentorQ||currentQuarter();
     const qBlocks=QUARTER_BLOCKS[q];
     const kq=calcKPIQ(res.id,qBlocks);
-    return el("div",null,
-      el("div",{cls:"card"},
-        el("div",{cls:"lbl",st:{marginBottom:"8px"}},"Select Quarter"),
-        el("div",{cls:"flex-wrap",st:{gap:"4px"}},
-          [1,2,3,4].map(n=>el("span",{cls:"pill"+(q===n?" on":""),onClick:()=>set({mentorQ:n})},QUARTER_LABELS[n]))
-        ),
-        el("div",{cls:"sh",st:{marginTop:"8px"}},"Blocks "+qBlocks.join(", ")+" · Quarterly tracking is informational — not included in KPI score")
+    const statBox=(label,iconPaths,mainVal,detail,subColor)=>el("div",{st:{flex:"1",minWidth:"0",padding:"16px 18px",background:"#F6EFE2",borderRadius:"12px"}},
+      el("div",{st:{fontSize:".66rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".07em",color:"rgba(31,26,18,.35)",display:"flex",alignItems:"center",gap:"5px",marginBottom:"10px"}},
+        svgIcon(iconPaths,10,10),label
       ),
-      el("div",{cls:"grid-3",st:{gap:"10px"}},
-        el("div",{cls:"card",st:{background:"#f0f9ff",border:"1px solid #bae6fd",padding:"12px"}},
-          el("div",{cls:"lbl",st:{marginBottom:"4px"}}," Morning Meeting"),
-          kq.mmPct!=null?el("div",null,
-            el("div",{st:{fontSize:"1.4rem",fontWeight:"900",color:kpiColor(kq.mmPct)}},kq.mmPct+"%"),
-            el("div",{cls:"sh"},kq.mmAtt+"/"+kq.mmTotal+" sessions"),
-            el("div",{cls:"sh",st:{color:"#7c3aed"}},kq.presCount+" pres/mod")
-          ):el("div",{cls:"sh"},"No data yet")
-        ),
-        el("div",{cls:"card",st:{background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"12px"}},
-          el("div",{cls:"lbl",st:{marginBottom:"4px"}}," Teaching"),
-          kq.tPct!=null?el("div",null,
-            el("div",{st:{fontSize:"1.4rem",fontWeight:"900",color:kpiColor(kq.tPct)}},kq.tPct+"%"),
-            el("div",{cls:"sh"},kq.tAtt+"/"+kq.tTotal+" sessions")
-          ):el("div",{cls:"sh"},"No data yet")
-        ),
-        el("div",{cls:"card",st:{background:"#fefce8",border:"1px solid #fef08a",padding:"12px"}},
-          el("div",{cls:"lbl",st:{marginBottom:"4px"}}," Quiz Average"),
-          kq.qAvg!=null?el("div",null,
-            el("div",{st:{fontSize:"1.4rem",fontWeight:"900",color:kpiColor(kq.qAvg)}},kq.qAvg+"%"),
-            el("div",{cls:"sh"},kq.quizCount+" quiz"+(kq.quizCount!==1?"zes":""))
-          ):el("div",{cls:"sh"},"No quizzes this quarter")
+      mainVal!=null
+        ?el("div",null,
+          el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1.7rem",fontWeight:"700",color:kpiColor(mainVal),lineHeight:"1",marginBottom:"4px"}},mainVal+"%"),
+          el("div",{st:{fontSize:".7rem",color:subColor||"rgba(31,26,18,.38)"}},detail)
         )
-      ),
-      milestoneCard("research","","research_milestone","research_achieved","e.g. Complete literature review and submit protocol to IRB by end of quarter"),
-      milestoneCard("improvement","","improvement_area","improvement_achieved","e.g. Improve documentation of discharge summaries — target: 100% completion rate")
+        :el("div",{st:{fontSize:".78rem",color:"rgba(31,26,18,.3)",fontStyle:"italic"}},"No data yet")
     );
-  }
-
-  // ── Yearly tab ────────────────────────────────────────────────
-  function renderYearlyTab(){
-    const pendingCount=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.quarter==null&&p.status==="pending").length;
     return el("div",null,
-      isPD()&&pendingCount>0?el("div",{cls:"alert-yellow",st:{marginBottom:"12px"}}, ""+pendingCount+" achievement submission"+(pendingCount>1?"s":"")+" pending your review." ):null,
-      el("div",{cls:"card"},
-        el("div",{cls:"card-title"}," Committee Participation — Active"),
-        el("div",{cls:"sh",st:{marginBottom:"10px"}},"Score set by PD only · "+KPI_W.comm+"% of total KPI"),
-        canEdit_?el("div",{cls:"flex-gap",st:{alignItems:"center",gap:"10px"}},
-          el("input",{type:"number",cls:"input-sm",st:{width:"70px"},min:"0",max:"10",value:COMM_SC[res.id]||0,
-            onChange:e=>{const v=Math.min(10,Math.max(0,parseInt(e.target.value)||0));saveKpiScore(res.id,{commScore:v});}}),
-          el("span",{cls:"sh"},"/10 → "+k.commPct+"% contribution")
-        ):el("div",{st:{fontSize:"1.4rem",fontWeight:"900",color:kpiColor(k.commPct)}},k.commPct+"%")
+      el("div",{st:{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"20px"}},
+        [1,2,3,4].map(n=>{const active=q===n;return el("span",{st:{padding:"5px 14px",borderRadius:"9999px",fontSize:".74rem",fontWeight:"600",background:active?"#c96a4a":"#F6EFE2",color:active?"#FEFBF3":"rgba(31,26,18,.55)",cursor:"pointer",transition:"all .15s"},onClick:()=>set({mentorQ:n})},QUARTER_LABELS[n]);})
       ),
-      el("div",{cls:"card",st:{marginTop:"12px"}},
-        el("div",{cls:"card-title"}," Yearly Achievements"),
-        el("div",{cls:"sh",st:{marginBottom:"14px"}},"Resident, mentor, or chief can submit — PD approves before it counts toward KPI score."),
-        el("div",{cls:"grid-2",st:{gap:"10px"}},
-          renderAchievement("qi","","Quality Improvement Project",KPI_W.qi,k.qiPct>0),
-          renderAchievement("publication","","Research Publication",KPI_W.pub,k.pubPct>0),
-          renderAchievement("oral","","Oral Presentation at Conference",KPI_W.oral,k.oralPct>0),
-          renderAchievement("poster","","Poster Presentation at Conference",KPI_W.poster,k.posterPct>0),
-          renderAchievement("awards","","Award / Honor",KPI_W.awards,k.awardsPct>0),
-          renderAchievement("volunteering","","Volunteering",KPI_W.volunteering,k.volunteeringPct>0)
-        )
-      )
+      el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.38)",marginBottom:"16px"}},"Blocks "+qBlocks.join(", ")+" · Quarterly stats are informational — not included in overall KPI score"),
+      el("div",{st:{display:"flex",gap:"10px",marginBottom:"28px"}},
+        statBox("Morning Meeting",'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',kq.mmPct!=null?kq.mmPct:null,kq.mmPct!=null?(kq.mmAtt+"/"+kq.mmTotal+" sessions · "+kq.presCount+" pres/mod"):null),
+        statBox("Teaching",'<path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>',kq.tPct!=null?kq.tPct:null,kq.tPct!=null?(kq.tAtt+"/"+kq.tTotal+" sessions"):null),
+        statBox("Quiz Average",'<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>',kq.qAvg!=null?kq.qAvg:null,kq.qAvg!=null?(kq.quizCount+" quiz"+(kq.quizCount!==1?"zes":"")):null)
+      ),
+      milestoneCard("research",'<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>',"research_milestone","research_achieved","e.g. Complete literature review and submit protocol to IRB by end of quarter"),
+      milestoneCard("improvement",'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',"improvement_area","improvement_achieved","e.g. Improve documentation of discharge summaries — target: 100% completion rate")
     );
   }
 
@@ -7664,6 +7762,7 @@ function render(){
         case"admin":content=renderAdmin();break;
         case"overview":content=renderPDOverview();break;
         case"kpi_exec":content=renderKPIExecutive();break;
+        case"cumulative_kpi":content=renderCumulativeKPI();break;
         case"oncall":content=renderOncall();break;
         case"best_resident":content=renderBestResident();break;
         default:content=renderModGrid();
