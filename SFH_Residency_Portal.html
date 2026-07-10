@@ -6767,7 +6767,7 @@ function renderBestResidentBanner(){
 // ─── LEAVE PLAN MODULE (AY 2026-27) ──────────────────────────────────────────
 function renderLeavePlan(){
   const u=STATE.user;if(!u)return null;
-  const canManage=isPdRole(u.role)||u.role==="chief"||hasPriv(u.profileId,"plan_rota");
+  const canManage=(isPdRole(u.role)||u.role==="chief")||(u.role==="resident"&&hasPriv(u.profileId,"plan_rota"));
   const tab=canManage?(STATE.lpTab||"mine"):"mine";
   const now=new Date();
   const passed=now>LP_DEADLINE;
