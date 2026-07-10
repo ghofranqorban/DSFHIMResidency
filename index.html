@@ -2552,15 +2552,27 @@ function renderScheduleTable(sessions,blk,cols){
 }
 // ─── MORNING MEETINGS ────────────────────────────────────────────────────────
 function renderMorning(){
+  const blk=STATE.mmBlock;
+  const period=ROTA_PERIODS[blk-1]||"";
+  const canEdit=canEditMMSchedule();
+  const header=el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
+    el("div",null,
+      el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Morning Meetings"),
+      el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Attendance & Schedule"),
+      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+" · Block "+blk+(period?" · "+period:""))
+    ),
+    canEdit?el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"999px",padding:"9px 22px",fontSize:".84rem",fontWeight:"600",cursor:"pointer",flexShrink:"0"},onClick:()=>set({mmShowEntry:true,mmEntrySession:"new_mm",mmTab:"schedule"})},"+ Add Session"):null
+  );
+  const tabs=el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"28px"}},
+    ...["schedule","attendance","overview"].map(t=>{
+      const label=t==="schedule"?"Schedule":t==="attendance"?"Attendance":"Overview";
+      const active=STATE.mmTab===t;
+      return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({mmTab:t})},label);
+    })
+  );
   return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-      el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"Morning Meetings")
-    ),
-    el("div",{cls:"tab-bar"},
-      ["schedule","attendance","overview"].map(t=>el("span",{cls:"tab"+(STATE.mmTab===t?" on":""),onClick:()=>set({mmTab:t})},
-        t==="schedule"?"Schedule":t==="attendance"?"Attendance":"Overview" ))
-    ),
+    header,
+    tabs,
     STATE.mmTab==="schedule"?renderMMSchedule():
     STATE.mmTab==="attendance"?renderMMAttendance():
     renderMMOverview()
@@ -2839,20 +2851,17 @@ function renderMMSchedule(){
     wrap.appendChild(editBtn);wrap.appendChild(delBtn);
     return wrap;
   }});
+  const blkRow=el("div",{st:{display:"flex",alignItems:"center",gap:"8px",marginBottom:"20px",flexWrap:"wrap"}},
+    el("span",{st:{fontSize:".72rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.42)",marginRight:"4px"}},"Block"),
+    ...ROTA_PERIODS.map((_,i)=>{const n=i+1;const a=blk===n;return el("span",{st:{padding:"5px 13px",borderRadius:"999px",fontSize:".78rem",fontWeight:"500",cursor:"pointer",border:"1px solid "+(a?"#c96a4a":"rgba(31,26,18,.12)"),background:a?"#c96a4a":"transparent",color:a?"#FEFBF3":"rgba(31,26,18,.55)",transition:"all .15s"},onClick:()=>set({mmBlock:n})},"B"+n);})
+  );
   return el("div",null,
-    el("div",{cls:"card"},
-      el("div",{cls:"lbl"},"Select Block"),
-      el("div",{cls:"flex-wrap",st:{marginTop:"6px"}},
-        ...ROTA_PERIODS.map((_,i)=>{const n=i+1;return el("span",{cls:"pill"+(blk===n?" on":""),onClick:()=>set({mmBlock:n})},"B"+n);})
-      )
-    ),
-    el("div",{cls:"card"},
-      el("div",{cls:"flex-gap",st:{marginBottom:"12px",flexWrap:"wrap",gap:"6px"}},
-        el("span",{cls:"card-title",st:{margin:"0"}},"Block "+blk+" Sessions"),
-        canEditSched?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem"},onClick:()=>generateMMSessions(blk)}," Auto-fill dates"):null,
-        canEditSched?el("button",{cls:"sbtn primary",onClick:()=>set({mmShowEntry:true,mmEntrySession:"new_mm"})},"+ Add Session"):null
-      ),
-      formOpen?renderMMScheduleForm(blk,editingSession):null,
+    blkRow,
+    canEditSched?el("div",{st:{marginBottom:"12px"}},
+      el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.12)",color:"rgba(31,26,18,.55)",padding:"5px 14px",borderRadius:"999px",cursor:"pointer",fontSize:".78rem"},onClick:()=>generateMMSessions(blk)},"Auto-fill dates")
+    ):null,
+    formOpen?renderMMScheduleForm(blk,editingSession):null,
+    el("div",{st:{border:"1px solid rgba(31,26,18,.08)",borderRadius:"12px",overflow:"hidden"}},
       renderScheduleTable(sessions,blk,cols)
     )
   );
@@ -2870,26 +2879,31 @@ function renderMMAttendance(){
     });
   });
   const avgPct=totalSess&&vr.length?Math.round((totalP+totalL+totalE)/(totalSess*vr.length)*100):0;
+  const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#b52040";
+  function sBox(label,val,color){
+    return el("div",{st:{background:"#F6EFE2",borderRadius:"12px",padding:"14px 16px",flex:"1",minWidth:"90px"}},
+      el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.6rem",fontWeight:"400",color:color||"#1F1A12",lineHeight:"1"}},(typeof val==="number"?String(val):val)),
+      el("div",{st:{fontSize:".7rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.42)",marginTop:"5px"}},label)
+    );
+  }
+  const blkRow=el("div",{st:{display:"flex",alignItems:"center",gap:"8px",marginBottom:"20px",flexWrap:"wrap"}},
+    el("span",{st:{fontSize:".72rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.42)",marginRight:"4px"}},"Block"),
+    ...ROTA_PERIODS.map((_,i)=>{const n=i+1;const a=blk===n;return el("span",{st:{padding:"5px 13px",borderRadius:"999px",fontSize:".78rem",fontWeight:"500",cursor:"pointer",border:"1px solid "+(a?"#c96a4a":"rgba(31,26,18,.12)"),background:a?"#c96a4a":"transparent",color:a?"#FEFBF3":"rgba(31,26,18,.55)",transition:"all .15s"},onClick:()=>set({mmBlock:n})},"B"+n);})
+  );
   return el("div",null,
-    el("div",{cls:"card"},
-      el("div",{cls:"lbl"},"Select Block"),
-      el("div",{cls:"flex-wrap",st:{marginTop:"6px"}},
-        ...ROTA_PERIODS.map((_,i)=>{const n=i+1;return el("span",{cls:"pill"+(blk===n?" on":""),onClick:()=>set({mmBlock:n})},"B"+n);})
-      )
+    blkRow,
+    el("div",{st:{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"10px",marginBottom:"24px"}},
+      sBox("Sessions",totalSess),
+      sBox("Avg Att",avgPct+"%",kpiColor(avgPct)),
+      sBox("Late",totalL,"#A47A28"),
+      sBox("Absent",totalA,"#b52040"),
+      sBox("Excused",totalE,"rgba(31,26,18,.42)")
     ),
-    el("div",{cls:"flex-wrap",st:{marginBottom:"14px",gap:"10px"}},
-      el("div",{cls:"statbox",st:{flex:"1",minWidth:"90px"}},el("div",{cls:"statval"},totalSess),el("div",{cls:"statlbl"},"Sessions")),
-      el("div",{cls:"statbox",st:{flex:"1",minWidth:"90px"}},el("div",{cls:"statval"},avgPct+"%"),el("div",{cls:"statlbl"},"Avg Attendance")),
-      el("div",{cls:"statbox",st:{flex:"1",minWidth:"90px"}},el("div",{cls:"statval",st:{color:"#A47A28"}},totalL),el("div",{cls:"statlbl"},"Late")),
-      el("div",{cls:"statbox",st:{flex:"1",minWidth:"90px"}},el("div",{cls:"statval",st:{color:"#dc2626"}},totalA),el("div",{cls:"statlbl"},"Absent")),
-      el("div",{cls:"statbox",st:{flex:"1",minWidth:"90px"}},el("div",{cls:"statval",st:{color:"#7c3aed"}},totalE),el("div",{cls:"statlbl"},"Excused"))
-    ),
-    sessions.length===0?el("div",{cls:"card"},el("p",{cls:"sh"},"No sessions for this block.")):
-    el("div",{cls:"card"},
-      el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
-        el("span",{cls:"card-title",st:{margin:"0"}},"Attendance Table"),
-        sessions.length?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem",marginLeft:"auto"},onClick:()=>exportAttendance("mm",blk)}," Export Excel"):null,
-        canLogMMAttendance()&&(isPD()||sessions.some(s=>canEditAttSession(s.session_date)))?el("button",{cls:"sbtn primary",onClick:()=>set({mmShowEntry:!STATE.mmShowEntry,mmEntrySession:null})},STATE.mmShowEntry?"Hide Form":"Log Attendance"):null
+    sessions.length===0?el("p",{st:{color:"rgba(31,26,18,.42)",fontSize:".88rem"}},"No sessions for this block."):
+    el("div",null,
+      el("div",{st:{display:"flex",gap:"8px",marginBottom:"12px",flexWrap:"wrap"}},
+        sessions.length?el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.12)",color:"rgba(31,26,18,.55)",padding:"5px 14px",borderRadius:"999px",cursor:"pointer",fontSize:".78rem"},onClick:()=>exportAttendance("mm",blk)},"Export Excel"):null,
+        canLogMMAttendance()&&(isPD()||sessions.some(s=>canEditAttSession(s.session_date)))?el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"999px",padding:"6px 16px",cursor:"pointer",fontSize:".82rem",fontWeight:"600"},onClick:()=>set({mmShowEntry:!STATE.mmShowEntry,mmEntrySession:null})},STATE.mmShowEntry?"Hide Form":"Log Attendance"):null
       ),
       STATE.mmShowEntry?renderMMEntryForm(blk,sessions):null,
       el("div",{cls:"tbl-wrap"},
@@ -3008,9 +3022,9 @@ function renderMMEntryForm(blk,sessions){
 function renderMMOverview(){
   const vr=visRes();
   const blocks=[...new Set(MM_SESSIONS.map(s=>s.block_number))].sort((a,b)=>a-b);
-  return el("div",{cls:"card"},
-    el("div",{cls:"card-title"},"Morning Meeting Overview"),
-    el("div",{cls:"tbl-wrap"},
+  return el("div",null,
+    el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.2rem",fontWeight:"600",color:"#1F1A12",marginBottom:"16px"}},"All-Blocks Overview"),
+    el("div",{st:{border:"1px solid rgba(31,26,18,.08)",borderRadius:"12px",overflow:"hidden"}},
       el("table",null,
         el("thead",null,
           el("tr",null,
