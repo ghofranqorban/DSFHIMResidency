@@ -1653,7 +1653,7 @@ function renderBroadcastModal(){
     el("div",{cls:"modal-card",st:{width:"480px",maxWidth:"100%"}},
       el("div",{cls:"modal-header"},
         el("div",{cls:"modal-title"}," Broadcast Announcement"),
-        el("button",{cls:"modal-close",onClick:close},"")
+        el("button",{cls:"modal-close",onClick:close},"×")
       ),
       el("div",{cls:"modal-body"},
         el("div",{cls:"lbl"},"Title / Subject"),
@@ -7077,7 +7077,7 @@ function renderOncallEditModal(){
     el("div",{cls:"modal-card",st:{width:"560px",maxWidth:"100%"}},
       el("div",{cls:"modal-header"},
         el("h3",{cls:"modal-title"},(isWe?"":"")+" On-Call — "+dayName+", "+fmtDate(date)),
-        el("button",{cls:"modal-close",onClick:close},"")
+        el("button",{cls:"modal-close",onClick:close},"×")
       ),
       el("div",{cls:"modal-body"},
         isWe
@@ -7778,7 +7778,7 @@ function renderCalModal(){
       el("div",{cls:"lbl",st:{marginBottom:"8px"}},"What to include"),
       ...PREF_OPTS.map(mkChkRow),
       feedSection,
-      el("button",{cls:"modal-close",onClick:close},"x")
+      el("button",{cls:"modal-close",onClick:close},"×")
     )
   );
 }
