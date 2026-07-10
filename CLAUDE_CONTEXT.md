@@ -729,3 +729,92 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - Historical KPI data (Phase 2)
 - KPI page visual redesign (deferred)
 - Oncall Statistics tab visibility (PD decides when to open to other roles)
+
+---
+
+### Session — 10 Jul 2026 (Eventevia design system + global redesign)
+
+**Features built / improved:**
+
+- **Collapsible roster groups in Performance Report** (`renderKPIExecutive()`): Each level group (R4/R3/R2/R1) is now independently collapsible. Clicking the group header toggles the body. Animated chevron (SVG, rotates -90° when collapsed). Pattern uses imperative `grpWrap.appendChild(hdr); grpWrap.appendChild(body)` with `body.id = "kpix-lvlb-"+lvl` and `getElementById` in the click handler (required because `el()` needs post-hoc ID lookup).
+
+- **Full portal Eventevia design system** — entire `<style>` block replaced with the Eventevia palette:
+  - **Palette**: `#FEFBF3` cream canvas · `#F6EFE2` parchment · `#1F1A12` dark · `#c96a4a` terracotta · `#A47A28` gold · `#CBA155` light gold · `#7FB89C` green
+  - **Typography**: Playfair Display (serif) for all headings and large stat numbers; existing sans stack for body
+  - **Cards** → transparent, no shadow, `border-bottom: 1px solid rgba(31,26,18,.07)` — flowing sections, no boxing
+  - **Tabs** → underline-only (`border-bottom: 2px solid transparent`), no background box
+  - **Stat boxes** → `background: #F6EFE2`, Playfair Display numbers
+  - **Module grid** → `border: none; border-right/bottom: 1px rgba` editorial grid, hover = `#F6EFE2`
+  - **Hero / login / loading** → `linear-gradient(148deg, #7c3820 0%, #c96a4a 45%, #e8956d 70%, #fde0c8 100%)`
+  - All Best Resident, KPI, counseling, oncall CSS classes updated to Eventevia palette
+  - Replacement done via Python script `/tmp/new_css.py` (safe to re-run if needed)
+
+- **Global Eventevia color pass** across all JS render functions (via `/tmp/eventevia_pages.py`):
+  - `#111827` / `#374151` → `#1F1A12` (text)
+  - `#f8fafc` → `#F6EFE2`, `#f1f5f9` → `#FEFBF3` (backgrounds)
+  - `#e5e7eb` / `#e2e8f0` → `rgba(31,26,18,.1)` (borders)
+  - `#6b7280` / `#9ca3af` → `rgba(31,26,18,.42)` (muted text)
+  - `#16a34a` → `#26523A`, `#d97706` → `#A47A28` (semantic colors)
+  - `#1a6a9a` / `#2563eb` → `#c96a4a`, `#7c3aad` → `#A47A28` (accent colors)
+
+- **`renderPDOverview()` structural rewrite** — Playfair Display heading, warm stat boxes, parchment table:
+  - Full-width layout (no `.content` wrapper); breadcrumb eyebrow in terracotta, big serif title
+  - `statCard()`: parchment bg, Playfair numbers, no emoji icons
+  - `colH()`: `#F6EFE2` header cells, warm letter-spacing
+  - `pctCell()`: Playfair Display font for percentages
+  - `kpiColor`: `#26523A` (green) / `#A47A28` (amber) / `#b52040` (red)
+  - `lvlStyle`: warm tints replacing cold blue/green/yellow/purple
+
+- **All emoji stripped** from the portal UI — Unicode regex pass on the entire main JS script block (3rd `<script>` tag only, not SVG or HTML attributes). Manual replacement map for ~40 emoji-prefixed UI strings, then regex sweep for any remaining Unicode emoji characters.
+
+**Key technical patterns used:**
+- Large CSS replacement via `content.find('<style>')` + `content.find('</style>')` in Python (avoids Edit tool truncation risk)
+- Emoji regex: `re.sub(r'[\U00010000-\U0010FFFF\U00002600-\U000027BF\U0001F300-\U0001FAFF]+', '', ...)` on JS block only
+- Preview workflow confirmed: build `/tmp/xxx_preview.html` → headless Chrome `--screenshot` → show user → get approval → apply
+
+**Still TODO (carried forward):**
+- **Page-by-page render redesign** — CSS foundation done, `renderPDOverview` done, `renderMorning` done. Remaining: `renderTeaching`, `renderKPI`, `renderLeave`, `renderOncall`, `renderAdmin`, `renderBestResident`, `renderCounseling`, `renderMentorHome`, `renderQuiz`, `renderRota`
+- `kpi-evidence` Supabase Storage bucket — still not created
+- Historical KPI data (Phase 2)
+- Oncall Statistics tab visibility (PD decides when to open to other roles)
+- Deduplicate `currentQuarter`, `saveAtt`, `close`, `tick` (4 duplicate function names flagged in code)
+
+---
+
+### Session — 10 Jul 2026 (SVG icons, mobile sidebar, Morning Meetings redesign)
+
+**Features built / improved:**
+
+- **SVG icons for module grid + sidebar**: `modIcon(id, sz)` function added just before `const MODS=[...]`. Uses `document.createElementNS("http://www.w3.org/2000/svg",tag)` (NOT `el()` — SVG requires namespace). Called as `modIcon(m.id,15)` in sidebar and `modIcon(m.id)` in home grid. 14 Lucide-style stroke icons (calendar, clock, map pin, sun, book, bar chart, checkbox, lock+calendar, chat bubble, pencil, gear, eye, monitor+chart, star).
+
+- **Modal close buttons fixed**: All `el("button",{cls:"modal-close",...})` now contain `"×"` (literal × character). Were stripped to `""` during emoji pass.
+
+- **Mobile hamburger + sidebar drawer**:
+  - `mob-topbar` always had a `renderMobileTopBar()` call in `render()` — already visible at `<600px`
+  - Hamburger: SVG 3-line icon built with `createElementNS`, calls `set({showMobileNav:true})`
+  - Sidebar: gets `mob-open` CSS class when `STATE.showMobileNav`. CSS: `position:fixed; left:-260px; transition:left .25s` → `.mob-open { left:0 }` at `<600px`
+  - Backdrop: `el("div",{cls:"mob-backdrop mob-open", onClick:()=>set({showMobileNav:false})})` appended in `render()` when `STATE.showMobileNav`
+  - X close button: rendered inside `sidebar-brand` row when `STATE.showMobileNav`, calls `set({showMobileNav:false})`
+  - All sidebar nav item `onClick`s include `showMobileNav:false`
+  - Mobile topbar right: "Account" text button + red "Sign Out" button
+
+- **Morning Meetings redesign** (`renderMorning`, `renderMMSchedule`, `renderMMAttendance`, `renderMMOverview`):
+  - Header: terracotta eyebrow, Playfair Display h1, AY + block subtitle, "+ Add Session" pill CTA (PD/chief only)
+  - Tabs: underline style (`border-bottom:2px solid #c96a4a` for active), no pill boxes
+  - Block selector: compact pill row (no card wrapper), same terracotta active style
+  - Stat boxes: 5-column grid, Playfair Display numbers on `#F6EFE2` parchment
+  - Tables: `border:1px solid rgba(31,26,18,.08); border-radius:12px; overflow:hidden` wrapper (no `.card`)
+  - Overview: serif heading, same clean table wrapper
+  - `renderMMAttendance` has local `kpiColor` + `sBox` helpers (not module-level)
+
+**Key patterns / gotchas:**
+- `modIcon()` must use `createElementNS` — `el()` uses `document.createElement` which produces non-rendering SVG elements
+- Mobile sidebar `position:fixed` in CSS; do NOT add `st:{position:...}` inline to the `<aside>` or it overrides the media query rule
+- `STATE.showMobileNav` drives the drawer open/close state
+
+**Still TODO (carried forward):**
+- `kpi-evidence` Supabase Storage bucket — still not created
+- Historical KPI data (Phase 2)
+- Oncall Statistics tab visibility
+- Remaining page redesigns: `renderTeaching`, `renderKPI`, `renderLeave`, `renderOncall`, `renderAdmin`, `renderBestResident`, `renderCounseling`, `renderMentorHome`, `renderQuiz`, `renderRota`
+- Deduplicate `currentQuarter`, `saveAtt`, `close`, `tick`
