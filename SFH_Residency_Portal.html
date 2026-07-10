@@ -4612,8 +4612,21 @@ function renderLeaveDetail(rid,onBack){
     const to=toDate.toISOString().split("T")[0];
     await addManualLeave(rid,from,to,days,"Rota leave B"+l.period);
   }
+  // Prev / Next navigation across visible residents
+  const vr_=visRes();
+  const curIdx=vr_.findIndex(r=>r.id===rid);
+  const prevRes=curIdx>0?vr_[curIdx-1]:null;
+  const nextRes=curIdx<vr_.length-1?vr_[curIdx+1]:null;
+  const navBtn=(label,r)=>el("button",{st:{background:"none",border:"1.5px solid rgba(31,26,18,.18)",borderRadius:"999px",padding:"6px 16px",fontSize:".8rem",fontWeight:"600",color:"rgba(31,26,18,.6)",cursor:"pointer",transition:"all .15s"},
+    onClick:()=>set({leaveSelRes:r.id})},label);
   return el("div",null,
-    onBack?el("button",{cls:"back-btn",onClick:onBack},"← Back to List"):null,
+    el("div",{st:{display:"flex",alignItems:"center",gap:"8px",marginBottom:"20px",flexWrap:"wrap"}},
+      onBack?el("button",{st:{background:"none",border:"none",color:"#c96a4a",cursor:"pointer",fontSize:".82rem",fontWeight:"600",padding:"0",display:"flex",alignItems:"center",gap:"4px"},onClick:onBack},"← Back to List"):null,
+      el("div",{st:{flex:"1"}}),
+      prevRes?navBtn("← "+dname(prevRes.name),prevRes):el("span",{st:{width:"1px"}}),
+      el("span",{st:{fontSize:".75rem",color:"rgba(31,26,18,.35)",padding:"0 4px"}},(curIdx+1)+" / "+vr_.length),
+      nextRes?navBtn(dname(nextRes.name)+" →",nextRes):el("span",{st:{width:"1px"}})
+    ),
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"14px"}},
         avEl(res),
