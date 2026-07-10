@@ -222,16 +222,11 @@ If this fails → fix before committing. Never commit a broken state to main.
 
 ## Features Pending (Build These Next)
 
-### 1. Cumulative KPI Page (planned, not built)
-Planned design:
-- Shows each resident's full training history (PGY-1 through PGY-4)
-- Grid of academic years — click a year → expands to: Yearly KPI achievements (visual badges/icons) → 4 quarters → click a quarter → Ongoing performance details (MM%, Teaching%, Quiz%)
-- Data sources: `kpi_scores` (yearly per academic_year) · `kpi_quarterly` (quarterly) · attendance/quiz (already in DB by block → map to academic year)
-- Add to MODS array with roles `["pd","deputy_pd","chief"]`
+### 1. ~~Cumulative KPI Page~~ ✅ Done (10 Jul 2026)
+Built as "Training Record" (`cumulative_kpi`, pd/deputy_pd/chief). Year rows expand to 4-quarter milestone grid. See session log for details.
 
-### 2. KPI Page Redesign (discussed, not built)
-- User wants a full visual redesign of the KPI dashboard page — agreed to do after proposal flow was finished
-- Current design works but feels cluttered; user wants a cleaner, more modern layout
+### 2. ~~KPI Page Redesign~~ ✅ Done (10 Jul 2026)
+Hero band, floating tiles, underline tabs, no-box metric rows, achievement list rows — all Eventevia-styled. Quarterly tab + milestone cards also redesigned this session.
 
 ### 3. Supabase Storage bucket needed
 - Create bucket named `kpi-evidence` (public) in Supabase for KPI file uploads
@@ -239,8 +234,8 @@ Planned design:
 
 ### 4. ~~Quiz Persistence~~ ✅ Done (error banner added)
 ### 5. ~~KPI PDF Export~~ ✅ Done
-### 4. ~~Global Search~~ ✅ Done
-### 5. ~~Bulk Broadcast~~ ✅ Done
+### 6. ~~Global Search~~ ✅ Done
+### 7. ~~Bulk Broadcast~~ ✅ Done
 
 ---
 
@@ -850,3 +845,37 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - Historical KPI data (Phase 2)
 - Oncall Statistics tab visibility (PD decides when to open to other roles)
 - Deduplicate `currentQuarter`, `saveAtt`, `close`, `tick`
+
+---
+
+### Session — 10 Jul 2026 (Deduplication + KPI quarterly redesign + Training Record page)
+
+**Bugs / cleanup fixed:**
+- **`currentQuarter` duplicate removed**: The version at line ~1441 (inside BEST RESIDENT HELPERS) was deleted. The authoritative version at line ~3705 (inside QUARTERLY KPI HELPERS) is the only one now. Both were functionally identical.
+- **Dead functions removed**: `renderOngoing()` and `renderYearlyTab()` were defined but never called — both had been superseded by `renderOngoingNew()` and `renderYearlyNew()` in a prior session. Deleted ~85 lines of dead code.
+- **`saveAtt`, `close`, `tick` are NOT global duplicates** — all are defined inside different render function closures, so they don't conflict at runtime. No action needed.
+
+**KPI quarterly tab redesign:**
+- `renderQuarterlyTab()` — quarter pills now terracotta-active; cold blue/green/yellow stat boxes replaced with a warm single parchment stat row (`statBox()` helper); milestone cards redesigned inline (no `.card` class).
+- `renderQuarterlyKPICard()` (shown on Ongoing tab) — replaced 3 separate cold cards with a segmented parchment bar (3 slots side-by-side with dividers); Playfair Display numbers.
+- `milestoneCard()` — dropped `.card` class; warm inline styling; goal text shown as italic quoted block (`"…"`); status pills use Eventevia pill style.
+
+**Training Record page** (new module):
+- **Mod id**: `cumulative_kpi` · **Label**: "Training Record" · **Roles**: `pd`, `deputy_pd`, `chief`
+- Shows full academic history from `res.yearStarted` → `CURRENT_ACADEMIC_YEAR`, most recent year first.
+- Each row: year label, inferred level badge (`R1`→`R4` based on current level), 6 achievement pills (green if earned via `kpi_proposals` or legacy `kpi_scores` flags, faint if not), committee score.
+- Click row → expands to 2×2 quarter grid: each quarter shows Research Milestone + Area of Improvement text from `kpi_quarterly`, with "Achieved" marker if set.
+- Current year row has "Full KPI" shortcut button → navigates to `mod:"kpi"`.
+- PD gets a resident dropdown sorted by level; residents don't see this page.
+- `loadCumulativeKpi(resId)` — single `Promise.all` fetching `kpi_scores`, `kpi_quarterly`, `kpi_proposals` for all years in range. Stores in `CUMULATIVE_KPI[resId][year]`. `CUMULATIVE_KPI_LOADING` flag prevents duplicate calls.
+- State: `STATE.cumKpiRes` (selected resident), `STATE.cumKpiYear` (expanded year or null).
+
+**Field key mapping note** (important for future edits):
+- In `kpi_proposals`, `field_key` values are: `"publication"`, `"qi"`, `"oral"`, `"poster"`, `"awards"`, `"volunteering"`.
+- In `kpi_scores` (legacy flags), columns are: `bonus_published`, `qi_participated`, `bonus_oral`, `bonus_poster`, `awards_honors`, `volunteering`.
+- `loadCumulativeKpi` maps the legacy kpi_scores columns → proposal field keys when building the `approved` Set.
+
+**Still TODO (carried forward):**
+- `kpi-evidence` Supabase Storage bucket — still not created
+- Historical KPI data 2024-25, 2023-24, 2022-23 — show as empty rows in Training Record; enter via Supabase or SQL
+- Oncall Statistics tab visibility (PD decides when to open to other roles)
