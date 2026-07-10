@@ -927,7 +927,12 @@ async function loadLeaveRecords(){
   LEAVE_PENDING_COUNT=Object.values(LEAVE_DATA).reduce((n,ld)=>n+(ld.requests||[]).filter(r=>r.status==="pending").length,0);
   render();
 }
+function leaveOverlaps(residentId,from,to){
+  const existing=(LEAVE_DATA[residentId]?.manual||[]).filter(l=>l.approved);
+  return existing.some(l=>from<=l.to_date&&l.from_date<=to);
+}
 async function addManualLeave(residentId,from,to,days,comment){
+  if(leaveOverlaps(residentId,from,to)){showToast("Warning: this period overlaps with existing approved leave for this resident","warning");}
   const{error}=await sb.from("leave_records").insert({resident_id:residentId,type:"manual",source:"manual",from_date:from,to_date:to,days,comment,approved:true,created_by:STATE.user?STATE.user.profileId:null});
   if(error){showToast("Could not save leave: "+error.message);return;}
   await loadLeaveRecords();
@@ -942,6 +947,7 @@ async function addAbsence(residentId,date,days,comment){
   await loadLeaveRecords();
 }
 async function submitLeaveRequest(residentId,from,to,days,leaveType,reason){
+  if(leaveOverlaps(residentId,from,to)){showToast("You already have approved leave covering part of this period. Please check your leave records.","warning");return;}
   const comment=(leaveType==="edu"?"[EDU] ":"")+reason;
   const{error}=await sb.from("leave_records").insert({resident_id:residentId,type:"leave_request",source:"resident",from_date:from,to_date:to,days,comment,approved:false,created_by:STATE.user?.profileId||null});
   if(error){showToast("Could not submit request: "+error.message);return;}
@@ -1220,6 +1226,7 @@ async function loadBestResident(){
   render();
 }
 async function brCastVote(seniorId,juniorId){
+  if(!brVotingIsOpen()){showToast("Voting is currently closed","warning");return;}
   const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
   const pid=STATE.user?.profileId;
   if(!pid)return;
@@ -1630,7 +1637,7 @@ const MODS=[
   {id:"quiz",label:"Quiz Marks",icon:"",desc:"Assessment marks & grading",color:"#c96a4a",roles:["pd","chief","consultant","resident"]},
   {id:"leave",label:"Annual Leave",icon:"",desc:"Leave requests, balances & records",color:"#0e78ba",roles:["pd","chief","resident"]},
   {id:"counseling",label:"Counseling",icon:"",desc:"Formal counseling & acknowledgement",color:"#b52040",roles:["pd","chief","consultant","resident"]},
-  {id:"mentornotes",label:"Mentor Notes",icon:"",desc:"Private observations for mentors",color:"#4a5e7a",roles:["pd","chief","consultant"]},
+  {id:"mentornotes",label:"Mentor Notes",icon:"",desc:"Private observations for mentors",color:"#4a5e7a",roles:["pd","chief","consultant","resident"]},
   {id:"admin",label:"PD Admin Panel",icon:"",desc:"Accounts, privileges & settings",color:"#2e3a4e",roles:["pd","deputy_pd"]},
   {id:"overview",label:"Overview Dashboard",icon:"",desc:"Bird's-eye view of all residents' performance",color:"#c96a4a",roles:["pd","deputy_pd","chief"]},
   {id:"kpi_exec",label:"Performance Report",icon:"",desc:"Executive KPI — program health, top performers & resident drill-down",color:"#1a2a4a",roles:["pd","deputy_pd","chief","consultant","resident"]},
@@ -1641,16 +1648,16 @@ function renderSearchOverlay(){
   const q=(STATE.searchQ||"").trim().toLowerCase();
   if(!q)return null;
   const results=[];
-  RESIDENTS.filter(r=>r.name.toLowerCase().includes(q)).slice(0,4).forEach(r=>{
+  RESIDENTS.filter(r=>r.name.toLowerCase().includes(q)).slice(0,8).forEach(r=>{
     results.push({label:r.name,sub:r.level+" · Mentor: "+mentorName(r.id),icon:"",action:()=>set({mod:"kpi",kpiSelRes:r.id,searchQ:""})});
   });
-  QUIZZES.filter(q2=>q2.title.toLowerCase().includes(q)).slice(0,3).forEach(qz=>{
+  QUIZZES.filter(q2=>q2.title.toLowerCase().includes(q)).slice(0,5).forEach(qz=>{
     results.push({label:qz.title,sub:"Quiz · "+fmtDate(qz.date)+" · Max: "+qz.max,icon:"",action:()=>set({mod:"quiz",quizSelQuiz:qz.id,searchQ:""})});
   });
-  MM_SESSIONS.filter(s=>(s.topic||"").toLowerCase().includes(q)).slice(0,3).forEach(s=>{
+  MM_SESSIONS.filter(s=>(s.topic||"").toLowerCase().includes(q)).slice(0,5).forEach(s=>{
     results.push({label:s.topic,sub:"Morning Meeting · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"",action:()=>set({mod:"morning",mmTab:"attendance",mmBlock:s.block_number,searchQ:""})});
   });
-  TEACH_SESSIONS.filter(s=>(s.topic||"").toLowerCase().includes(q)).slice(0,3).forEach(s=>{
+  TEACH_SESSIONS.filter(s=>(s.topic||"").toLowerCase().includes(q)).slice(0,5).forEach(s=>{
     results.push({label:s.topic,sub:"Teaching · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"",action:()=>set({mod:"teaching",teachTab:"attendance",teachBlock:s.block_number,searchQ:""})});
   });
   if(!results.length)results.push({label:'No results for "'+STATE.searchQ+'"',sub:"",icon:"",action:null});
@@ -5182,9 +5189,40 @@ function mnGetNote(resId,type){
   return arr.find(n=>n.type===type)||null;
 }
 function renderMentorNotes(){
+  const u=STATE.user;
+  // Resident sees only their own notes (strength/improvement/interest — not concern)
+  if(u.role==="resident"&&u.rid){
+    const rid=u.rid;
+    if(MENTOR_NOTES[rid]===undefined){loadMentorNotes(rid);return el("div",{cls:"content"},el("div",{cls:"sh",st:{padding:"40px",textAlign:"center"}},"Loading your mentor feedback…"));}
+    const notes=MENTOR_NOTES[rid]||[];
+    const visibleTypes=MN_COLS; // strength, improvement, interest (no concern)
+    return el("div",{cls:"content"},
+      el("div",{st:{marginBottom:"28px"}},
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Mentorship"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"My Mentor Feedback"),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"Written by your mentor — read only")
+      ),
+      notes.length===0
+        ? el("div",{st:{padding:"32px",textAlign:"center",background:"#F6EFE2",borderRadius:"14px",color:"rgba(31,26,18,.45)"}}, "No mentor feedback recorded yet. Your mentor will add observations here over time.")
+        : el("div",{st:{display:"flex",flexDirection:"column",gap:"16px"}},
+            ...visibleTypes.map(col=>{
+              const typeNotes=notes.filter(n=>n.type===col.type);
+              if(!typeNotes.length)return null;
+              return el("div",{st:{background:col.bg,borderRadius:"14px",padding:"20px 24px",borderLeft:"4px solid "+col.accent}},
+                el("div",{st:{fontSize:".7rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".08em",color:col.fg,marginBottom:"12px"}},col.shortLabel),
+                el("div",{st:{display:"flex",flexDirection:"column",gap:"10px"}},
+                  ...typeNotes.map(n=>el("div",{st:{borderBottom:"1px solid rgba(31,26,18,.07)",paddingBottom:"10px"}},
+                    el("div",{st:{fontSize:".88rem",color:"#1F1A12",lineHeight:"1.6"}},n.note||"—"),
+                    el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.38)",marginTop:"4px"}},fmtDate(n.created_at?.split("T")[0]))
+                  ))
+                )
+              );
+            }).filter(Boolean)
+          )
+    );
+  }
   const vr=visRes();
   if(!vr.length)return el("div",{cls:"content"},el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),el("p",null,"No residents available"));
-  const u=STATE.user;
   const canWrite=isConsultant();
   const myResIds=canWrite?getAccess(u.cid):[];
   // Trigger bulk load for any resident not yet loaded
