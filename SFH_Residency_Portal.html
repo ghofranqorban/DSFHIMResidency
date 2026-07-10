@@ -4461,14 +4461,19 @@ function renderLeaveList(vr){
 }
 function renderLeaveRequests(){
   // Collect all requests across residents
-  const pending=[];const rejected=[];
+  const pending=[];const rejected=[];const rotaPending=[];
   RESIDENTS.forEach(r=>{
     (LEAVE_DATA[r.id]?.requests||[]).forEach(req=>{
       if(req.status==="pending")pending.push({...req,res:r});
       else rejected.push({...req,res:r});
     });
+    // Rota-detected leaves not yet formally approved
+    const ld=LEAVE_DATA[r.id]||{rota:[],manual:[]};
+    const approvedBlocks=new Set((ld.manual||[]).map(m=>{const mt=m.comment?.match(/Rota leave B(\d+)/);return mt?parseInt(mt[1]):null;}).filter(Boolean));
+    (ld.rota||[]).filter(l=>!approvedBlocks.has(l.period)).forEach(l=>rotaPending.push({...l,res:r}));
   });
   pending.sort((a,b)=>a.createdAt?.localeCompare(b.createdAt||"")||0);
+  rotaPending.sort((a,b)=>a.period-b.period);
   const isEdu=c=>c?.startsWith("[EDU]");
   const cleanComment=c=>c?.replace("[EDU] ","")?.split("\n")[0]||"";
 
@@ -4507,7 +4512,51 @@ function renderLeaveRequests(){
     );
   }
 
+  // Rota leave row renderer
+  function rotaRow(l){
+    const bs=blockStartDate(l.period,CURRENT_ACADEMIC_YEAR);
+    const days=l.partial?l.weeks*7:28;
+    let fromDate,toDate;
+    if(bs){
+      if(!l.partial){fromDate=bs;toDate=new Date(bs.getTime()+27*86400000);}
+      else if(l.position==="start"){fromDate=bs;toDate=new Date(bs.getTime()+(days-1)*86400000);}
+      else{toDate=new Date(bs.getTime()+27*86400000);fromDate=new Date(toDate.getTime()-(days-1)*86400000);}
+    }
+    const fmt=d=>d?fmtDate(d.toISOString().split("T")[0]):"—";
+    return el("div",{st:{padding:"12px",border:"1px solid rgba(164,122,40,.25)",borderRadius:"10px",marginBottom:"8px",background:"#fdf8ee"}},
+      el("div",{cls:"flex-gap",st:{marginBottom:"6px",flexWrap:"wrap",gap:"8px"}},
+        el("div",{cls:"flex-gap",st:{gap:"8px",alignItems:"center",flex:"1"}},
+          avEl(l.res),
+          el("div",null,
+            el("div",{st:{fontWeight:"700",fontSize:".88rem"}},l.res.name),
+            el("div",{cls:"sub"},l.res.level)
+          )
+        ),
+        el("span",{cls:"bdg",st:{background:"rgba(164,122,40,.12)",color:"#7a5a10"}},"Rota Block "+l.period),
+        el("span",{cls:"bdg",st:{background:"#FEFBF3",color:"#475569"}},days+"d"+(l.partial?" (partial)":""))
+      ),
+      bs?el("div",{st:{fontSize:".82rem",color:"#1F1A12",marginBottom:"8px"}}," "+fmt(fromDate)+" → "+fmt(toDate)):
+        el("div",{cls:"sh",st:{marginBottom:"8px"}},"Dates unavailable for this block"),
+      el("button",{cls:"sbtn success",st:{fontSize:".78rem"},onClick:async()=>{
+        showConfirm("Approve rota leave Block "+l.period+" for "+l.res.name+"?",async()=>{
+          if(!bs){showToast("Cannot compute dates for this block.","error");return;}
+          const from=fromDate.toISOString().split("T")[0];
+          const to=toDate.toISOString().split("T")[0];
+          await addManualLeave(l.res.id,from,to,days,"Rota leave B"+l.period);
+        },"Approve","success");
+      }},"Approve")
+    );
+  }
+
   return el("div",null,
+    rotaPending.length>0?el("div",{cls:"card",st:{marginBottom:"16px"}},
+      el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
+        el("span",{cls:"card-title",st:{margin:"0"}},"Rota-Detected Leave"),
+        el("span",{cls:"bdg",st:{background:"rgba(164,122,40,.15)",color:"#7a5a10"}},rotaPending.length+" pending approval")
+      ),
+      el("div",{cls:"sh",st:{marginBottom:"12px",fontSize:".78rem"}},"Leave blocks detected from the master rota. Approve to formally record them."),
+      el("div",null,...rotaPending.map(rotaRow))
+    ):null,
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
         el("span",{cls:"card-title",st:{margin:"0"}},"Pending Leave Requests"),
