@@ -879,3 +879,47 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - `kpi-evidence` Supabase Storage bucket — still not created
 - Historical KPI data 2024-25, 2023-24, 2022-23 — show as empty rows in Training Record; enter via Supabase or SQL
 - Oncall Statistics tab visibility (PD decides when to open to other roles)
+
+---
+
+### Session — 10 Jul 2026 (Consolidation + quick wins + medium-impact UX)
+
+**Consolidation fixes (low-risk, high-value):**
+- `loadQuizzes()` added to `init()` — quizzes now load on page refresh, not only after fresh login
+- Dead `renderNav()` function removed (returned null, legacy)
+- `init()` catch block now renders a visible "Failed to load — Retry" screen instead of silent console.error
+- `STATE.user.*` direct mutations (`username`, `name`, `contactEmail`) replaced with `set({user:{...STATE.user,...}})` so sidebar updates immediately after save
+- `renderBlockPills(selected, onSelect, opts)` helper extracted — replaces 7 copy-pasted `ROTA_PERIODS.map()` pill rows across MM, Teaching, and Oncall modules. `opts.cur` adds current-period outline; `opts.inactiveBg` sets non-selected background; `opts.st` adds wrapper styles
+
+**kpi-evidence bucket (security):**
+- Bucket created as **private** (not public)
+- `uploadKpiFile()` now stores storage **path** instead of public URL
+- `getKpiFileUrl(fileRef)` generates a 1-hour signed URL on demand via `createSignedUrl()`
+- `renderProposalDetails()` "View uploaded file" is now an async button (fetches fresh signed URL on click)
+- Legacy full-URL entries in `note.fileUrl` are auto-converted to path before signing
+
+**Quick wins (UX):**
+- Search result limits raised: residents 4→8, quizzes/MM/teaching 3→5
+- `leaveOverlaps(residentId, from, to)` helper — blocks residents from submitting duplicate leave periods; warns PD when adding overlapping manual leave
+- `brCastVote()` now guards `!brVotingIsOpen()` server-side (was UI-only before)
+- Mentor Notes module unlocked for `resident` role — residents see their own Strength / Improvement / Interest notes read-only; Concern notes remain hidden
+
+**Medium-impact improvements:**
+- Modal CSS: `width:100%!important;max-width:100%!important` in `<600px` media query — inline `st:{width:"Npx"}` can no longer override on mobile
+- Activity log (`renderActivityLog()`): resident name text filter + action type dropdown; `STATE.actLogRes`, `STATE.actLogAction`
+- PD Overview (`renderPDOverview()`): `counselBox` — amber flag section listing residents with 2+ counseling records as clickable pills → navigates to their counseling drawer
+- Rota import (`commitRotaImport()`): leave conflict check before committing — warns with resident names and "Commit Anyway" escape hatch via `showConfirm()`
+- KPI Ongoing tab (`renderOngoingNew()`): per-block attendance trend — mini bar chart showing MM (solid) and Teaching (faded) % per block, color-coded green/amber/red, scrollable
+- Mentor home (`renderMentorHome()`): per-quiz score breakdown for current quarter — mini progress bars per published quiz below the stat grid
+
+**Key helpers / patterns added:**
+- `renderBlockPills(selected, onSelect, opts)` — module-level, near `sortByLevel()`
+- `leaveOverlaps(residentId, from, to)` — module-level, before `addManualLeave()`
+- `getKpiFileUrl(fileRef)` — module-level, after `uploadKpiFile()`
+- `STATE.actLogRes`, `STATE.actLogAction` — activity log filter state keys
+
+**Still TODO (carried forward):**
+- Historical KPI data 2024-25, 2023-24, 2022-23 — data entry in Supabase
+- Oncall Statistics tab visibility — PD decides when to open to other roles
+- `renderKPI()` split (~456 lines) — deferred; tackle when editing that function for another reason
+- `renderAdminProfile()` split (~223 lines) — same
