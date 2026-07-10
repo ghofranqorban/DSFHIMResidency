@@ -923,3 +923,49 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - Oncall Statistics tab visibility — PD decides when to open to other roles
 - `renderKPI()` split (~456 lines) — deferred; tackle when editing that function for another reason
 - `renderAdminProfile()` split (~223 lines) — same
+
+---
+
+### Session — 11 Jul 2026 (Annual Leave Plan module for AY 2026-27)
+
+**Features built:**
+
+- **Annual Leave Plan module** (mod id: `leave_plan`, roles: all). Planning-only module for AY 2026-27 leave allocation — entirely separate from `leave_records`.
+  - **Resident view**: Deadline countdown banner (18 Jul 2026 midnight). Full list of 26 pre-set half-block periods (B1 1st half → B13 2nd half) grouped by block with exact dates. Resident picks **First Leave** and **Second Leave** — one period each, 2 weeks each = 4 weeks total.
+    - Same-block rule: cannot pick both periods from the same block (JS-enforced with toast warning)
+    - Blocks 1 & 2 locked for R1s (orientation — "not available" pill shown)
+    - Save Draft saves without submitting; Submit requires both periods selected
+    - After submission: form locks, shows green confirmation bar
+    - Optional note to PD textarea (uses `_lpNoteDraft` module-level variable to survive re-renders)
+  - **PD / privileged matrix view** (tab: "All Residents"): Summary strip (submitted count, missing, over-cap periods, deadline status). Resident × 26-period dot matrix — terracotta dot = First Leave, green dot = Second Leave. Bottom cap row shows count per period, red +N badge when > LP_CAP (4). "Send Reminder" button (toast), "Push to Rota — available Oct 2026" button (disabled placeholder).
+  - **Access control**: `canManage = isPdRole || chief || hasPriv('plan_rota')`. Regular residents see only their own form. Deema Bakhashab + Abdullah Fared get full matrix via `plan_rota` privilege (grant via Admin Panel).
+
+**New Supabase table:** `leave_plan` — migration at `supabase/add_leave_plan.sql` (**run this in Supabase**).
+  - Columns: id (uuid), resident_id (bigint FK), academic_year (int, default 2026), first_leave_key/block/half/from/to, second_leave_key/block/half/from/to, note, status ('draft'|'submitted'), submitted_at, created_at, updated_at.
+  - UNIQUE(resident_id, academic_year).
+  - RLS: all authenticated SELECT; write via `app_resident_id()` (own row) or pd/deputy_pd/chief/dio role.
+
+**New privilege:** `plan_rota` — "View all residents leave plan & manage AY rota planning" — added to `PRIV_LABELS_RESIDENT`.
+
+**Key constants/globals/functions:**
+- `LP_AY=2026`, `LP_CAP=4`, `LP_DEADLINE=new Date("2026-07-18T23:59:59")`
+- `LP_PERIODS` — array of 26 period objects: `{key, blk, half, label, from, to, disp, r1lock?}`
+- `LEAVE_PLAN={}` — `{resident_id: row}` — loaded by `loadLeavePlan()` on init
+- `_lpNoteDraft` — module-level note draft (avoids render on typing)
+- `saveLeavePlan(status)` — upserts to `leave_plan` table with `onConflict:"resident_id,academic_year"`
+- `renderLeavePlan()` — main module function
+- STATE keys: `lpFirstKey` (string|null|undefined), `lpSecondKey` (string|null|undefined), `lpTab` ("mine"|"all")
+- Nav resets: both sidebar and home-grid clicks set `{lpFirstKey:undefined,lpSecondKey:undefined,lpTab:undefined}` so navigating back always re-reads from DB
+
+**Design decisions:**
+- Leave plan data is completely separate from `leave_records` — it's planning only
+- "Push to Rota" button will become active in Oct 2026 when AY starts; for now it's a disabled placeholder
+- Period key format: `"6a"` = Block 6 First Half, `"6b"` = Block 6 Second Half
+
+**Still TODO (carried forward):**
+- **Run `supabase/add_leave_plan.sql`** in Supabase SQL editor (table not yet created)
+- **Grant `plan_rota` privilege** to Deema Bakhashab and Abdullah Fared via Admin Panel
+- Historical KPI data 2024-25, 2023-24, 2022-23 — data entry in Supabase
+- Oncall Statistics tab visibility — PD decides when to open to other roles
+- New AY master rota: promote current residents (Oct auto-promotion handles R1→R2→R3→R4), archive graduating R4s, create 15 placeholder R1 residents with codes (NR1-01 to NR1-15), import new rota via Excel wizard
+- "Push to Rota" in leave_plan — implement in Oct 2026 to convert leave_plan rows into leave_records
