@@ -1811,7 +1811,7 @@ function renderSidebar(){
         el("div",{cls:"sidebar-user-name"},u.name),
         el("div",{cls:"sidebar-user-role"},ROLE_LABELS[u.role]||u.role)
       ),
-      el("div",{cls:"notif-bell-wrap",onClick:()=>set({showNotifPanel:!STATE.showNotifPanel})},
+      el("div",{cls:"notif-bell-wrap",onClick:()=>{const opening=!STATE.showNotifPanel;set({showNotifPanel:opening});if(opening)loadNotifications();}},
         el("span",{st:{fontSize:"1.1rem"}},"\uD83D\uDD14"),
         NOTIF_UNREAD>0?el("span",{cls:"notif-badge"},NOTIF_UNREAD>9?"9+":String(NOTIF_UNREAD)):null
       )
@@ -8440,6 +8440,7 @@ function renderCalModal(){
         loadBestResident();
         loadLeavePlan();
         loadNotifications();
+        setInterval(()=>{if(STATE.user)loadNotifications();},60000);
         loadQuizzes().catch(e=>console.warn("Quiz load failed:",e));
       }
     }
