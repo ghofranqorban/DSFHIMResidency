@@ -2131,29 +2131,30 @@ function renderRota(){
   if(isResident){
     const resTab=STATE.rotaResTab||"my";
     return el("div",{cls:"content"},
-      el("div",{cls:"flex-gap",st:{marginBottom:"16px",flexWrap:"wrap",alignItems:"center"}},
-        el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-        el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"Rota Schedule"),
-        null
+      el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
+        el("div",null,
+          el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Rotation Schedule"),
+          el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Rota Schedule"),
+          el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2))
+        )
       ),
-      el("div",{cls:"tab-bar"},
-        el("span",{cls:"tab"+(resTab==="dist"?" on":""),onClick:()=>set({rotaResTab:"dist"})},"Distribution"),
-        el("span",{cls:"tab"+(resTab==="my"?" on":""),onClick:()=>set({rotaResTab:"my"})}," My Rota"),
-        el("span",{cls:"tab"+(resTab==="full"?" on":""),onClick:()=>set({rotaResTab:"full"})}," Full Table")
-      ),
+      el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
+        ...["dist","my","full"].map(t=>{const lbs={dist:"Distribution",my:"My Rota",full:"Full Table"};const active=resTab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({rotaResTab:t})},lbs[t]);})),
       resTab==="dist"?renderRotaBlock(RESIDENTS):
       resTab==="full"?renderRotaTable(RESIDENTS):
       renderResidentOwnRota(u.rid)
     );
   }
   return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px",flexWrap:"wrap",alignItems:"center"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-      el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"Rota Schedule")
+    el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
+      el("div",null,
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Rotation Schedule"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Rota Schedule"),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2))
+      )
     ),
-    el("div",{cls:"tab-bar"},
-      ...tabs.map(t=>el("span",{cls:"tab"+(STATE.rotaTab===t?" on":""),onClick:()=>set({rotaTab:t})},tabLabels[t]))
-    ),
+    el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
+      ...tabs.map(t=>{const active=STATE.rotaTab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({rotaTab:t})},tabLabels[t]);})),
     STATE.rotaTab==="block"?renderRotaBlock():
     STATE.rotaTab==="timeline"?renderRotaTimeline():
     renderRotaTable()
@@ -3057,15 +3058,18 @@ function renderMMOverview(){
 }
 // ─── TEACHING ATTENDANCE ─────────────────────────────────────────────────────
 function renderTeaching(){
+  const blkT=STATE.teachBlock;const periodT=ROTA_PERIODS[blkT-1]||"";
   return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-      el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"Teaching Attendance")
+    el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
+      el("div",null,
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Academic Program"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Teaching Sessions"),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+" · Block "+blkT+(periodT?" · "+periodT:""))
+      ),
+      canEditTeachSchedule()?el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"999px",padding:"9px 22px",fontSize:".84rem",fontWeight:"600",cursor:"pointer",flexShrink:"0"},onClick:()=>set({teachShowEntry:true,teachEntrySession:"new_teach",teachTab:"schedule"})},"+ Add Session"):null
     ),
-    el("div",{cls:"tab-bar"},
-      ["schedule","attendance","overview"].map(t=>el("span",{cls:"tab"+(STATE.teachTab===t?" on":""),onClick:()=>set({teachTab:t})},
-        t==="schedule"?"Schedule":t==="attendance"?"Attendance":"Overview" ))
-    ),
+    el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"28px"}},
+      ...["schedule","attendance","overview"].map(t=>{const lbs={schedule:"Schedule",attendance:"Attendance",overview:"Overview"};const active=STATE.teachTab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({teachTab:t})},lbs[t]);})),
     STATE.teachTab==="schedule"?renderTeachSchedule():
     STATE.teachTab==="attendance"?renderTeachAttendance():
     renderTeachOverview()
@@ -3443,9 +3447,10 @@ function exportAttendance(type, blk){
 function renderQuiz(){
   const u=STATE.user;
   if(QUIZZES_LOAD_ERR)return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-      el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"Quiz Marks")
+    el("div",{st:{marginBottom:"28px"}},
+      el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Assessment"),
+      el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Quiz Marks"),
+      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2))
     ),
     el("div",{cls:"alert-red"},
       el("div",{st:{fontWeight:"700",marginBottom:"6px"}},"Quiz tables not found in Supabase"),
@@ -3466,9 +3471,9 @@ function renderQuiz(){
     const assignedMentor=selQ.assigned_mentor_id?consultById(selQ.assigned_mentor_id):null;
     const enteredCount=vr.filter(r=>selQ.sc[r.id]!=null).length;
     return el("div",{cls:"content"},
-      el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-        el("button",{cls:"back-btn",onClick:()=>set({quizSelQuiz:null})},"← All Quizzes"),
-        el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},selQ.title)
+      el("div",{st:{marginBottom:"24px"}},
+        el("button",{st:{background:"none",border:"none",color:"#c96a4a",cursor:"pointer",fontSize:".82rem",fontWeight:"600",padding:"0",marginBottom:"12px",display:"flex",alignItems:"center",gap:"4px"},onClick:()=>set({quizSelQuiz:null})},"← All Quizzes"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.8rem",fontWeight:"400",color:"#1F1A12"}},selQ.title)
       ),
       el("div",{cls:"card"},
         el("div",{cls:"flex-gap",st:{flexWrap:"wrap",gap:"12px"}},
@@ -3581,10 +3586,13 @@ function renderQuiz(){
   }
   // ── Quiz list view ──
   return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-      el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"Quiz Marks"),
-      isPD()?el("button",{cls:"sbtn primary",st:{marginLeft:"auto"},onClick:()=>set({quizShowAdd:!STATE.quizShowAdd})},STATE.quizShowAdd?"Cancel":"+ New Quiz"):null
+    el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
+      el("div",null,
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Assessment"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Quiz Marks"),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+" · "+QUIZZES.length+" quizzes")
+      ),
+      isPD()?el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"999px",padding:"9px 22px",fontSize:".84rem",fontWeight:"600",cursor:"pointer",flexShrink:"0"},onClick:()=>set({quizShowAdd:!STATE.quizShowAdd})},STATE.quizShowAdd?"Cancel":"+ New Quiz"):null
     ),
     STATE.quizShowAdd&&isPD()?el("div",{cls:"card"},
       el("div",{cls:"card-title"},"New Quiz"),
@@ -3658,9 +3666,10 @@ function renderQuizResident(){
   if(!res)return el("div",null,"Error");
   const pubQ=QUIZZES.filter(q=>q.published);
   return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-      el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"My Quiz Marks")
+    el("div",{st:{marginBottom:"24px"}},
+      el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Assessment"),
+      el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"My Quiz Marks"),
+      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2))
     ),
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"14px"}},
@@ -3768,9 +3777,10 @@ function renderMentorHome(){
   const u=STATE.user;
   const myRes=visRes(); // already filtered to this consultant's assigned residents
   if(!myRes.length)return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-      el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"My Residents")
+    el("div",{st:{marginBottom:"28px"}},
+      el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"My Portfolio"),
+      el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"My Residents"),
+      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2))
     ),
     el("div",{cls:"card"},el("p",{cls:"sh"},"No residents are currently assigned to you. Ask the Program Director to assign residents."))
   );
@@ -3778,18 +3788,18 @@ function renderMentorHome(){
   const q=STATE.mentorQ||currentQuarter();
   const qBlocks=QUARTER_BLOCKS[q];
   return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-      el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"My Residents")
-    ),
-    el("div",{cls:"card",st:{marginBottom:"12px"}},
-      el("div",{cls:"lbl"},"Quarter"),
-      el("div",{cls:"flex-wrap",st:{marginTop:"6px"}},
-        [1,2,3,4].map(n=>el("span",{cls:"pill"+(q===n?" on":""),onClick:()=>set({mentorQ:n})},QUARTER_LABELS[n]))
+    el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
+      el("div",null,
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"My Portfolio"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"My Residents"),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+" · "+myRes.length+" resident"+(myRes.length!==1?"s":"")+" assigned")
       )
     ),
-    el("div",{cls:"card"},
-      el("div",{cls:"card-title"},"KPI Overview — "+QUARTER_LABELS[q]),
+    el("div",{st:{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"24px"}},
+      [1,2,3,4].map(n=>{const active=q===n;return el("span",{st:{padding:"5px 13px",borderRadius:"999px",fontSize:".74rem",fontWeight:"600",background:active?"#c96a4a":"#F6EFE2",color:active?"#FEFBF3":"rgba(31,26,18,.55)",cursor:"pointer"},onClick:()=>set({mentorQ:n})},QUARTER_LABELS[n]);})
+    ),
+    el("div",null,
+      el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:"rgba(31,26,18,.35)",marginBottom:"16px",display:"flex",alignItems:"center",gap:"8px"}},"KPI Overview — "+QUARTER_LABELS[q],el("div",{st:{flex:"1",height:"1px",background:"rgba(31,26,18,.08)"}})),
       el("p",{cls:"sh",st:{marginBottom:"10px"}},"Attendance data covers blocks "+qBlocks.join(", ")+". Click a resident's name to view full KPI."),
       el("div",null,
         ...myRes.map(r=>{
@@ -4385,22 +4395,24 @@ function renderLeave(){
   // Residents see only their own leave page directly
   if(!canManage&&u.role==="resident"){
     return el("div",{cls:"content"},
-      el("div",{cls:"flex-gap",st:{marginBottom:"12px",flexWrap:"wrap",alignItems:"center"}},
-        el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-        el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"My Annual Leave")
+      el("div",{st:{marginBottom:"28px"}},
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Leave Management"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"My Annual Leave"),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2))
       ),
       renderLeaveDetail(u.rid,null)
     );
   }
   return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"12px",flexWrap:"wrap",alignItems:"center"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-      el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"Annual Leave")
-    ),
-    canManage?el("div",{cls:"tab-bar",st:{marginBottom:"16px"}},
-      el("span",{cls:"tab"+(tab==="overview"?" on":""),onClick:()=>set({leaveTab:"overview",leaveSelRes:null})},"Overview"),
-      el("span",{cls:"tab"+(tab==="requests"?" on":""),onClick:()=>set({leaveTab:"requests",leaveSelRes:null})}, "Requests"+(LEAVE_PENDING_COUNT>0?" ("+LEAVE_PENDING_COUNT+")":"")
+    el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
+      el("div",null,
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Leave Management"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Annual Leave"),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+(LEAVE_PENDING_COUNT>0?" · "+LEAVE_PENDING_COUNT+" pending":""))
       )
+    ),
+    canManage?el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
+      ...["overview","requests"].map(t=>{const active=tab===t;const lbl=t==="overview"?"Overview":"Requests"+(LEAVE_PENDING_COUNT>0?" ("+LEAVE_PENDING_COUNT+")":"");return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({leaveTab:t,leaveSelRes:null})},lbl);})
     ):null,
     tab==="requests"&&canManage?renderLeaveRequests():
     sel?renderLeaveDetail(sel,()=>set({leaveSelRes:null})):renderLeaveList(vr)
@@ -4861,9 +4873,10 @@ function renderCounseling(){
     const cnt=Array.isArray(records)?records.length:0;
     const alertLv=cnt===0?"green":cnt===1?"yellow":"red";
     return el("div",{cls:"content"},
-      el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-        el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-        el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"My Counseling Records")
+      el("div",{st:{marginBottom:"24px"}},
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Pastoral Care"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"My Counseling Records"),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2))
       ),
       Array.isArray(records)?el("div",{cls:"alert-"+alertLv},
         cnt===0?" No counseling records — all clear.":cnt===1?"1 counseling record — monitoring required.":" "+cnt+" counseling records — SCFHS warning threshold reached." ):null,
@@ -4888,9 +4901,10 @@ function renderCounseling(){
   const drawerOpen=!!STATE.counselDrawerRes;
   return el("div",{st:{position:"relative"}},
     el("div",{cls:"content",st:{transition:"margin-right .3s",marginRight:drawerOpen?"416px":"0"}},
-      el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-        el("button",{cls:"back-btn",onClick:()=>set({mod:null,counselDrawerRes:null})},"Back"),
-        el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"Counseling Records")
+      el("div",{st:{marginBottom:"24px"}},
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Pastoral Care"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Counseling Records"),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+" · Click a resident to view records")
       ),
       el("div",{cls:"card",st:{padding:"0",overflow:"hidden"}},
         el("table",{st:{width:"100%",borderCollapse:"collapse"}},
@@ -5009,16 +5023,14 @@ function renderMentorNotes(){
   const detailRes=detail?resById(detail.resId):null;
   const detailInfo=detail?noteTypeInfo(detail.type):null;
   return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null,notesDetail:null,notesShowForm:false})},"Back"),
-      el("h2",{st:{fontWeight:"800",color:"#1F1A12",fontFamily:"'Playfair Display',Georgia,serif"}},"Mentor Notes")
+    el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
+      el("div",null,
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Mentorship"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Mentor Notes"),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},canWrite?"Visible to you and the Program Director only.":"Overview of mentor observations. Click a cell to read the note.")
+      ),
+      canWrite?el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"999px",padding:"9px 22px",fontSize:".84rem",fontWeight:"600",cursor:"pointer",flexShrink:"0"},onClick:()=>set({notesShowForm:!STATE.notesShowForm,notesDetail:null})},STATE.notesShowForm?"Cancel":"+ Add Note"):null
     ),
-    el("p",{cls:"sh",st:{marginBottom:"16px"}},
-      canWrite?"Log your observations for assigned residents. Only you and the Program Director can see these.": "Overview of mentor observations for all residents. Click a highlighted cell to read the note." ),
-    // Add Note button (mentor only)
-    canWrite?el("div",{st:{marginBottom:"12px"}},
-      el("button",{cls:"sbtn primary",onClick:()=>set({notesShowForm:!STATE.notesShowForm,notesDetail:null})},STATE.notesShowForm?" Cancel":"+ Add Note")
-    ):null,
     // Add Note form
     STATE.notesShowForm&&canWrite?el("div",{cls:"card",st:{marginBottom:"16px"}},
       el("div",{cls:"card-title",st:{marginBottom:"12px"}},"New Observation"),
@@ -5428,13 +5440,13 @@ function renderAdmin(){
   if(!isPD())return el("div",{cls:"content"},el("p",null,"Access denied."));
   if(STATE.adminProfile)return renderAdminProfile(STATE.adminProfile);
   return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-      el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"PD Admin Panel")
+    el("div",{st:{marginBottom:"28px"}},
+      el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Administration"),
+      el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"PD Admin Panel"),
+      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"Residents · Mentors · Accounts · Deadlines · Activity")
     ),
-    el("div",{cls:"tab-bar",st:{overflowX:"auto",display:"flex",flexWrap:"nowrap"}},
-      ["residents","mentors","accounts","deadlines","rotaImport","actlog"].map(t=>el("span",{cls:"tab"+((STATE.adminTab||"residents")===t?" on":""),onClick:()=>{set({adminTab:t,adminProfile:null});if(t==="actlog")loadActivityLog();}},
-        t==="residents"?"Residents":t==="mentors"?"Mentors":t==="accounts"?"Accounts":t==="deadlines"?"Deadlines & Tasks":t==="actlog"?"Activity Log":"Import Rota" ))
+    el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"28px",overflowX:"auto",gap:"0",flexWrap:"nowrap"}},
+      ...["residents","mentors","accounts","deadlines","rotaImport","actlog"].map(t=>{const active=(STATE.adminTab||"residents")===t;const lbl=t==="residents"?"Residents":t==="mentors"?"Mentors":t==="accounts"?"Accounts":t==="deadlines"?"Deadlines & Tasks":t==="actlog"?"Activity Log":"Import Rota";return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s",whiteSpace:"nowrap"},onClick:()=>{set({adminTab:t,adminProfile:null});if(t==="actlog")loadActivityLog();}},lbl);})
     ),
     (STATE.adminTab||"residents")==="residents"?renderAdminResidents():
     STATE.adminTab==="mentors"?renderAdminMentors():
@@ -6636,19 +6648,15 @@ function renderBestResident(){
   }
 
   return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px",flexWrap:"wrap",alignItems:"center"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-      el("div",{cls:"stars-icon-bubble",st:{width:"48px",height:"48px",fontSize:"24px",borderRadius:"12px",animation:"none"}},""),
+    el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
       el("div",null,
-        el("h2",{st:{fontWeight:"900",color:"#1F1A12",fontSize:"1.4rem"}},"Best Resident"),
-        el("p",{cls:"sh",st:{marginTop:"2px"}},"Quarterly recognition — "+quarterLabel(q)+" · AY "+ay+"–"+(ay+1))
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Recognition"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Best Resident"),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"Quarterly recognition — "+quarterLabel(q)+" · AY "+ay+"–"+(ay+1))
       )
     ),
-    el("div",{cls:"tab-bar"},
-      el("span",{cls:"tab"+(tab==="vote"?" on":""),onClick:()=>set({brTab:"vote"})},"Vote"),
-      el("span",{cls:"tab"+(tab==="rank"?" on":""),onClick:()=>set({brTab:"rank"})},"Live Rankings"),
-      el("span",{cls:"tab"+(tab==="hof"?" on":""),onClick:()=>set({brTab:"hof",brHofLoaded:false})},"Hall of Fame")
-    ),
+    el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"28px"}},
+      ...["vote","rank","hof"].map(t=>{const lbs={vote:"Vote",rank:"Live Rankings",hof:"Hall of Fame"};const active=tab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({brTab:t,...(t==="hof"?{brHofLoaded:false}:{})})},lbs[t]);})),
     tab==="vote"?renderVoteTab():tab==="rank"?renderRankTab():renderHofTab()
   );
 }
@@ -7400,22 +7408,19 @@ function renderOncall(){
       )
     );
   }
+  const blkPeriodOC=ROTA_PERIODS[blk-1]||"";
   return el("div",{cls:"content"},
-    el("div",{cls:"page-header"},
-      el("h2",{cls:"page-title"},"On-Call Schedule"),
-      el("p",{cls:"page-subtitle"},"Duty assignments · Personal schedule · Statistics")
-    ),
-    el("div",{cls:"card",st:{marginBottom:"16px"}},
-      el("div",{cls:"lbl"},"Select Block"),
-      el("div",{cls:"flex-wrap",st:{marginTop:"6px"}},
-        ...ROTA_PERIODS.map((_,i)=>{const n=i+1;return el("span",{cls:"pill"+(blk===n?" on":""),onClick:()=>set({oncallBlock:n,oncallTab:tab})},"B"+n);})
+    el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
+      el("div",null,
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"On-Call Schedule"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"On-Call Schedule"),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+" · Block "+blk+(blkPeriodOC?" · "+blkPeriodOC:""))
       )
     ),
-    el("div",{cls:"tab-bar"},
-      el("span",{cls:"tab"+(tab==="schedule"?" active":""),onClick:()=>set({oncallTab:"schedule"})},"Schedule"),
-      el("span",{cls:"tab"+(tab==="mine"?" active":""),onClick:()=>set({oncallTab:"mine"})},"My On-Calls"),
-      el("span",{cls:"tab"+(tab==="stats"?" active":""),onClick:()=>set({oncallTab:"stats"})},"Statistics")
-    ),
+    el("div",{st:{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"20px"}},
+      ...ROTA_PERIODS.map((_,i)=>{const n=i+1;const sel=blk===n;const isCur=n===CURRENT_PERIOD;return el("span",{st:{padding:"5px 13px",borderRadius:"999px",fontSize:".74rem",fontWeight:"600",background:sel?"#c96a4a":"#F6EFE2",color:sel?"#FEFBF3":"rgba(31,26,18,.55)",cursor:"pointer",outline:isCur&&!sel?"2px solid #c96a4a":"none",outlineOffset:"1px"},onClick:()=>set({oncallBlock:n,oncallTab:tab})},"B"+n);})),
+    el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
+      ...["schedule","mine","stats"].map(t=>{const lbs={schedule:"Schedule",mine:"My On-Calls",stats:"Statistics"};const active=tab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({oncallTab:t})},lbs[t]);})),
     tab==="schedule"?renderScheduleTab():tab==="mine"?renderMineTab():renderStatsTab()
   );
 }
