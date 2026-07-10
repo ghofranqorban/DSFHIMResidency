@@ -1461,6 +1461,17 @@ function dname(name){return(name||"").replace(/^Dr\.\s*/i,"");}
 const _LVL_ORD={R4:0,R3:1,R2:2,R1:3};
 function sortByLevel(arr){return arr.slice().sort((a,b)=>(_LVL_ORD[a.level]??9)-(_LVL_ORD[b.level]??9)||a.name.localeCompare(b.name));}
 function consultById(id){return CONSULTANTS.find(c=>c.id===id);}
+// renderBlockPills(selected, onSelect, opts?) — unified block pill row
+// opts: { st: extra wrapper styles, cur: bool (outline CURRENT_PERIOD), inactiveBg: string }
+function renderBlockPills(selected,onSelect,opts){
+  opts=opts||{};
+  return el("div",{st:{display:"flex",gap:"6px",flexWrap:"wrap",...(opts.st||{})}},
+    ...ROTA_PERIODS.map((_,i)=>{
+      const n=i+1;const a=selected===n;const isCur=opts.cur&&n===CURRENT_PERIOD;
+      return el("span",{st:{padding:"5px 13px",borderRadius:"999px",fontSize:".78rem",fontWeight:"500",cursor:"pointer",border:"1px solid "+(a?"#c96a4a":"rgba(31,26,18,.12)"),background:a?"#c96a4a":(opts.inactiveBg||"transparent"),color:a?"#FEFBF3":"rgba(31,26,18,.55)",transition:"all .15s",...(isCur&&!a?{outline:"2px solid #c96a4a",outlineOffset:"1px"}:{})},onClick:()=>onSelect(n)},"B"+n);
+    })
+  );
+}
 // ─── BEST RESIDENT HELPERS ───────────────────────────────────────────────────
 function quarterLabel(q){return["","Q1 (Oct–Dec)","Q2 (Jan–Mar)","Q3 (Apr–Jun)","Q4 (Jul–Sep)"][q]||"";}
 function quarterMonthsLabel(q){return["","October · November · December","January · February · March","April · May · June","July · August · September"][q]||"";}
@@ -2877,7 +2888,7 @@ function renderMMSchedule(){
   }});
   const blkRow=el("div",{st:{display:"flex",alignItems:"center",gap:"8px",marginBottom:"20px",flexWrap:"wrap"}},
     el("span",{st:{fontSize:".72rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.42)",marginRight:"4px"}},"Block"),
-    ...ROTA_PERIODS.map((_,i)=>{const n=i+1;const a=blk===n;return el("span",{st:{padding:"5px 13px",borderRadius:"999px",fontSize:".78rem",fontWeight:"500",cursor:"pointer",border:"1px solid "+(a?"#c96a4a":"rgba(31,26,18,.12)"),background:a?"#c96a4a":"transparent",color:a?"#FEFBF3":"rgba(31,26,18,.55)",transition:"all .15s"},onClick:()=>set({mmBlock:n})},"B"+n);})
+    renderBlockPills(blk,n=>set({mmBlock:n}))
   );
   return el("div",null,
     blkRow,
@@ -2912,7 +2923,7 @@ function renderMMAttendance(){
   }
   const blkRow=el("div",{st:{display:"flex",alignItems:"center",gap:"8px",marginBottom:"20px",flexWrap:"wrap"}},
     el("span",{st:{fontSize:".72rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.42)",marginRight:"4px"}},"Block"),
-    ...ROTA_PERIODS.map((_,i)=>{const n=i+1;const a=blk===n;return el("span",{st:{padding:"5px 13px",borderRadius:"999px",fontSize:".78rem",fontWeight:"500",cursor:"pointer",border:"1px solid "+(a?"#c96a4a":"rgba(31,26,18,.12)"),background:a?"#c96a4a":"transparent",color:a?"#FEFBF3":"rgba(31,26,18,.55)",transition:"all .15s"},onClick:()=>set({mmBlock:n})},"B"+n);})
+    renderBlockPills(blk,n=>set({mmBlock:n}))
   );
   return el("div",null,
     blkRow,
@@ -3183,9 +3194,7 @@ function renderTeachSchedule(){
   return el("div",null,
     el("div",{cls:"card"},
       el("div",{cls:"lbl"},"Select Block"),
-      el("div",{cls:"flex-wrap",st:{marginTop:"6px"}},
-        ...ROTA_PERIODS.map((_,i)=>{const n=i+1;return el("span",{cls:"pill"+(blk===n?" on":""),onClick:()=>set({teachBlock:n})},"B"+n);})
-      )
+      renderBlockPills(blk,n=>set({teachBlock:n}))
     ),
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
@@ -3210,9 +3219,7 @@ function renderTeachAttendance(){
   return el("div",null,
     el("div",{cls:"card"},
       el("div",{cls:"lbl"},"Select Block"),
-      el("div",{cls:"flex-wrap",st:{marginTop:"6px"}},
-        ...ROTA_PERIODS.map((_,i)=>{const n=i+1;return el("span",{cls:"pill"+(blk===n?" on":""),onClick:()=>set({teachBlock:n})},"B"+n);})
-      )
+      renderBlockPills(blk,n=>set({teachBlock:n}))
     ),
     el("div",{cls:"flex-wrap",st:{marginBottom:"14px",gap:"10px"}},
       el("div",{cls:"statbox",st:{flex:"1",minWidth:"90px"}},el("div",{cls:"statval"},sessions.length),el("div",{cls:"statlbl"},"Sessions")),
@@ -7576,8 +7583,7 @@ function renderOncall(){
         el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+" · Block "+blk+(blkPeriodOC?" · "+blkPeriodOC:""))
       )
     ),
-    el("div",{st:{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"20px"}},
-      ...ROTA_PERIODS.map((_,i)=>{const n=i+1;const sel=blk===n;const isCur=n===CURRENT_PERIOD;return el("span",{st:{padding:"5px 13px",borderRadius:"999px",fontSize:".74rem",fontWeight:"600",background:sel?"#c96a4a":"#F6EFE2",color:sel?"#FEFBF3":"rgba(31,26,18,.55)",cursor:"pointer",outline:isCur&&!sel?"2px solid #c96a4a":"none",outlineOffset:"1px"},onClick:()=>set({oncallBlock:n,oncallTab:tab})},"B"+n);})),
+    renderBlockPills(blk,n=>set({oncallBlock:n,oncallTab:tab}),{st:{marginBottom:"20px"},cur:true,inactiveBg:"#F6EFE2"}),
     el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
       ...["schedule","mine","stats"].map(t=>{const lbs={schedule:"Schedule",mine:"My On-Calls",stats:"Statistics"};const active=tab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({oncallTab:t})},lbs[t]);})),
     tab==="schedule"?renderScheduleTab():tab==="mine"?renderMineTab():renderStatsTab()
@@ -7792,9 +7798,7 @@ function renderProfileMM(res){
   return el("div",null,
     el("div",{cls:"card"},
       el("div",{cls:"lbl"},"Select Block"),
-      el("div",{cls:"flex-wrap",st:{marginTop:"6px"}},
-        ...ROTA_PERIODS.map((_,i)=>{const n=i+1;return el("span",{cls:"pill"+(blk===n?" on":""),onClick:()=>set({mmBlock:n})},"B"+n);})
-      )
+      renderBlockPills(blk,n=>set({mmBlock:n}))
     ),
     el("div",{cls:"card"},
       el("div",{cls:"card-title"},"MM Attendance — "+res.name+" — Block "+blk),
@@ -7830,9 +7834,7 @@ function renderProfileTeach(res){
   return el("div",null,
     el("div",{cls:"card"},
       el("div",{cls:"lbl"},"Select Block"),
-      el("div",{cls:"flex-wrap",st:{marginTop:"6px"}},
-        ...ROTA_PERIODS.map((_,i)=>{const n=i+1;return el("span",{cls:"pill"+(blk===n?" on":""),onClick:()=>set({teachBlock:n})},"B"+n);})
-      )
+      renderBlockPills(blk,n=>set({teachBlock:n}))
     ),
     el("div",{cls:"card"},
       el("div",{cls:"card-title"},"Teaching Att. — "+res.name+" — Block "+blk),
