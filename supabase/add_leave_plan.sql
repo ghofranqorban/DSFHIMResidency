@@ -35,10 +35,10 @@ CREATE POLICY "write leave_plan"
   ON public.leave_plan FOR ALL
   TO authenticated
   USING (
-    resident_id IN (SELECT id FROM public.residents WHERE user_id = auth.uid())
+    resident_id = app_resident_id()
     OR (SELECT role FROM public.profiles WHERE id = auth.uid()) IN ('pd','deputy_pd','chief','dio')
   )
   WITH CHECK (
-    resident_id IN (SELECT id FROM public.residents WHERE user_id = auth.uid())
+    resident_id = app_resident_id()
     OR (SELECT role FROM public.profiles WHERE id = auth.uid()) IN ('pd','deputy_pd','chief','dio')
   );
