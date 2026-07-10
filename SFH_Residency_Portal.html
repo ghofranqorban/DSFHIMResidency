@@ -806,10 +806,17 @@ function parseProposalNote(note){
 async function uploadKpiFile(file,resId,fieldKey){
   const ext=file.name.split(".").pop();
   const path=resId+"/"+fieldKey+"_"+Date.now()+"."+ext;
-  const{data,error}=await sb.storage.from("kpi-evidence").upload(path,file,{upsert:true});
+  const{error}=await sb.storage.from("kpi-evidence").upload(path,file,{upsert:true});
   if(error){showToast("Upload failed: "+error.message);return null;}
-  const{data:urlData}=sb.storage.from("kpi-evidence").getPublicUrl(path);
-  return urlData.publicUrl;
+  return path;
+}
+async function getKpiFileUrl(fileRef){
+  if(!fileRef)return null;
+  // legacy: old entries stored full public URL before bucket was made private
+  if(fileRef.startsWith("http")){const parts=fileRef.split("/kpi-evidence/");return parts[1]?await getKpiFileUrl(parts[1]):fileRef;}
+  const{data,error}=await sb.storage.from("kpi-evidence").createSignedUrl(fileRef,3600);
+  if(error){showToast("Could not generate file link: "+error.message);return null;}
+  return data.signedUrl;
 }
 let _kpiPropLive={};
 function renderKpiProposalModal(){
@@ -4064,7 +4071,7 @@ function renderKPI(){
     if(m.description)rows.push(el("div",{cls:"sh"},"Description: "+m.description));
     if(m.supervisor)rows.push(el("div",{cls:"sh"},"Supervisor: "+m.supervisor+(m.supervisorEmail?" ("+m.supervisorEmail+")":"")));
     if(m.link)rows.push(el("a",{href:m.link,target:"_blank",st:{fontSize:".78rem",color:"#c96a4a","wordBreak":"break-all"}}," "+m.link));
-    if(m.fileUrl)rows.push(el("a",{href:m.fileUrl,target:"_blank",st:{fontSize:".78rem",color:"#7c3aed"}}," View uploaded file"));
+    if(m.fileUrl)rows.push(el("button",{st:{fontSize:".78rem",color:"#c96a4a",background:"none",border:"none",padding:"0",cursor:"pointer",textDecoration:"underline"},onClick:async function(e){const btn=e.currentTarget;btn.textContent="Opening...";btn.disabled=true;const url=await getKpiFileUrl(m.fileUrl);if(url)window.open(url,"_blank");btn.textContent="View uploaded file";btn.disabled=false;}},"View uploaded file"));
     return rows.length?el("div",{st:{marginBottom:"6px"}}, ...rows):null;
   }
   function renderAchievement(fieldKey,icon,label,weight,isApproved){
