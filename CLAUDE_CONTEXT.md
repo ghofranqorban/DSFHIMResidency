@@ -816,5 +816,37 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - `kpi-evidence` Supabase Storage bucket — still not created
 - Historical KPI data (Phase 2)
 - Oncall Statistics tab visibility
-- Remaining page redesigns: `renderTeaching`, `renderKPI`, `renderLeave`, `renderOncall`, `renderAdmin`, `renderBestResident`, `renderCounseling`, `renderMentorHome`, `renderQuiz`, `renderRota`
+- Deduplicate `currentQuarter`, `saveAtt`, `close`, `tick`
+
+---
+
+### Session — 10 Jul 2026 (Global page redesigns + leave fixes)
+
+**Features built / improved:**
+
+- **All remaining page redesigns** — Eventevia design system applied to every remaining render function using the same pattern established in `renderMorning` (terracotta eyebrow label + Playfair Display h1 + underline tabs):
+  - `renderRota` — eyebrow "Rotation Schedule", both resident and PD branches updated, underline tabs
+  - `renderTeaching` — eyebrow "Academic Program", "+ Add Session" CTA in header using `canEditTeachSchedule()`, block + period in subtitle
+  - `renderQuiz` — eyebrow "Assessment", "+ New Quiz" CTA pill in header (PD only), stat count in subtitle; error state, detail view back link, and resident view all updated
+  - `renderMentorHome` — eyebrow "My Portfolio", quarter pills replace card wrapper, section divider label replaces card-title
+  - `renderLeave` — eyebrow "Leave Management", both resident and PD branches; tabs updated; pending count in subtitle
+  - `renderCounseling` — eyebrow "Pastoral Care", both resident and PD branches updated
+  - `renderMentorNotes` — eyebrow "Mentorship", "+ Add Note" CTA in header
+  - `renderAdmin` — eyebrow "Administration", scrollable underline tabs (no `flexWrap`)
+  - `renderBestResident` — eyebrow "Recognition", removed old icon-bubble div, underline tabs
+  - `renderOncall` — eyebrow "On-Call Schedule", block pills inline (no card wrapper), underline tabs; fixed old `.active` class → `.on` pattern; added `blkPeriodOC` local var for subtitle
+
+- **Leave Requests tab — Rota-Detected Leave section**: `renderLeaveRequests()` now also collects unapproved rota blocks from `LEAVE_DATA[r.id].rota` across all residents. Displays them in a gold-tinted "Rota-Detected Leave" section above formal pending requests. Each row shows resident, block number, date range, days, and an Approve button (calls `addManualLeave` with `"Rota leave B{n}"` comment). Previously only visible one-by-one in each resident's detail view.
+
+- **Prev/Next navigation in leave detail view**: `renderLeaveDetail` now shows a nav bar at the top — `← Dr. Prev Name` · `N / Total` · `Dr. Next Name →`. Uses `visRes()` sorted list and `set({leaveSelRes:r.id})` to navigate. "← Back to List" link preserved on the left.
+
+**Key patterns:**
+- Page header pattern: `el("div",{st:{display:"flex",alignItems:"flex-start",...}}, el("div",null, eyebrow-div, h1, subtitle-div), optional-cta-button)`
+- Underline tabs: `el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",...}}, ...items.map(t=>{const active=...; return el("div",{st:{borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),...}})}))`
+- Block pills (no card wrapper): inline `el("div",{st:{display:"flex",gap:"6px",flexWrap:"wrap",...}}, ...ROTA_PERIODS.map(...))`
+
+**Still TODO (carried forward):**
+- `kpi-evidence` Supabase Storage bucket — still not created
+- Historical KPI data (Phase 2)
+- Oncall Statistics tab visibility (PD decides when to open to other roles)
 - Deduplicate `currentQuarter`, `saveAtt`, `close`, `tick`
