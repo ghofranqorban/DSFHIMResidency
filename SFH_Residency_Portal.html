@@ -1747,7 +1747,10 @@ function renderMobileTopBar(){
   return el("div",{cls:"mob-topbar"},
     hamIcon,
     el("span",{cls:"mob-topbar-brand"},STATE.mod?(MODS.find(m=>m.id===STATE.mod)||{label:"DSFH"}).label:"DSFH Residency"),
-    el("div",{cls:"mob-topbar-right"},acctBtn)
+    el("div",{cls:"mob-topbar-right"},
+      acctBtn,
+      el("button",{st:{background:"rgba(239,68,68,.2)",border:"1px solid rgba(239,68,68,.4)",color:"#fca5a5",padding:"6px 10px",borderRadius:"8px",cursor:"pointer",fontSize:".8rem",fontWeight:"600"},onClick:async()=>{await sb.auth.signOut();STATE.user=null;STATE.mod=null;render();}},"Sign Out")
+    )
   );
 }
 function renderAccountModal(){
