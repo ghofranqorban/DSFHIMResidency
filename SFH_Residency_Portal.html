@@ -6969,8 +6969,14 @@ function renderLeavePlan(){
               if(!usernames.length){showToast("No residents to notify","info");return;}
               const{data:profs}=await sb.from("profiles").select("id,username").in("username",usernames);
               if(!profs||!profs.length){showToast("Could not find resident profiles","error");return;}
-              await Promise.all(profs.map(p=>createNotification(p.id,"info","Reminder: Please submit your AY 2026-27 Leave Plan before 18 July 2026.","leave_plan",null)));
-              showToast("Reminder sent to "+profs.length+" resident"+(profs.length===1?"":"s"),"success");
+              const results=await Promise.all(profs.map(async p=>{
+                const{error}=await sb.from("notifications").insert({profile_id:p.id,type:"info",message:"Reminder: Please submit your AY 2026-27 Leave Plan before 18 July 2026.",link_mod:"leave_plan",link_param:null,read:false});
+                if(error)console.warn("notif insert failed for",p.username,error.message);
+                return !error;
+              }));
+              const sent=results.filter(Boolean).length;
+              if(sent===0)showToast("Failed to send notifications — check console","error");
+              else showToast("Reminder sent to "+sent+" resident"+(sent===1?"":"s"),"success");
             }},"Send Reminder ("+missing.length+")"):null,
           el("button",{st:{background:"rgba(31,26,18,.07)",color:"rgba(31,26,18,.35)",border:"none",borderRadius:"9999px",padding:"8px 20px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".78rem",cursor:"default",userSelect:"none"}},"Push to Rota — available Oct 2026")
         )
