@@ -1009,3 +1009,8 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - Run `supabase/fix_leave_plan_rls.sql` in Supabase SQL editor, then verify a resident can Save Draft / Submit their leave plan.
 - Confirm with user whether the attendance-committee resident's original "save" complaint was actually this same reset-while-marking bug (likely) or a separate save error — still unconfirmed.
 - Have the resident who hit "Validation failed" retry adding the calendar link on Apple Calendar to confirm the webcals:// fix works.
+
+**Features/UX changed:**
+- **Attendance entry forms default to today's session**: `renderMMEntryForm`/`renderTeachEntryForm` now pre-select the session matching today's date within the current block (falls back to the first session if none scheduled today), instead of always defaulting to the block's first session.
+- **Leave Plan same-block restriction removed**: residents can now select both First Leave and Second Leave from the same block (full 4-week leave in one block), per PD confirmation.
+- **Leave Plan Block 13 restricted to R3s (next AY R4s)**: added `r3only:true` to the `13a`/`13b` `LP_PERIODS` entries. Locked out for any resident whose current `level !== "R3"`, shown as "Exam Prep — R3 Only" — same lock pattern as the existing R1 orientation lock on Blocks 1-2. Purpose: R3s (incoming R4 class) get the last block off for exam prep; other levels can't take it.
