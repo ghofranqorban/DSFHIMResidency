@@ -710,8 +710,8 @@ const LP_PERIODS=[
   {key:"11b",blk:11,half:"second",label:"Block 11 - Second Half",from:"2027-07-26",to:"2027-08-08",disp:"26 Jul - 8 Aug 2027"},
   {key:"12a",blk:12,half:"first",label:"Block 12 - First Half",from:"2027-08-09",to:"2027-08-22",disp:"9 - 22 Aug 2027"},
   {key:"12b",blk:12,half:"second",label:"Block 12 - Second Half",from:"2027-08-23",to:"2027-09-05",disp:"23 Aug - 5 Sep 2027"},
-  {key:"13a",blk:13,half:"first",label:"Block 13 - First Half",from:"2027-09-06",to:"2027-09-19",disp:"6 - 19 Sep 2027"},
-  {key:"13b",blk:13,half:"second",label:"Block 13 - Second Half",from:"2027-09-20",to:"2027-10-03",disp:"20 Sep - 3 Oct 2027"},
+  {key:"13a",blk:13,half:"first",label:"Block 13 - First Half",from:"2027-09-06",to:"2027-09-19",disp:"6 - 19 Sep 2027",r3only:true},
+  {key:"13b",blk:13,half:"second",label:"Block 13 - Second Half",from:"2027-09-20",to:"2027-10-03",disp:"20 Sep - 3 Oct 2027",r3only:true},
 ];
 let LEAVE_PLAN={}; // {resident_id: row}
 let _lpNoteDraft=null;
@@ -6780,6 +6780,7 @@ function renderLeavePlan(){
   const fp=LP_PERIODS.find(p=>p.key===fk),sp=LP_PERIODS.find(p=>p.key===sk);
   const submitted=myPlan?.status==="submitted";
   const isR1=u.level==="R1";
+  const isR3=u.level==="R3";
 
   function cdBanner(){
     if(passed){
@@ -6837,7 +6838,7 @@ function renderLeavePlan(){
           el("span",{st:{fontFamily:"'Playfair Display',serif",fontSize:".88rem",fontWeight:"600",color:"#1F1A12",textTransform:"none",letterSpacing:"0"}},blkLabel)
         ),
         ...periods.map(p=>{
-          const locked=(isR1&&!!p.r1lock)||submitted||passed;
+          const locked=(isR1&&!!p.r1lock)||(!!p.r3only&&!isR3)||submitted||passed;
           const isFirst=fk===p.key,isSecond=sk===p.key;
           const bg=isFirst?"rgba(201,106,74,.08)":isSecond?"rgba(38,90,72,.08)":"";
           return el("div",{st:{display:"flex",alignItems:"center",gap:"12px",padding:"10px 14px",borderRadius:"10px",background:bg}},
@@ -6852,18 +6853,18 @@ function renderLeavePlan(){
                   el("button",{st:{border:"none",borderRadius:"9999px",padding:"5px 14px",fontFamily:"Inter,sans-serif",fontSize:".72rem",fontWeight:"600",cursor:"pointer",transition:"all .15s",background:isFirst?"#c96a4a":"rgba(201,106,74,.12)",color:isFirst?"#FEFBF3":"#c96a4a"},
                     onClick:()=>{
                       if(isFirst){set({lpFirstKey:null});return;}
-                      if(sk&&LP_PERIODS.find(x=>x.key===sk)?.blk===p.blk){showToast("You cannot choose both leave periods from the same block","warning");return;}
                       set({lpFirstKey:p.key});
                     }},"First Leave"),
                   el("button",{st:{border:"none",borderRadius:"9999px",padding:"5px 14px",fontFamily:"Inter,sans-serif",fontSize:".72rem",fontWeight:"600",cursor:"pointer",transition:"all .15s",background:isSecond?"#26523A":"rgba(38,90,72,.1)",color:isSecond?"#FEFBF3":"#26523A"},
                     onClick:()=>{
                       if(isSecond){set({lpSecondKey:null});return;}
-                      if(fk&&LP_PERIODS.find(x=>x.key===fk)?.blk===p.blk){showToast("You cannot choose both leave periods from the same block","warning");return;}
                       set({lpSecondKey:p.key});
                     }},"Second Leave")
                 )
               :locked&&isR1&&!!p.r1lock&&!isFirst&&!isSecond
                 ?el("span",{st:{fontSize:".62rem",fontWeight:"600",color:"rgba(31,26,18,.3)",background:"rgba(31,26,18,.06)",padding:"3px 10px",borderRadius:"9999px"}},"Orientation — not available")
+                :locked&&p.r3only&&!isR3&&!isFirst&&!isSecond
+                ?el("span",{st:{fontSize:".62rem",fontWeight:"600",color:"rgba(31,26,18,.3)",background:"rgba(31,26,18,.06)",padding:"3px 10px",borderRadius:"9999px"}},"Exam Prep — R3 Only")
                 :null
           );
         })
