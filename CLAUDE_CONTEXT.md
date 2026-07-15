@@ -189,6 +189,8 @@ QUIZZES_LOAD_ERR // string|null — set if quizzes table missing in Supabase
 | `add_oncall_resident_name.sql` | ✅ Run | Adds `resident_name text` column to `oncall_schedule` for free-text / outside-rotator entries. |
 | `add_notifications.sql` | ✅ Run | In-app notification bell — `notifications` table with RLS (users see own only, any auth can insert) |
 | `add_activity_log.sql` | ✅ Run | Audit trail — `activity_log` table, immutable (no UPDATE/DELETE policies), PD/chief/dio can read all |
+| `add_leave_plan.sql` | ✅ Run (11 Jul, modified) | `leave_plan` table for AY 2026-27 planning. Original `write leave_plan` policy using `app_resident_id()` failed with `column "user_id" does not exist` — replaced with a direct `profiles.username = residents.username` lookup instead. |
+| `fix_leave_plan_rls.sql` | ⚠️ NEEDS TO RUN (15 Jul) | Reverts `write leave_plan` policy from the fragile `profiles.username = residents.username` join back to `app_resident_id()` (same proven pattern as `counseling`/`leave_records`/`rotations`). Root cause of residents getting "violates row-level security policy" on Save Draft/Submit: the username-join breaks for any resident whose login username was changed after their resident record was created (`profiles.username` and `residents.username` no longer match, since editing login username doesn't touch `residents.username`). `app_resident_id()` uses the `profiles.resident_id` FK directly, so it's immune to username drift. |
 
 ---
 
@@ -969,3 +971,38 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - Oncall Statistics tab visibility — PD decides when to open to other roles
 - New AY master rota: promote current residents (Oct auto-promotion handles R1→R2→R3→R4), archive graduating R4s, create 15 placeholder R1 residents with codes (NR1-01 to NR1-15), import new rota via Excel wizard
 - "Push to Rota" in leave_plan — implement in Oct 2026 to convert leave_plan rows into leave_records
+
+---
+
+### Session — 11 Jul 2026 (continued — Leave Plan migration fix, notification bugs)
+
+**SQL migrations run this session:**
+- `supabase/add_leave_plan.sql` ✅ Run — but original RLS policy using `app_resident_id()` threw `column "user_id" does not exist` on CREATE POLICY (root cause unclear — possibly a stale/shadowed function). Worked around by rewriting the `write leave_plan` policy to look up `resident_id` directly via `profiles.username = residents.username` instead of calling `app_resident_id()`. If this function misbehaves elsewhere, consider redefining it.
+- `account_privileges_privilege_key_check` constraint updated ✅ — was missing `edit_quiz_marks` (pre-existing privilege key already in use) and `plan_rota` (new). Constraint now allows both. **Lesson: always `SELECT DISTINCT privilege_key FROM account_privileges` before editing this constraint — don't assume the existing allowed-list is complete.**
+
+**Bugs fixed:**
+- **`window.scrollTo(0,0)` fired on every `render()`**, not just page navigation — so opening the Privileges panel, toggling checkboxes, etc. in Admin Panel yanked the user back to the top of the page. Fixed with module-level `_lastMod` tracker — scroll only fires when `STATE.mod` actually changes (~line 8172).
+- **Leave Plan "All Residents" tab visible to a plain resident (Dr. Farid)**: `canManage` logic was already privilege-gated correctly; root cause was Dr. Farid had `plan_rota` accidentally checked in Admin Panel. No code bug — just uncheck it per-profile. (Tightened the `canManage` expression anyway at ~line 6770 to make the resident-only gate explicit.)
+- **"Send Reminder" button on Leave Plan matrix was a no-op**: only called `showToast(...)`, never touched the database. Rewrote to: look up `profiles` by `residents.user` username for all non-submitted residents, then insert one row per resident into `notifications` (~line 6965). Verified working — confirmed via `SELECT count(*) FROM notifications WHERE message LIKE 'Reminder: Please submit%'` before/after.
+- **Notifications inserted correctly but resident never saw them**: `loadNotifications()` was only called once, at login/session-restore (`init()`, ~line 8442). If a resident was already logged in with the tab open, new notifications (like reminders) never appeared until a manual page refresh. Fixed two ways: (1) bell icon click now calls `loadNotifications()` every time it opens (~line 1814), (2) added `setInterval(loadNotifications, 60000)` background poll after the initial load in `init()`.
+
+**Key pattern for future notification-related bugs:** `NOTIFICATIONS` / `NOTIF_UNREAD` are populated once and cached in module state — any UI that displays them needs either an explicit reload trigger or the 60s poll to catch new rows. Don't assume "insert succeeded" means "user sees it" — these are two separate failure points.
+
+**Still TODO (carried forward):**
+- Historical KPI data 2024-25, 2023-24, 2022-23 — data entry in Supabase
+- Oncall Statistics tab visibility — PD decides when to open to other roles
+- New AY master rota: promote current residents (Oct auto-promotion handles R1→R2→R3→R4), archive graduating R4s, create 15 placeholder R1 residents with codes (NR1-01 to NR1-15), import new rota via Excel wizard
+- "Push to Rota" in leave_plan — implement in Oct 2026 to convert leave_plan rows into leave_records
+- Verify Dr. Farid's `plan_rota` checkbox was unchecked (only Deema + Abdullah should have it)
+
+---
+
+### Session — 15 Jul 2026 (leave plan RLS + attendance form reset bugs)
+
+**Bugs fixed:**
+- **`loadNotifications()` forced a full `render()` on every 60s poll tick, unconditionally.** This wiped in-progress local state in any open form built from closures on each render — specifically `renderMMEntryForm`/`renderTeachEntryForm`'s `selSession`/`attMap`/`cmtMap`. Residents marking attendance and staying on the page for >60s would get silently snapped back to the first session with their unsaved marks discarded — looked like "the page automatically refreshes and goes back to the first teaching session." Fixed `loadNotifications()` (~line 8086) to only call `render()` when the unread count or row count actually changed, not on every poll.
+- **Leave Plan save failing with "new row violates row-level security policy for table leave_plan"**: the 11 Jul workaround (`profiles.username = residents.username` join in the `write leave_plan` RLS policy) breaks whenever a resident's login username diverges from `residents.username` — e.g. after changing their username in the account modal, which does not update `residents.username`. Wrote `supabase/fix_leave_plan_rls.sql` to revert the policy to `resident_id = app_resident_id()`, the same FK-based pattern already proven working on `counseling`, `leave_records`, `rotations`, `residents` (immune to username drift). **⚠️ Needs to be run in Supabase SQL editor** — not yet executed.
+
+**Still TODO:**
+- Run `supabase/fix_leave_plan_rls.sql` in Supabase SQL editor, then verify a resident can Save Draft / Submit their leave plan.
+- Confirm with user whether the attendance-committee resident's original "save" complaint was actually this same reset-while-marking bug (likely) or a separate save error — still unconfirmed.

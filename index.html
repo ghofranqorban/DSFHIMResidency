@@ -8087,7 +8087,11 @@ async function loadNotifications(){
   const u=STATE.user;if(!u)return;
   const{data,error}=await sb.from("notifications").select("*").eq("profile_id",u.profileId).order("created_at",{ascending:false}).limit(50);
   if(error){console.warn("notifications load error",error.message);NOTIFICATIONS=[];NOTIF_UNREAD=0;return;}
-  NOTIFICATIONS=data||[];NOTIF_UNREAD=NOTIFICATIONS.filter(n=>!n.read).length;render();
+  const rows=data||[];
+  const newUnread=rows.filter(n=>!n.read).length;
+  const changed=newUnread!==NOTIF_UNREAD||rows.length!==NOTIFICATIONS.length;
+  NOTIFICATIONS=rows;NOTIF_UNREAD=newUnread;
+  if(changed)render();
 }
 async function createNotification(profileId,type,message,linkMod,linkParam){
   if(!profileId)return;
