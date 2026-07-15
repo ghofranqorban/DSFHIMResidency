@@ -8353,7 +8353,7 @@ function renderCalModal(){
   const prefs=_calPrefsDraft;
   const token=STATE.calToken;
   const feedUrl=token?(SUPABASE_URL+"/functions/v1/"+CAL_FEED_FN+"?token="+token):"";
-  const webcalUrl=feedUrl.replace("https://","webcal://");
+  const webcalUrl=feedUrl.replace("https://","webcals://");
   const gcalUrl=feedUrl?"https://calendar.google.com/calendar/r/settings/addbyurl?url="+encodeURIComponent(feedUrl):"";
   function close(){_calPrefsDraft=null;set({showCalModal:false});}
   const PREF_OPTS=[
