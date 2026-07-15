@@ -3056,7 +3056,8 @@ function renderMMEntryForm(blk,sessions){
       el("div",{cls:"alert-yellow",st:{margin:"0"}},"No sessions scheduled for this block yet.")
     );
   }
-  let selSession=STATE.mmEntrySession&&typeof STATE.mmEntrySession==="number"?MM_SESSION_BY_ID[STATE.mmEntrySession]?.session_date:sessions[0]?.session_date;
+  const todayStr=new Date().toISOString().slice(0,10);
+  let selSession=STATE.mmEntrySession&&typeof STATE.mmEntrySession==="number"?MM_SESSION_BY_ID[STATE.mmEntrySession]?.session_date:(sessions.find(s=>s.session_date===todayStr)?.session_date||sessions[0]?.session_date);
   let attMap={};
   let cmtMap={};
   function loadSession(dateStr){
@@ -3346,7 +3347,8 @@ function renderTeachEntryForm(blk,sessions){
       el("div",{cls:"alert-yellow",st:{margin:"0"}},"No sessions scheduled for this block yet.")
     );
   }
-  let selSession=sessions[0]?.session_date;
+  const todayStrT=new Date().toISOString().slice(0,10);
+  let selSession=sessions.find(s=>s.session_date===todayStrT)?.session_date||sessions[0]?.session_date;
   let attMap={};
   let cmtMap={};
   function loadSession(dateStr){
