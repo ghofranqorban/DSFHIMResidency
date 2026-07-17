@@ -6779,8 +6779,9 @@ function renderLeavePlan(){
   const fk=STATE.lpFirstKey,sk=STATE.lpSecondKey;
   const fp=LP_PERIODS.find(p=>p.key===fk),sp=LP_PERIODS.find(p=>p.key===sk);
   const submitted=myPlan?.status==="submitted";
-  const isR1=u.level==="R1";
-  const isR3=u.level==="R3";
+  const myLevel=resById(u.rid)?.level;
+  const isR1=myLevel==="R1";
+  const isR3=myLevel==="R3";
 
   function cdBanner(){
     if(passed){
