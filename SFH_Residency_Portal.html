@@ -8894,7 +8894,7 @@ function renderCalModal(){
   const prefs=_calPrefsDraft;
   const token=STATE.calToken;
   const feedUrl=token?(SUPABASE_URL+"/functions/v1/"+CAL_FEED_FN+"?token="+token):"";
-  const webcalUrl=feedUrl.replace("https://","webcals://");
+  const webcalUrl=feedUrl.replace("https://","webcal://");
   const gcalUrl=feedUrl?"https://calendar.google.com/calendar/r/settings/addbyurl?url="+encodeURIComponent(feedUrl):"";
   function close(){_calPrefsDraft=null;set({showCalModal:false});}
   const PREF_OPTS=[
@@ -8941,6 +8941,11 @@ function renderCalModal(){
           st:{fontSize:".84rem",background:"#4285f4",color:"#fff",border:"none",borderRadius:"8px",padding:"9px 14px",textDecoration:"none",display:"block",textAlign:"center",fontFamily:"inherit",cursor:"pointer"}}, "Add to Google Calendar"),
         el("button",{cls:"sbtn ghost",st:{fontSize:".84rem"},
           onClick:function(){var rid=u.rid;if(rid)downloadRotationICS(rid);else showToast("No rotation record linked to your account.");}},"Download one-time .ics (Outlook / other)")
+      ),
+      el("div",{st:{fontSize:".74rem",color:"rgba(31,26,18,.55)",background:"#fef9f7",border:"1px solid #f5e6dd",borderRadius:"8px",padding:"10px 12px",marginBottom:"16px",lineHeight:"1.65"}},
+        el("div",{st:{fontWeight:"700",marginBottom:"4px",color:"#8a5a3a"}},"iPhone: if the button above doesn't work"),
+        el("div",{st:{marginBottom:"6px"}},"If Calendar opens but says \"Validation failed\": tap the Server field and change http to https at the start of the address, then tap Next again."),
+        el("div",null,"If nothing happens at all: tap Copy above, then go to ",el("b",null,"Settings"),"  →  ",el("b",null,"Calendar"),"  →  ",el("b",null,"Accounts"),"  →  ",el("b",null,"Add Account"),"  →  ",el("b",null,"Other"),"  →  ",el("b",null,"Add Subscribed Calendar"),", paste the link into \"Server\", then Next and Save.")
       ),
       el("div",{st:{borderTop:"1px solid #f1ede9",paddingTop:"14px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px",flexWrap:"wrap"}},
         el("button",{st:{fontSize:".77rem",color:"#b91c1c",background:"none",border:"1px solid #fca5a5",borderRadius:"6px",padding:"5px 12px",cursor:"pointer"},
