@@ -3390,7 +3390,13 @@ function renderSchedImportModal(){
           })()
         )
       ):el("div",null,
-        el("p",{cls:"sh",st:{marginBottom:"10px"}},SCHED_IMPORT.fileName+" — "+SCHED_IMPORT.rows.length+" row(s) found, "+validCount+" ready to import."),
+        el("div",{cls:"flex-gap",st:{marginBottom:"10px",justifyContent:"space-between",flexWrap:"wrap"}},
+          el("p",{cls:"sh",st:{margin:"0"}},SCHED_IMPORT.fileName+" — "+SCHED_IMPORT.rows.length+" row(s) found, "+validCount+" ready to import."),
+          el("div",{cls:"flex-gap"},
+            el("button",{cls:"sbtn ghost",st:{fontSize:".76rem",padding:"4px 10px"},onClick:()=>{SCHED_IMPORT.rows.forEach(r=>{if(!r.error)r.include=true;});render();}},"Select All"),
+            el("button",{cls:"sbtn ghost",st:{fontSize:".76rem",padding:"4px 10px"},onClick:()=>{SCHED_IMPORT.rows.forEach(r=>{r.include=false;});render();}},"Deselect All")
+          )
+        ),
         el("div",{cls:"tbl-wrap",st:{maxHeight:"360px",overflowY:"auto",marginBottom:"14px"}},
           el("table",null,
             el("thead",null,el("tr",null,
