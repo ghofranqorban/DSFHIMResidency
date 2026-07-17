@@ -3096,7 +3096,8 @@ function mmDatesForBlock(blockNum,academicYear){
   for(let wk=0;wk<4;wk++){
     [0,1,2,3,4].forEach(dow=>{
       const d=new Date(start.getTime()+(wk*7+dow)*86400000);
-      dates.push({date:d.toISOString().split("T")[0],day:DAY_NAMES[d.getDay()],week:wk+1});
+      const yr=d.getFullYear(),mo=String(d.getMonth()+1).padStart(2,"0"),dy=String(d.getDate()).padStart(2,"0");
+      dates.push({date:yr+"-"+mo+"-"+dy,day:DAY_NAMES[d.getDay()],week:wk+1});
     });
   }
   return dates;
