@@ -3270,258 +3270,6 @@ function schedInlineResident(sid,field,currentResId,currentLabel,saveFn,tbl){
   div.ondblclick=()=>set({schedInlineEdit:{id:sid,field,tbl}});
   return div;
 }
-// ─── Excel import for MM / Teaching schedules ────────────────────────────────
-const SCHED_IMPORT_CONFIG={
-  mm:{
-    table:"mm_sessions",label:"Morning Meeting",
-    fields:[
-      {key:"date",aliases:["date","session date"],required:true},
-      {key:"day",aliases:["day","day label","weekday"]},
-      {key:"topic",aliases:["topic","subject"],required:true},
-      {key:"presenter",aliases:["presenter","presenter name","presenter label"]},
-      {key:"moderator",aliases:["moderator","moderator name","moderator label"]},
-      {key:"consultant",aliases:["consultant","supervisor","consultant/supervisor","consultant label"]}
-    ],
-    previewCols:["date","day","topic","presenter","moderator","consultant"],
-    buildPayload:(p,blk,weekNumber,ay)=>({
-      academic_year:ay,block_number:blk,week_number:weekNumber,session_date:p.date,
-      day_label:p.day||null,topic:p.topic,
-      presenter_label:p.presenter||null,moderator_label:p.moderator||null,
-      consultant_label:p.consultant||null
-    })
-  },
-  teach:{
-    table:"teaching_sessions",label:"Teaching",
-    fields:[
-      {key:"date",aliases:["date","session date"],required:true},
-      {key:"day",aliases:["day","day label","weekday"]},
-      {key:"specialty",aliases:["specialty","specialty label"]},
-      {key:"topic",aliases:["topic","subject"],required:true},
-      {key:"presenter",aliases:["presenter","presenter name","presenter label"],required:true},
-      {key:"role",aliases:["role","role label"]}
-    ],
-    previewCols:["date","day","specialty","topic","presenter","role"],
-    buildPayload:(p,blk,weekNumber,ay)=>({
-      academic_year:ay,block_number:blk,week_number:weekNumber,session_date:p.date,
-      day_label:p.day||"Tuesday",specialty_label:p.specialty||null,topic:p.topic,
-      presenter_label:p.presenter,role_label:p.role||"Consultant"
-    })
-  }
-};
-let SCHED_IMPORT={type:null,fileName:"",rows:[]};
-function parseImportDate(v){
-  if(v==null||v==="")return null;
-  if(v instanceof Date)return toLocalYMD(v);
-  if(typeof v==="number"){
-    const d=new Date(Math.round((v-25569)*86400*1000));
-    return d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,"0")+"-"+String(d.getUTCDate()).padStart(2,"0");
-  }
-  const s=String(v).trim();
-  let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if(m)return m[1]+"-"+m[2].padStart(2,"0")+"-"+m[3].padStart(2,"0");
-  m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-  if(m){let[,d,mo,y]=m;if(y.length===2)y="20"+y;return y+"-"+mo.padStart(2,"0")+"-"+d.padStart(2,"0");}
-  return null;
-}
-function blockWeekForDate(dateStr,academicYear){
-  if(!dateStr)return null;
-  const[y,m,d]=dateStr.split("-").map(Number);
-  const dt=new Date(y,m-1,d);
-  for(let blk=1;blk<=ROTA_PERIODS.length;blk++){
-    const start=blockStartDate(blk,academicYear);
-    if(!start)continue;
-    const diffDays=Math.round((dt-start)/86400000);
-    if(diffDays>=0&&diffDays<28){
-      const week=Math.floor(diffDays/7)+1;
-      return{block:blk,week,weekNumber:4*(blk-1)+week-1};
-    }
-  }
-  return null;
-}
-function findColIndex(headerRow,aliases){
-  for(let c=0;c<headerRow.length;c++){
-    const h=(headerRow[c]==null?"":String(headerRow[c])).trim().toLowerCase();
-    if(aliases.includes(h))return c;
-  }
-  return-1;
-}
-// Some real-world schedule templates (e.g. the MM/Teaching Excel template) label
-// their date column "Day" and put actual dates in it, with no separate weekday
-// column at all. If we couldn't find a "date"/"session date" header but the "day"
-// column's values all parse as dates, treat that column as the date source instead.
-function resolveDateColumnFallback(colIdx,getSampleValues){
-  if(colIdx.date===-1&&colIdx.day!==undefined&&colIdx.day>=0){
-    const samples=getSampleValues(colIdx.day);
-    if(samples.length&&samples.every(v=>parseImportDate(v))){
-      colIdx.date=colIdx.day;colIdx.day=-1;
-    }
-  }
-}
-// rawObj: {fieldKey: rawCellValue}. Shared by the Excel-parsing and AI-image-parsing
-// paths so both produce identically-validated rows for the same preview table.
-function buildImportRow(cfg,rawObj,rowIndex){
-  const parsed={};
-  cfg.fields.forEach(f=>{
-    const raw=rawObj[f.key];
-    parsed[f.key]=f.key==="date"?parseImportDate(raw):(raw==null?"":String(raw).trim());
-  });
-  let error=null;
-  if(!parsed.date)error="Could not read a date";
-  else if(cfg.fields.some(f=>f.required&&f.key!=="date"&&!parsed[f.key]))error="Missing required field";
-  let bw=null;
-  if(!error){
-    bw=blockWeekForDate(parsed.date,CURRENT_ACADEMIC_YEAR);
-    if(!bw)error="Date doesn't fall in any block of "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1);
-  }
-  return{excelRowIndex:rowIndex,parsed,block:bw?bw.block:null,week:bw?bw.week:null,weekNumber:bw?bw.weekNumber:null,error,include:!error};
-}
-async function handleSchedImportFile(file,type){
-  try{
-    const buf=await file.arrayBuffer();
-    const wb=XLSX.read(buf,{type:"array",cellDates:true});
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""});
-    if(!aoa||aoa.length<2)throw new Error("Sheet has too few rows — expected a header row plus at least one session row.");
-    const cfg=SCHED_IMPORT_CONFIG[type];
-    const headerRow=aoa[0]||[];
-    const colIdx={};
-    cfg.fields.forEach(f=>{colIdx[f.key]=findColIndex(headerRow,f.aliases);});
-    resolveDateColumnFallback(colIdx,ci=>aoa.slice(1,6).map(row=>(row||[])[ci]).filter(v=>v!=null&&v!==""));
-    const missingRequired=cfg.fields.filter(f=>f.required&&colIdx[f.key]===-1);
-    if(missingRequired.length)throw new Error("Could not find column(s): "+missingRequired.map(f=>f.aliases[0]).join(", ")+". Add a header row with these column names.");
-    const rows=[];
-    for(let r=1;r<aoa.length;r++){
-      const row=aoa[r]||[];
-      if(row.every(c=>c==null||String(c).trim()===""))continue;
-      const rawObj={};
-      cfg.fields.forEach(f=>{rawObj[f.key]=colIdx[f.key]>=0?row[colIdx[f.key]]:"";});
-      rows.push(buildImportRow(cfg,rawObj,r+1));
-    }
-    if(!rows.length)throw new Error("No session rows found under the header row.");
-    SCHED_IMPORT={type,fileName:file.name,rows};
-    render();
-  }catch(e){
-    showToast("Could not read that file: "+(e.message||e));
-  }
-}
-// Free, no-API text import: pasted text (e.g. copied straight out of Excel/Word)
-// is parsed with simple tab/column-splitting into the same buildImportRow()
-// pipeline the Excel importer uses.
-let SCHED_PASTE_TEXT="";
-function splitTextCells(line){
-  if(line.includes("\t"))return line.split("\t").map(c=>c.trim());
-  return line.split(/ {2,}|\s*\|\s*/).map(c=>c.trim()).filter(c=>c!=="");
-}
-function parseSchedImportText(text,type){
-  const cfg=SCHED_IMPORT_CONFIG[type];
-  const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l!=="");
-  if(!lines.length)throw new Error("Paste or scan some schedule text first.");
-  const firstCells=splitTextCells(lines[0]);
-  const headerIdx={};
-  cfg.fields.forEach(f=>{headerIdx[f.key]=findColIndex(firstCells,f.aliases);});
-  resolveDateColumnFallback(headerIdx,ci=>lines.slice(1,6).map(l=>splitTextCells(l)[ci]).filter(v=>v!=null&&v!==""));
-  const looksLikeHeader=cfg.fields.filter(f=>f.required).every(f=>headerIdx[f.key]>=0);
-  let dataLines=lines,colOrder;
-  if(looksLikeHeader){colOrder=cfg.fields.map(f=>headerIdx[f.key]);dataLines=lines.slice(1);}
-  else colOrder=cfg.fields.map((f,i)=>i);
-  const rows=[];
-  dataLines.forEach((line,idx)=>{
-    const cells=splitTextCells(line);
-    if(!cells.length)return;
-    const rawObj={};
-    cfg.fields.forEach((f,i)=>{const ci=colOrder[i];rawObj[f.key]=ci>=0&&ci<cells.length?cells[ci]:"";});
-    rows.push(buildImportRow(cfg,rawObj,idx+1));
-  });
-  if(!rows.length)throw new Error("No session rows found in that text.");
-  return rows;
-}
-function handleSchedImportTextParse(type){
-  try{
-    const ta=document.getElementById("sched_paste_text");
-    const rows=parseSchedImportText(ta?ta.value:"",type);
-    SCHED_IMPORT={type,fileName:"Pasted text",rows};
-    render();
-  }catch(e){
-    showToast(e.message||String(e));
-  }
-}
-function renderSchedImportModal(){
-  const type=STATE.schedImportType;
-  if(!type)return null;
-  const cfg=SCHED_IMPORT_CONFIG[type];
-  function close(){SCHED_IMPORT={type:null,fileName:"",rows:[]};SCHED_PASTE_TEXT="";set({schedImportType:null});}
-  const validCount=SCHED_IMPORT.rows.filter(r=>r.include&&!r.error).length;
-  return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
-    el("div",{cls:"modal-card",st:{width:"780px"}},
-      el("div",{cls:"flex-gap",st:{marginBottom:"14px",justifyContent:"space-between"}},
-        el("h3",null,"Import "+cfg.label+" Sessions"),
-        el("button",{cls:"sbtn ghost",onClick:close},"×")
-      ),
-      !SCHED_IMPORT.rows.length?el("div",null,
-        el("p",{cls:"sh",st:{marginBottom:"8px",fontWeight:"700"}},"Option 1 — Excel file"),
-        el("p",{cls:"sh",st:{marginBottom:"12px"}},"Upload a spreadsheet with a header row containing columns like: "+cfg.fields.map(f=>f.aliases[0]).join(", ")+". One row per session."),
-        el("div",{cls:"drop-zone",st:{marginBottom:"20px"}},
-          el("div",{st:{marginBottom:"8px"}},"Choose the .xlsx file to upload"),
-          (()=>{
-            const inp=el("input",{type:"file",accept:".xlsx,.xls"});
-            inp.onchange=e=>{const f=e.target.files[0];if(f)handleSchedImportFile(f,type);};
-            return inp;
-          })()
-        ),
-        el("p",{cls:"sh",st:{marginBottom:"8px",fontWeight:"700"}},"Option 2 — Paste text (free, no AI cost)"),
-        el("p",{cls:"sh",st:{marginBottom:"10px"}},"Copy the schedule cells straight from Excel/Word (or type them out) and paste below — columns come through exactly since there's no image-reading involved. For a photo/screenshot, send it to Claude directly in chat and it'll enter the sessions for you."),
-        el("textarea",{id:"sched_paste_text",rows:"6",cls:"input",st:{width:"100%",fontFamily:"monospace",fontSize:".78rem",marginBottom:"10px",resize:"vertical"},placeholder:"Paste tab-separated rows here — e.g.\n"+cfg.fields.map(f=>f.aliases[0]).join("\t"),oninput:e=>{SCHED_PASTE_TEXT=e.target.value;}},SCHED_PASTE_TEXT),
-        el("button",{cls:"sbtn",onClick:()=>handleSchedImportTextParse(type)},"Parse Text"),
-        el("p",{cls:"sh",st:{marginTop:"14px"}},"Either way, Block and Week are detected automatically from each session's Date, and imported sessions start as drafts so you can review before publishing.")
-      ):el("div",null,
-        el("div",{cls:"flex-gap",st:{marginBottom:"10px",justifyContent:"space-between",flexWrap:"wrap"}},
-          el("p",{cls:"sh",st:{margin:"0"}},SCHED_IMPORT.fileName+" — "+SCHED_IMPORT.rows.length+" row(s) found, "+validCount+" ready to import."),
-          el("div",{cls:"flex-gap"},
-            el("button",{cls:"sbtn ghost",st:{fontSize:".76rem",padding:"4px 10px"},onClick:()=>{SCHED_IMPORT.rows.forEach(r=>{if(!r.error)r.include=true;});render();}},"Select All"),
-            el("button",{cls:"sbtn ghost",st:{fontSize:".76rem",padding:"4px 10px"},onClick:()=>{SCHED_IMPORT.rows.forEach(r=>{r.include=false;});render();}},"Deselect All")
-          )
-        ),
-        el("div",{cls:"tbl-wrap",st:{maxHeight:"360px",overflowY:"auto",marginBottom:"14px"}},
-          el("table",null,
-            el("thead",null,el("tr",null,
-              el("th",null,""),
-              ...cfg.previewCols.map(c=>el("th",null,c.charAt(0).toUpperCase()+c.slice(1))),
-              el("th",null,"Block/Week"),
-              el("th",null,"Status")
-            )),
-            el("tbody",null,
-              ...SCHED_IMPORT.rows.map(row=>el("tr",{st:row.error?{background:"rgba(220,38,38,.06)"}:null},
-                el("td",null,el("input",{type:"checkbox",...(row.include&&!row.error?{checked:""}:{}),...(row.error?{disabled:""}:{}),onChange:e=>{row.include=e.target.checked;render();}})),
-                ...cfg.previewCols.map(c=>el("td",{st:{fontSize:".8rem"}},c==="date"?fmtDate(row.parsed.date||""):(row.parsed[c]||"—"))),
-                el("td",{st:{fontSize:".78rem"}},row.block?("B"+row.block+" / W"+row.week):"—"),
-                el("td",{st:{fontSize:".76rem",color:row.error?"#dc2626":"#16a34a"}},row.error||"OK")
-              ))
-            )
-          )
-        ),
-        el("div",{cls:"flex-gap"},
-          el("button",{cls:"sbtn success",onClick:()=>commitSchedImport()},"Import "+validCount+" Session"+(validCount===1?"":"s")),
-          el("button",{cls:"sbtn ghost",onClick:()=>{SCHED_IMPORT={type,fileName:"",rows:[]};render();}},"Choose Different File"),
-          el("button",{cls:"sbtn ghost",onClick:close},"Cancel")
-        )
-      )
-    )
-  );
-}
-async function commitSchedImport(){
-  const type=STATE.schedImportType;
-  const cfg=SCHED_IMPORT_CONFIG[type];
-  const toImport=SCHED_IMPORT.rows.filter(r=>r.include&&!r.error);
-  if(!toImport.length){showToast("No valid rows selected to import.","warning");return;}
-  const payload=toImport.map(r=>({...cfg.buildPayload(r.parsed,r.block,r.weekNumber,CURRENT_ACADEMIC_YEAR),created_by:STATE.user.profileId}));
-  const{error}=await sb.from(cfg.table).insert(payload);
-  if(error){showToast("Could not import: "+error.message);return;}
-  showToast("Imported "+payload.length+" session"+(payload.length===1?"":"s")+" as drafts.","success");
-  SCHED_IMPORT={type:null,fileName:"",rows:[]};
-  SCHED_PASTE_TEXT="";
-  set({schedImportType:null});
-  await loadSchedules();
-}
 function schedulePublishState(sessions){
   if(!sessions.length)return"empty";
   const pubCount=sessions.filter(s=>s.published).length;
@@ -3593,8 +3341,7 @@ function renderMMSchedule(){
     blkRow,
     renderPublishControls(sessions,"mm_sessions",blk,canEditSched),
     canEditSched?el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
-      el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.12)",color:"rgba(31,26,18,.55)",padding:"5px 14px",borderRadius:"999px",cursor:"pointer",fontSize:".78rem"},onClick:()=>generateMMSessions(blk)},"Auto-fill dates"),
-      el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.12)",color:"rgba(31,26,18,.55)",padding:"5px 14px",borderRadius:"999px",cursor:"pointer",fontSize:".78rem"},onClick:()=>{SCHED_IMPORT={type:"mm",fileName:"",rows:[]};set({schedImportType:"mm"});}},"Import from Excel")
+      el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.12)",color:"rgba(31,26,18,.55)",padding:"5px 14px",borderRadius:"999px",cursor:"pointer",fontSize:".78rem"},onClick:()=>generateMMSessions(blk)},"Auto-fill dates")
     ):null,
     formOpen?renderMMScheduleForm(blk,editingSession):null,
     el("div",{st:{border:"1px solid rgba(31,26,18,.08)",borderRadius:"12px",overflow:"hidden"}},
@@ -3945,7 +3692,6 @@ function renderTeachSchedule(){
       renderPublishControls(sessions,"teaching_sessions",blk,canEditSched),
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
         el("span",{cls:"card-title",st:{margin:"0"}},"Block "+blk+" Teaching Sessions"),
-        canEditSched?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem"},onClick:()=>{SCHED_IMPORT={type:"teach",fileName:"",rows:[]};set({schedImportType:"teach"});}},"Import from Excel"):null,
         canEditSched?el("button",{cls:"sbtn primary",onClick:()=>set({teachShowEntry:true,teachEntrySession:"new_teach"})},"+ Add Session"):null
       ),
       formOpen?renderTeachScheduleForm(blk,editingSession):null,
@@ -9189,7 +8935,6 @@ function render(){
   if(STATE.showPromoModal&&isPD())app.appendChild(renderPromoModal());
   if(STATE.showBroadcast)(isPD()||STATE.user?.role==="chief")&&app.appendChild(renderBroadcastModal());
   if(STATE.showCalModal)app.appendChild(renderCalModal());
-  if(STATE.schedImportType)app.appendChild(renderSchedImportModal());
   const _np=renderNotifPanel();if(_np)app.appendChild(_np);
   const srch=renderSearchOverlay();if(srch)app.appendChild(srch);
   appendAccountModal(app);
