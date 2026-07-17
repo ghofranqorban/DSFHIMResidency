@@ -2901,7 +2901,13 @@ function renderMorning(){
 }
 function renderMMScheduleForm(blk,editingSession){
   const wk=editingSession?weekInBlock(editingSession,blk):1;
-  return el("div",{cls:"inline-form",st:{marginBottom:"14px"}},
+  function close(){set({mmShowEntry:false,mmEntrySession:null});}
+  return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
+    el("div",{cls:"modal-card",st:{width:"680px"}},
+      el("div",{cls:"flex-gap",st:{marginBottom:"14px",justifyContent:"space-between"}},
+        el("h3",null,editingSession?"Edit Session":"Add Session"),
+        el("button",{cls:"sbtn ghost",onClick:close},"×")
+      ),
     el("div",{cls:"grid-3",st:{marginBottom:"10px"}},
       el("div",null,el("label",null,"Week (in block)"),
         el("select",{id:"mm_f_week"},
@@ -3077,7 +3083,8 @@ function renderMMScheduleForm(blk,editingSession){
         set({mmShowEntry:false,mmEntrySession:null});
         await loadSchedules();
       }},editingSession?"Save Changes":"Add Session"),
-      el("button",{cls:"sbtn ghost",onClick:()=>set({mmShowEntry:false,mmEntrySession:null})},"Cancel")
+      el("button",{cls:"sbtn ghost",onClick:close},"Cancel")
+    )
     )
   );
 }
@@ -3549,7 +3556,13 @@ function renderTeaching(){
 }
 function renderTeachScheduleForm(blk,editingSession){
   const wk=editingSession?weekInBlock(editingSession,blk):1;
-  return el("div",{cls:"inline-form",st:{marginBottom:"14px"}},
+  function close(){set({teachShowEntry:false,teachEntrySession:null});}
+  return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
+    el("div",{cls:"modal-card",st:{width:"680px"}},
+      el("div",{cls:"flex-gap",st:{marginBottom:"14px",justifyContent:"space-between"}},
+        el("h3",null,editingSession?"Edit Session":"Add Session"),
+        el("button",{cls:"sbtn ghost",onClick:close},"×")
+      ),
     el("div",{cls:"grid-3",st:{marginBottom:"10px"}},
       el("div",null,el("label",null,"Week (in block)"),
         el("select",{id:"teach_f_week"},
@@ -3600,7 +3613,8 @@ function renderTeachScheduleForm(blk,editingSession){
         set({teachShowEntry:false,teachEntrySession:null});
         await loadSchedules();
       }},editingSession?"Save Changes":"Add Session"),
-      el("button",{cls:"sbtn ghost",onClick:()=>set({teachShowEntry:false,teachEntrySession:null})},"Cancel")
+      el("button",{cls:"sbtn ghost",onClick:close},"Cancel")
+    )
     )
   );
 }
