@@ -737,12 +737,12 @@ async function saveLeavePlan(status){
   const fk=STATE.lpFirstKey||null,sk=STATE.lpSecondKey||null;
   if(status==="submitted"){
     if(fk&&!STATE.lpFirstAltKey&&lpPeriodCount(fk,u.rid)>=LP_CAP){
-      showToast("That period is at full capacity — choose a backup before submitting","error");
+      showToast("That period is at full capacity — choose your second preference before submitting","error");
       set({lpAltPending:{which:"a",key:fk,altChoice:null}});
       return;
     }
     if(sk&&!STATE.lpSecondAltKey&&lpPeriodCount(sk,u.rid)>=LP_CAP){
-      showToast("That period is at full capacity — choose a backup before submitting","error");
+      showToast("That period is at full capacity — choose your second preference before submitting","error");
       set({lpAltPending:{which:"b",key:sk,altChoice:null}});
       return;
     }
@@ -805,10 +805,10 @@ async function lpDecideDecline(residentId,which){
   LEAVE_PLAN[residentId]=row;
   const resProfile=PROFILE_BY_RESIDENT[residentId];
   const msg=altPeriod
-    ?("Your "+(which==="first"?"First":"Second")+" Leave suggestion was declined by the PD — your backup period ("+altPeriod.label.replace(" - "," — ")+") has been assigned instead.")
+    ?("Your "+(which==="first"?"First":"Second")+" Leave suggestion was declined by the PD — your Second Preference ("+altPeriod.label.replace(" - "," — ")+") has been assigned instead.")
     :("Your "+(which==="first"?"First":"Second")+" Leave suggestion was declined by the PD. Please choose another period and resubmit your Leave Plan.");
   if(resProfile)createNotification(resProfile.id,"warning",msg,"leave_plan",null);
-  showToast(altPeriod?"Declined — backup period assigned":"Declined — resident notified to resubmit","success");
+  showToast(altPeriod?"Declined — Second Preference assigned":"Declined — resident notified to resubmit","success");
   render();
 }
 async function lpDecideEdit(residentId,which,newKey){
@@ -6990,12 +6990,16 @@ function renderLeavePlan(){
       return el("div",{st:{flex:"1",borderRadius:"14px",padding:"18px 20px",border:"2px solid "+(filled?colorHex:"rgba(31,26,18,.1)"),background:filled?"rgba("+bgRgb+",.05)":"#FEFBF3",position:"relative",minHeight:"80px"}},
         el("div",{st:{fontSize:".63rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",marginBottom:"7px",color:colorHex}},label),
         filled
-          ?[el("div",{st:{display:"flex",alignItems:"center",gap:"8px"}},
+          ?[altPeriod?el("div",{st:{fontSize:".58rem",fontWeight:"700",letterSpacing:".05em",textTransform:"uppercase",color:colorHex,marginBottom:"2px"}},"First Preference"):null,
+            el("div",{st:{display:"flex",alignItems:"center",gap:"8px"}},
               el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",fontWeight:"600",lineHeight:"1.3",color:"#1F1A12"}},period.label.replace(" - "," — ")),
               overCap?el("span",{st:{fontSize:".58rem",fontWeight:"700",padding:"2px 8px",borderRadius:"9999px",background:"#fde8e8",color:"#b52040"}},"SUGGESTION"):null
             ),
             el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.45)",marginTop:"3px"}},period.disp),
-            altPeriod?el("div",{st:{fontSize:".7rem",color:"rgba(31,26,18,.5)",marginTop:"6px"}},"Backup: ",el("strong",null,altPeriod.label.replace(" - "," — "))):null,
+            altPeriod?el("div",{st:{marginTop:"8px"}},
+              el("div",{st:{fontSize:".58rem",fontWeight:"700",letterSpacing:".05em",textTransform:"uppercase",color:"rgba(31,26,18,.4)",marginBottom:"2px"}},"Second Preference"),
+              el("div",{st:{fontSize:".82rem",fontWeight:"600",color:"#1F1A12"}},altPeriod.label.replace(" - "," — "))
+            ):null,
             !passed?el("button",{st:{position:"absolute",top:"12px",right:"12px",background:"none",border:"none",cursor:"pointer",color:"rgba(31,26,18,.3)",fontSize:"1.1rem",padding:"2px 6px",borderRadius:"6px"},
               onClick:()=>set({[which==="a"?"lpFirstKey":"lpSecondKey"]:null,[which==="a"?"lpFirstAltKey":"lpSecondAltKey"]:null})},"x"):null]
           :el("div",{st:{fontSize:".8rem",color:"rgba(31,26,18,.3)",fontStyle:"italic",marginTop:"4px"}},"Not selected yet")
@@ -7063,14 +7067,14 @@ function renderLeavePlan(){
     const altOptions=LP_PERIODS.filter(p=>p.key!==pend.key&&p.key!==otherKey&&!(isR1&&p.r1lock)&&!(p.r3only&&!isR3));
     return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)set({lpAltPending:null});}},
       el("div",{cls:"modal-card",st:{width:"440px",maxWidth:"92vw",padding:"26px"}},
-        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.1rem",fontWeight:"600",color:"#1F1A12",marginBottom:"10px"}},"Keep as Suggestion"),
+        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.1rem",fontWeight:"600",color:"#1F1A12",marginBottom:"10px"}},"Add Your Second Preference"),
         el("div",{st:{fontSize:".85rem",color:"rgba(31,26,18,.6)",lineHeight:"1.5",marginBottom:"16px"}},
-          cnt+" resident"+(cnt===1?" has":"s have")+" already applied for "+(period?period.label.replace(" - "," — "):"this period")+" — it's already full. This choice will be kept only as your ",el("strong",null,"suggestion"),", not a guaranteed slot. Please choose a backup period the PD can fall back to if this one can't be granted."
+          cnt+" resident"+(cnt===1?" has":"s have")+" already applied for "+(period?period.label.replace(" - "," — "):"this period")+" — it's already full. This will be kept as your ",el("strong",null,"First Preference"),", not a guaranteed slot. Please choose a Second Preference the PD can fall back to if this one can't be granted."
         ),
-        el("label",{st:{fontSize:".7rem",fontWeight:"600",textTransform:"uppercase",letterSpacing:".05em",color:"rgba(31,26,18,.45)",display:"block",marginBottom:"6px"}},"Backup Period (required)"),
+        el("label",{st:{fontSize:".7rem",fontWeight:"600",textTransform:"uppercase",letterSpacing:".05em",color:"rgba(31,26,18,.45)",display:"block",marginBottom:"6px"}},"Second Preference (required)"),
         el("select",{st:{width:"100%",padding:"9px 12px",borderRadius:"9px",border:"1px solid rgba(31,26,18,.15)",fontSize:".85rem",marginBottom:"20px",background:"#F6EFE2",color:"#1F1A12"},
           onChange:e=>set({lpAltPending:{...pend,altChoice:e.target.value||null}})},
-          el("option",{value:""},"Select a backup period…"),
+          el("option",{value:""},"Select your second preference…"),
           ...altOptions.map(p=>el("option",{value:p.key,selected:pend.altChoice===p.key},p.label.replace(" - "," — ")))
         ),
         el("div",{st:{display:"flex",justifyContent:"flex-end",gap:"10px"}},
@@ -7082,7 +7086,7 @@ function renderLeavePlan(){
               if(!pend.altChoice)return;
               if(pend.which==="a")set({lpFirstKey:pend.key,lpFirstAltKey:pend.altChoice,lpAltPending:null});
               else set({lpSecondKey:pend.key,lpSecondAltKey:pend.altChoice,lpAltPending:null});
-            }},"Save as Suggestion")
+            }},"Save Preferences")
         )
       )
     );
@@ -7161,13 +7165,13 @@ function renderLeavePlan(){
             if(isF){
               const alt=plan.first_leave_alt_key?LP_PERIODS.find(x=>x.key===plan.first_leave_alt_key):null;
               const appr=!!plan.first_leave_approved;
-              const tt="First Leave"+(over?(appr?" — Approved":" — Suggestion (over cap)"):"")+(alt?" — Backup: "+alt.label.replace(" - "," — "):"")+" — click to manage";
+              const tt="First Leave"+(over?(appr?" — Approved":" — Suggestion (over cap)"):"")+(alt?" — Second Preference: "+alt.label.replace(" - "," — "):"")+" — click to manage";
               return el("td",{st:{textAlign:"center"}},el("span",{title:tt,onClick:()=>set({lpDecision:{residentId:r.id,which:"first"},lpDecisionEditKey:undefined}),st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#c96a4a",boxShadow:over?(appr?"0 0 0 2px #1e7a43":"0 0 0 2px #b52040"):"none",cursor:"pointer"}}));
             }
             if(isS){
               const alt=plan.second_leave_alt_key?LP_PERIODS.find(x=>x.key===plan.second_leave_alt_key):null;
               const appr=!!plan.second_leave_approved;
-              const tt="Second Leave"+(over?(appr?" — Approved":" — Suggestion (over cap)"):"")+(alt?" — Backup: "+alt.label.replace(" - "," — "):"")+" — click to manage";
+              const tt="Second Leave"+(over?(appr?" — Approved":" — Suggestion (over cap)"):"")+(alt?" — Second Preference: "+alt.label.replace(" - "," — "):"")+" — click to manage";
               return el("td",{st:{textAlign:"center"}},el("span",{title:tt,onClick:()=>set({lpDecision:{residentId:r.id,which:"second"},lpDecisionEditKey:undefined}),st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#26523A",boxShadow:over?(appr?"0 0 0 2px #1e7a43":"0 0 0 2px #b52040"):"none",cursor:"pointer"}}));
             }
             if(gimBlocksSet&&gimBlocksSet.has(p.blk))return el("td",{title:"Suggested GIM block",st:{textAlign:"center",background:"rgba(38,90,72,.18)"}},"");
@@ -7294,12 +7298,12 @@ function renderLeavePlan(){
           period?period.label.replace(" - "," — "):"No period selected",
           over?el("span",{st:{marginLeft:"8px",fontSize:".58rem",fontWeight:"700",padding:"2px 8px",borderRadius:"9999px",background:approved?"#e6f4ea":"#fde8e8",color:approved?"#1e7a43":"#b52040"}},approved?"APPROVED":"OVER CAP"):null
         ),
-        altPeriod?el("div",{st:{fontSize:".78rem",color:"rgba(31,26,18,.5)",marginBottom:"16px"}},"Backup on file: ",el("strong",null,altPeriod.label.replace(" - "," — "))):null,
+        altPeriod?el("div",{st:{fontSize:".78rem",color:"rgba(31,26,18,.5)",marginBottom:"16px"}},"Second Preference on file: ",el("strong",null,altPeriod.label.replace(" - "," — "))):null,
         period?el("div",{st:{display:"flex",gap:"8px",marginBottom:"18px",flexWrap:"wrap"}},
           over&&!approved?el("button",{st:{background:"#1e7a43",color:"#FEFBF3",border:"none",borderRadius:"9999px",padding:"8px 16px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".78rem",cursor:"pointer"},
             onClick:async()=>{await lpDecideApprove(dec.residentId,which);close();}},"Approve as Suggested"):null,
           el("button",{st:{background:"none",color:"#b52040",border:"1px solid rgba(181,32,64,.35)",borderRadius:"9999px",padding:"8px 16px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".78rem",cursor:"pointer"},
-            onClick:()=>showConfirm("Decline "+dname(resident.name)+"'s "+(which==="first"?"First":"Second")+" Leave for "+period.label.replace(" - "," — ")+"?"+(altPeriod?" Their backup period ("+altPeriod.label.replace(" - "," — ")+") will be assigned instead.":" They'll be notified to choose another period."),async()=>{await lpDecideDecline(dec.residentId,which);},altPeriod?"Decline (use backup)":"Decline","danger")},altPeriod?"Decline (use backup)":"Decline")
+            onClick:()=>showConfirm("Decline "+dname(resident.name)+"'s "+(which==="first"?"First":"Second")+" Leave for "+period.label.replace(" - "," — ")+"?"+(altPeriod?" Their Second Preference ("+altPeriod.label.replace(" - "," — ")+") will be assigned instead.":" They'll be notified to choose another period."),async()=>{await lpDecideDecline(dec.residentId,which);},altPeriod?"Decline (use 2nd preference)":"Decline","danger")},altPeriod?"Decline (use 2nd preference)":"Decline")
         ):null,
         el("label",{st:{fontSize:".7rem",fontWeight:"600",textTransform:"uppercase",letterSpacing:".05em",color:"rgba(31,26,18,.45)",display:"block",marginBottom:"6px"}},"Reassign to a different period"),
         el("select",{st:{width:"100%",padding:"9px 12px",borderRadius:"9px",border:"1px solid rgba(31,26,18,.15)",fontSize:".85rem",marginBottom:"20px",background:"#F6EFE2",color:"#1F1A12"},
