@@ -749,6 +749,7 @@ function lpPeriodCount(periodKey,excludeResId){
   });
   return c;
 }
+function lpCapFor(period){return period&&period.r3only?Infinity:LP_CAP;}
 async function loadLeavePlan(){
   const{data,error}=await sb.from("leave_plan").select("*").eq("academic_year",LP_AY);
   if(error){console.warn("leave_plan load error",error.message);return;}
@@ -759,12 +760,13 @@ async function saveLeavePlan(status){
   const u=STATE.user;if(!u?.rid)return;
   const fk=STATE.lpFirstKey||null,sk=STATE.lpSecondKey||null;
   if(status==="submitted"){
-    if(fk&&!STATE.lpFirstAltKey&&lpPeriodCount(fk,u.rid)>=LP_CAP){
+    const fkPeriod=LP_PERIODS.find(p=>p.key===fk),skPeriod=LP_PERIODS.find(p=>p.key===sk);
+    if(fk&&!STATE.lpFirstAltKey&&lpPeriodCount(fk,u.rid)>=lpCapFor(fkPeriod)){
       showToast("That period is at full capacity — choose your second preference before submitting","error");
       set({lpAltPending:{which:"a",key:fk,altChoice:null}});
       return;
     }
-    if(sk&&!STATE.lpSecondAltKey&&lpPeriodCount(sk,u.rid)>=LP_CAP){
+    if(sk&&!STATE.lpSecondAltKey&&lpPeriodCount(sk,u.rid)>=lpCapFor(skPeriod)){
       showToast("That period is at full capacity — choose your second preference before submitting","error");
       set({lpAltPending:{which:"b",key:sk,altChoice:null}});
       return;
@@ -7205,7 +7207,7 @@ function renderLeavePlan(){
       const filled=!!period;
       const altKey=which==="a"?STATE.lpFirstAltKey:STATE.lpSecondAltKey;
       const altPeriod=altKey?LP_PERIODS.find(x=>x.key===altKey):null;
-      const overCap=filled&&lpPeriodCount(period.key,u.rid)>=LP_CAP;
+      const overCap=filled&&lpPeriodCount(period.key,u.rid)>=lpCapFor(period);
       return el("div",{st:{flex:"1",borderRadius:"14px",padding:"18px 20px",border:"2px solid "+(filled?colorHex:"rgba(31,26,18,.1)"),background:filled?"rgba("+bgRgb+",.05)":"#FEFBF3",position:"relative",minHeight:"80px"}},
         el("div",{st:{fontSize:".63rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",marginBottom:"7px",color:colorHex}},label),
         filled
@@ -7256,14 +7258,14 @@ function renderLeavePlan(){
                     onClick:()=>{
                       if(isFirst){set({lpFirstKey:null,lpFirstAltKey:null});return;}
                       const cnt=lpPeriodCount(p.key,u.rid);
-                      if(cnt>=LP_CAP){set({lpAltPending:{which:"a",key:p.key,altChoice:null}});return;}
+                      if(cnt>=lpCapFor(p)){set({lpAltPending:{which:"a",key:p.key,altChoice:null}});return;}
                       set({lpFirstKey:p.key,lpFirstAltKey:null});
                     }},"First Leave"),
                   el("button",{st:{border:"none",borderRadius:"9999px",padding:"5px 14px",fontFamily:"Inter,sans-serif",fontSize:".72rem",fontWeight:"600",cursor:"pointer",transition:"all .15s",background:isSecond?"#26523A":"rgba(38,90,72,.1)",color:isSecond?"#FEFBF3":"#26523A"},
                     onClick:()=>{
                       if(isSecond){set({lpSecondKey:null,lpSecondAltKey:null});return;}
                       const cnt=lpPeriodCount(p.key,u.rid);
-                      if(cnt>=LP_CAP){set({lpAltPending:{which:"b",key:p.key,altChoice:null}});return;}
+                      if(cnt>=lpCapFor(p)){set({lpAltPending:{which:"b",key:p.key,altChoice:null}});return;}
                       set({lpSecondKey:p.key,lpSecondAltKey:null});
                     }},"Second Leave")
                 )
@@ -7352,7 +7354,7 @@ function renderLeavePlan(){
       if(plan.first_leave_key)counts[plan.first_leave_key]=(counts[plan.first_leave_key]||0)+1;
       if(plan.second_leave_key)counts[plan.second_leave_key]=(counts[plan.second_leave_key]||0)+1;
     });
-    const overCap=LP_PERIODS.filter(p=>counts[p.key]>LP_CAP).length;
+    const overCap=LP_PERIODS.filter(p=>counts[p.key]>lpCapFor(p)).length;
     const gimEligible=allRes.filter(r=>r.level!=="R4");
     const gimSubRes=gimEligible.filter(r=>GIM_PREFS[r.id]?.status==="submitted");
     const sumStrip=el("div",{st:{display:"flex",border:"1px solid rgba(31,26,18,.08)",borderRadius:"14px",overflow:"hidden",marginBottom:"24px"}},
@@ -7380,7 +7382,7 @@ function renderLeavePlan(){
           ...LP_PERIODS.map(p=>{
             if(p.r1lock&&r.level==="R1")return el("td",{st:{textAlign:"center",fontSize:".58rem",color:"rgba(31,26,18,.15)"}},"-");
             const isF=!notSub&&plan.first_leave_key===p.key,isS=!notSub&&plan.second_leave_key===p.key;
-            const over=(counts[p.key]||0)>LP_CAP;
+            const over=(counts[p.key]||0)>lpCapFor(p);
             if(isF){
               const alt=plan.first_leave_alt_key?LP_PERIODS.find(x=>x.key===plan.first_leave_alt_key):null;
               const appr=!!plan.first_leave_approved;
@@ -7402,10 +7404,10 @@ function renderLeavePlan(){
     tableRows.push(el("tr",{st:{background:"#fff9f7",borderTop:"1px solid rgba(201,106,74,.12)"}},
       el("td",{colSpan:"2",st:{padding:"6px 16px",fontSize:".62rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.4)"}},"On leave / period"),
       ...LP_PERIODS.map(p=>{
-        const c=counts[p.key]||0,over=c>LP_CAP;
+        const cap=lpCapFor(p),c=counts[p.key]||0,over=c>cap;
         return el("td",{st:{textAlign:"center",padding:"5px 3px"}},
-          el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:".88rem",fontWeight:"700",color:over?"#b52040":c>=LP_CAP?"#A47A28":"#26523A"}},c),
-          over?el("div",{st:{display:"inline-block",background:"#fde8e8",color:"#b52040",borderRadius:"4px",padding:"1px 4px",fontSize:".56rem",fontWeight:"700"}},"+"+String(c-LP_CAP)):null
+          el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:".88rem",fontWeight:"700",color:over?"#b52040":c>=cap?"#A47A28":"#26523A"}},c),
+          over?el("div",{st:{display:"inline-block",background:"#fde8e8",color:"#b52040",borderRadius:"4px",padding:"1px 4px",fontSize:".56rem",fontWeight:"700"}},"+"+String(c-cap)):null
         );
       })
     ));
@@ -7528,7 +7530,7 @@ function renderLeavePlan(){
     const apprF=which==="first"?"first_leave_approved":"second_leave_approved";
     const period=LP_PERIODS.find(p=>p.key===plan[keyF])||null;
     const altPeriod=plan[altF]?LP_PERIODS.find(p=>p.key===plan[altF]):null;
-    const over=period?lpPeriodCount(period.key,null)>=LP_CAP+1:false;
+    const over=period?lpPeriodCount(period.key,null)>=lpCapFor(period)+1:false;
     const approved=!!plan[apprF];
     const rLevel=resident.level,isR1r=rLevel==="R1",isR3r=rLevel==="R3";
     const editOptions=LP_PERIODS.filter(p=>!(isR1r&&p.r1lock)&&!(p.r3only&&!isR3r));
