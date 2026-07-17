@@ -1771,8 +1771,9 @@ function quarterMonthsLabel(q){return["","October · November · December","Janu
 function quarterEndDate(q,ay){const ends={1:ay+"-12-31",2:(ay+1)+"-03-31",3:(ay+1)+"-06-30",4:(ay+1)+"-09-30"};return ends[q];}
 function kpiOngoingScore(id){
   const k=calcKPI(id);
-  const raw=k.qAvg*0.20+k.mmPct*0.15+k.tPct*0.15+(k.pres?10:0);
-  return Math.round(raw/60*100);
+  const ongoingTotal=KPI_W.quiz+KPI_W.mm+KPI_W.teach+KPI_W.pres;
+  const raw=k.qAvg*KPI_W.quiz/100+k.mmPct*KPI_W.mm/100+k.tPct*KPI_W.teach/100+(k.pres?KPI_W.pres:0);
+  return Math.round(raw/ongoingTotal*100);
 }
 function ini(name){const n=dname(name);const parts=n.trim().split(/\s+/);if(parts.length>=2)return(parts[0][0]+(parts[parts.length-1][0]||"")).toUpperCase();return n.slice(0,2).toUpperCase();}
 function brVoteCountFor(resId,role){
