@@ -8866,14 +8866,14 @@ function renderProfileTeach(res){
 async function generateCalToken(){
   const u=STATE.user;if(!u)return;
   const token=crypto.randomUUID();
-  const{error}=await sb.from("profiles").update({calendar_token:token}).eq("id",u.profileId);
+  const{error}=await sb.rpc("set_my_calendar_token",{new_token:token});
   if(error){showToast("Could not generate calendar link: "+error.message);return;}
   STATE.calToken=token;
   render();
 }
 async function saveCalPrefs(prefs){
   const u=STATE.user;if(!u)return;
-  const{error}=await sb.from("profiles").update({calendar_prefs:prefs}).eq("id",u.profileId);
+  const{error}=await sb.rpc("set_my_calendar_prefs",{new_prefs:prefs});
   if(error){showToast("Could not save preferences: "+error.message);return;}
   set({calPrefs:prefs});
 }
