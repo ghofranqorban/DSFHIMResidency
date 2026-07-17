@@ -7082,8 +7082,10 @@ function renderLeavePlan(){
       if(plan.second_leave_key)counts[plan.second_leave_key]=(counts[plan.second_leave_key]||0)+1;
     });
     const overCap=LP_PERIODS.filter(p=>counts[p.key]>LP_CAP).length;
+    const gimEligible=allRes.filter(r=>r.level!=="R4");
+    const gimSubRes=gimEligible.filter(r=>GIM_PREFS[r.id]?.status==="submitted");
     const sumStrip=el("div",{st:{display:"flex",border:"1px solid rgba(31,26,18,.08)",borderRadius:"14px",overflow:"hidden",marginBottom:"24px"}},
-      ...[{n:subRes.length,l:"Submitted"},{n:missing.length,l:"Not submitted",warn:missing.length>0},{n:overCap,l:"Periods over cap ("+LP_CAP+")",warn:overCap>0},{n:passed?"Closed":"Open",l:"Submissions"}]
+      ...[{n:subRes.length,l:"Leave Submitted"},{n:missing.length,l:"Leave Not submitted",warn:missing.length>0},{n:overCap,l:"Periods over cap ("+LP_CAP+")",warn:overCap>0},{n:gimSubRes.length+"/"+gimEligible.length,l:"GIM Prefs Submitted"},{n:passed?"Closed":"Open",l:"Submissions"}]
         .map((s,i,a)=>el("div",{st:{flex:"1",padding:"18px 20px",borderRight:i<a.length-1?"1px solid rgba(31,26,18,.08)":"none"}},
           el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.7rem",fontWeight:"700",lineHeight:"1",color:s.warn?"#b52040":"#1F1A12"}},s.n),
           el("div",{st:{fontSize:".68rem",color:"rgba(31,26,18,.4)",marginTop:"4px",textTransform:"uppercase",letterSpacing:".06em",fontWeight:"600"}},s.l)
@@ -7098,13 +7100,15 @@ function renderLeavePlan(){
       grp.forEach(r=>{
         const plan=LEAVE_PLAN[r.id]||null;
         const notSub=!plan||plan.status!=="submitted";
+        const gimRow=GIM_PREFS[r.id]||null;
+        const gimSubmitted=gimRow?.status==="submitted";
+        const gimBlocksSet=gimSubmitted?new Set(gimRow.blocks||[]):null;
         tableRows.push(el("tr",null,
           el("td",{st:{padding:"7px 16px",fontWeight:"500",fontSize:".78rem",color:notSub?"rgba(31,26,18,.35)":"#1F1A12",fontStyle:notSub?"italic":"normal",whiteSpace:"nowrap"}},dname(r.name)),
           el("td",{st:{padding:"4px"}},el("span",{st:{display:"inline-block",fontSize:".6rem",fontWeight:"700",padding:"2px 7px",borderRadius:"9999px",background:lvlColors[lvl],color:lvlText[lvl]}},lvl)),
           ...LP_PERIODS.map(p=>{
             if(p.r1lock&&r.level==="R1")return el("td",{st:{textAlign:"center",fontSize:".58rem",color:"rgba(31,26,18,.15)"}},"-");
-            if(!plan||plan.status!=="submitted")return el("td",{st:{textAlign:"center",fontSize:".65rem",color:"rgba(31,26,18,.15)"}},"-");
-            const isF=plan.first_leave_key===p.key,isS=plan.second_leave_key===p.key;
+            const isF=!notSub&&plan.first_leave_key===p.key,isS=!notSub&&plan.second_leave_key===p.key;
             const over=(counts[p.key]||0)>LP_CAP;
             if(isF){
               const alt=plan.first_leave_alt_key?LP_PERIODS.find(x=>x.key===plan.first_leave_alt_key):null;
@@ -7118,6 +7122,7 @@ function renderLeavePlan(){
               const tt="Second Leave"+(over?(appr?" — Approved":" — Suggestion (over cap)"):"")+(alt?" — Backup: "+alt.label.replace(" - "," — "):"")+" — click to manage";
               return el("td",{st:{textAlign:"center"}},el("span",{title:tt,onClick:()=>set({lpDecision:{residentId:r.id,which:"second"},lpDecisionEditKey:undefined}),st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#26523A",boxShadow:over?(appr?"0 0 0 2px #1e7a43":"0 0 0 2px #b52040"):"none",cursor:"pointer"}}));
             }
+            if(gimBlocksSet&&gimBlocksSet.has(p.blk))return el("td",{title:"Suggested GIM block",st:{textAlign:"center",background:"rgba(38,90,72,.18)"}},"");
             return el("td",{st:{textAlign:"center",fontSize:".65rem",color:"rgba(31,26,18,.18)"}},"-");
           })
         ));
@@ -7144,7 +7149,8 @@ function renderLeavePlan(){
         el("div",{st:{display:"flex",gap:"14px",flexWrap:"wrap"}},
           el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.5)"}},el("span",{st:{display:"inline-block",width:"10px",height:"10px",borderRadius:"50%",background:"#c96a4a"}}),"First Leave"),
           el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.5)"}},el("span",{st:{display:"inline-block",width:"10px",height:"10px",borderRadius:"50%",background:"#26523A"}}),"Second Leave"),
-          el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.5)"}},el("span",{st:{display:"inline-block",width:"10px",height:"10px",borderRadius:"50%",background:"#fde8e8",border:"1px solid #b52040"}}),"Over cap ("+LP_CAP+")")
+          el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.5)"}},el("span",{st:{display:"inline-block",width:"10px",height:"10px",borderRadius:"50%",background:"#fde8e8",border:"1px solid #b52040"}}),"Over cap ("+LP_CAP+")"),
+          el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.5)"}},el("span",{st:{display:"inline-block",width:"10px",height:"10px",borderRadius:"3px",background:"rgba(38,90,72,.18)"}}),"Suggested GIM block")
         ),
         el("div",{st:{marginLeft:"auto",display:"flex",gap:"10px"}},
           missing.length?el("button",{st:{background:"#F6EFE2",color:"#1F1A12",border:"none",borderRadius:"9999px",padding:"8px 18px",fontFamily:"Inter,sans-serif",fontWeight:"500",fontSize:".78rem",cursor:"pointer"},
