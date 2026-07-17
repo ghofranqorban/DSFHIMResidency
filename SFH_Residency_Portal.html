@@ -2967,12 +2967,7 @@ function renderMMScheduleForm(blk,editingSession){
         const holder=document.createElement("div");
         const selRow=document.createElement("div");selRow.style.cssText="display:flex;gap:8px;align-items:center;";
         const sel=document.createElement("select");sel.id="mm_f_highlight";sel.style.flex="1";
-        [
-          ["","None"],["#c2726a","Special (Dept Mtg / M&M)"],["#4a7fd6","Night Team Case"],
-          ["#a24a72","Dr. Nahed"],["#b8433a","Acute Coronary Syndrome"],["#f5e08a","Grand Round"],["#e8b4c8","Journal Club"]
-        ].forEach(([v,l])=>{
-          const o=document.createElement("option");o.value=v;o.textContent=l;if(v===curVal)o.selected=true;sel.appendChild(o);
-        });
+        const noneOpt=document.createElement("option");noneOpt.value="";noneOpt.textContent="None";if(curVal==="")noneOpt.selected=true;sel.appendChild(noneOpt);
         const optByHlId={};
         MM_HIGHLIGHTS.forEach(h=>{
           const o=document.createElement("option");o.value=h.color;o.textContent=h.label;if(h.color===curVal)o.selected=true;sel.appendChild(o);
