@@ -3391,44 +3391,75 @@ async function handleSchedImportFile(file,type){
     showToast("Could not read that file: "+(e.message||e));
   }
 }
-function fileToBase64(file){
-  return new Promise((resolve,reject)=>{
-    const reader=new FileReader();
-    reader.onload=()=>{const s=reader.result;resolve(s.slice(s.indexOf(",")+1));};
-    reader.onerror=()=>reject(new Error("Could not read the file."));
-    reader.readAsDataURL(file);
+// Free, no-API image/text import: OCR runs entirely in the browser (Tesseract.js,
+// loaded on demand from CDN so it doesn't slow down the initial page load), and
+// pasted/scanned text is parsed with simple tab/column-splitting into the same
+// buildImportRow() pipeline the Excel importer uses. OCR is never 100% accurate,
+// so the extracted text lands in an editable textarea for the user to fix before
+// parsing — this is deliberate, not a placeholder.
+let SCHED_OCR_BUSY=false;
+let TESSERACT_LOAD_PROMISE=null;
+function loadTesseract(){
+  if(window.Tesseract)return Promise.resolve();
+  if(TESSERACT_LOAD_PROMISE)return TESSERACT_LOAD_PROMISE;
+  TESSERACT_LOAD_PROMISE=new Promise((resolve,reject)=>{
+    const s=document.createElement("script");
+    s.src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+    s.onload=()=>resolve();
+    s.onerror=()=>reject(new Error("Could not load the OCR library — check your internet connection."));
+    document.head.appendChild(s);
   });
+  return TESSERACT_LOAD_PROMISE;
 }
-// The Supabase dashboard may assign this function a different routing slug than
-// its display name (see CREATE_LOGIN_FN above for precedent) — if so, update this
-// constant to match what's shown in Supabase Dashboard > Edge Functions.
-const IMPORT_IMAGE_FN="import-schedule-image";
-let SCHED_IMPORT_BUSY=false;
-async function handleSchedImportImage(file,type){
+async function handleSchedImportOcr(file){
   try{
-    SCHED_IMPORT_BUSY=true;render();
-    const cfg=SCHED_IMPORT_CONFIG[type];
-    const mediaType=file.type||"image/png";
-    const imageBase64=await fileToBase64(file);
-    const{data:sess}=await sb.auth.getSession();
-    const token=sess?.session?.access_token;
-    if(!token){showToast("Your session expired — please sign in again.");SCHED_IMPORT_BUSY=false;render();return;}
-    const{data,error}=await sb.functions.invoke(IMPORT_IMAGE_FN,{
-      body:{type,mediaType,imageBase64},
-      headers:{Authorization:"Bearer "+token}
-    });
-    SCHED_IMPORT_BUSY=false;
-    if(error){showToast("Could not read image: "+(error.message||error));render();return;}
-    if(data?.error){showToast("Could not read image: "+data.error);render();return;}
-    const items=data?.rows||[];
-    if(!items.length){showToast("No sessions detected in that image.","warning");render();return;}
-    const rows=items.map((it,idx)=>buildImportRow(cfg,it,idx+1));
-    SCHED_IMPORT={type,fileName:file.name,rows};
+    SCHED_OCR_BUSY=true;render();
+    await loadTesseract();
+    const{data}=await Tesseract.recognize(file,"eng");
+    const ta=document.getElementById("sched_ocr_text");
+    if(ta)ta.value=(ta.value?ta.value+"\n":"")+(data.text||"").trim();
+    SCHED_OCR_BUSY=false;render();
+    showToast("Text scanned — check it over, then click Parse Text.","success");
+  }catch(e){
+    SCHED_OCR_BUSY=false;
+    showToast("Could not scan that image: "+(e.message||e));
+    render();
+  }
+}
+function splitTextCells(line){
+  if(line.includes("\t"))return line.split("\t").map(c=>c.trim());
+  return line.split(/ {2,}|\s*\|\s*/).map(c=>c.trim()).filter(c=>c!=="");
+}
+function parseSchedImportText(text,type){
+  const cfg=SCHED_IMPORT_CONFIG[type];
+  const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l!=="");
+  if(!lines.length)throw new Error("Paste or scan some schedule text first.");
+  const firstCells=splitTextCells(lines[0]);
+  const headerIdx={};
+  cfg.fields.forEach(f=>{headerIdx[f.key]=findColIndex(firstCells,f.aliases);});
+  const looksLikeHeader=cfg.fields.filter(f=>f.required).every(f=>headerIdx[f.key]>=0);
+  let dataLines=lines,colOrder;
+  if(looksLikeHeader){colOrder=cfg.fields.map(f=>headerIdx[f.key]);dataLines=lines.slice(1);}
+  else colOrder=cfg.fields.map((f,i)=>i);
+  const rows=[];
+  dataLines.forEach((line,idx)=>{
+    const cells=splitTextCells(line);
+    if(!cells.length)return;
+    const rawObj={};
+    cfg.fields.forEach((f,i)=>{const ci=colOrder[i];rawObj[f.key]=ci>=0&&ci<cells.length?cells[ci]:"";});
+    rows.push(buildImportRow(cfg,rawObj,idx+1));
+  });
+  if(!rows.length)throw new Error("No session rows found in that text.");
+  return rows;
+}
+function handleSchedImportTextParse(type){
+  try{
+    const ta=document.getElementById("sched_ocr_text");
+    const rows=parseSchedImportText(ta?ta.value:"",type);
+    SCHED_IMPORT={type,fileName:"Pasted/scanned text",rows};
     render();
   }catch(e){
-    SCHED_IMPORT_BUSY=false;
-    showToast("Could not read that image: "+(e.message||e));
-    render();
+    showToast(e.message||String(e));
   }
 }
 function renderSchedImportModal(){
@@ -3444,27 +3475,28 @@ function renderSchedImportModal(){
         el("button",{cls:"sbtn ghost",onClick:close},"×")
       ),
       !SCHED_IMPORT.rows.length?el("div",null,
-        SCHED_IMPORT_BUSY?el("div",{cls:"alert-yellow",st:{marginBottom:"12px"}},"Reading the image with AI — this can take up to 20 seconds…"):null,
         el("p",{cls:"sh",st:{marginBottom:"8px",fontWeight:"700"}},"Option 1 — Excel file"),
         el("p",{cls:"sh",st:{marginBottom:"12px"}},"Upload a spreadsheet with a header row containing columns like: "+cfg.fields.map(f=>f.aliases[0]).join(", ")+". One row per session."),
-        el("div",{cls:"drop-zone",st:{marginBottom:"20px",opacity:SCHED_IMPORT_BUSY?".5":"1"}},
+        el("div",{cls:"drop-zone",st:{marginBottom:"20px"}},
           el("div",{st:{marginBottom:"8px"}},"Choose the .xlsx file to upload"),
           (()=>{
-            const inp=el("input",{type:"file",accept:".xlsx,.xls",...(SCHED_IMPORT_BUSY?{disabled:""}:{})});
+            const inp=el("input",{type:"file",accept:".xlsx,.xls"});
             inp.onchange=e=>{const f=e.target.files[0];if(f)handleSchedImportFile(f,type);};
             return inp;
           })()
         ),
-        el("p",{cls:"sh",st:{marginBottom:"8px",fontWeight:"700"}},"Option 2 — Screenshot / photo"),
-        el("p",{cls:"sh",st:{marginBottom:"12px"}},"Upload a picture of the schedule (screenshot or photo of a printed table) and AI will read the sessions out of it."),
-        el("div",{cls:"drop-zone",st:{opacity:SCHED_IMPORT_BUSY?".5":"1"}},
-          el("div",{st:{marginBottom:"8px"}},"Choose an image (.png, .jpg)"),
+        el("p",{cls:"sh",st:{marginBottom:"8px",fontWeight:"700"}},"Option 2 — Paste text, or scan a photo (free, no AI cost)"),
+        el("p",{cls:"sh",st:{marginBottom:"10px"}},"Copy the schedule cells straight from Excel/Word and paste below — that's the most reliable option since the columns come through exactly. Or scan a screenshot/photo: it runs OCR right in your browser (no server, no API cost), but always double-check the scanned text before parsing since OCR isn't perfect."),
+        el("div",{cls:"drop-zone",st:{marginBottom:"10px",opacity:SCHED_OCR_BUSY?".5":"1"}},
+          el("div",{st:{marginBottom:"8px"}},SCHED_OCR_BUSY?"Scanning image…":"Scan an image (.png, .jpg) into the text box below"),
           (()=>{
-            const inp=el("input",{type:"file",accept:"image/*",...(SCHED_IMPORT_BUSY?{disabled:""}:{})});
-            inp.onchange=e=>{const f=e.target.files[0];if(f)handleSchedImportImage(f,type);};
+            const inp=el("input",{type:"file",accept:"image/*",...(SCHED_OCR_BUSY?{disabled:""}:{})});
+            inp.onchange=e=>{const f=e.target.files[0];if(f)handleSchedImportOcr(f);e.target.value="";};
             return inp;
           })()
         ),
+        el("textarea",{id:"sched_ocr_text",rows:"6",cls:"input",st:{width:"100%",fontFamily:"monospace",fontSize:".78rem",marginBottom:"10px",resize:"vertical"},placeholder:"Paste tab-separated rows here, or scan an image above — e.g.\n"+cfg.fields.map(f=>f.aliases[0]).join("\t")}),
+        el("button",{cls:"sbtn",onClick:()=>handleSchedImportTextParse(type)},"Parse Text"),
         el("p",{cls:"sh",st:{marginTop:"14px"}},"Either way, Block and Week are detected automatically from each session's Date, and imported sessions start as drafts so you can review before publishing.")
       ):el("div",null,
         el("div",{cls:"flex-gap",st:{marginBottom:"10px",justifyContent:"space-between",flexWrap:"wrap"}},
