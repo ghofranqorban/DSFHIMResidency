@@ -1706,12 +1706,10 @@ function canEditKPI(resId){
 function calcKPI(id){
   let mmAtt=0,mmTotal=0,mmScore=0;
   Object.values(MM_ATT).forEach(blk=>{Object.values(blk).forEach(day=>{const s=day[id];if(!s||s==='O')return;mmTotal++;if(s==='P'||s==='E'){mmAtt++;mmScore+=1;}else if(s==='L'){mmAtt++;mmScore+=0.5;}});});
-  if(mmTotal===0){mmScore=1;mmTotal=1;}
-  const mmPct=Math.round(mmScore/mmTotal*100);
+  const mmPct=mmTotal?Math.round(mmScore/mmTotal*100):null;
   let tAtt=0,tTotal=0,tScore=0;
   Object.values(TEACH_ATT).forEach(blk=>{Object.values(blk).forEach(day=>{const s=day[id];if(!s||s==='O')return;tTotal++;if(s==='P'||s==='E'){tAtt++;tScore+=1;}else if(s==='L'){tAtt++;tScore+=0.5;}});});
-  if(tTotal===0){tScore=1;tTotal=1;}
-  const tPct=Math.round(tScore/tTotal*100);
+  const tPct=tTotal?Math.round(tScore/tTotal*100):null;
   const rotPct=Math.round(((ROT_H[id]||[]).length/MANDATORY.length)*100);
   const pubQ=QUIZZES.filter(q=>q.published&&q.sc[id]!=null);
   const qAvg=pubQ.length?Math.round(pubQ.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/pubQ.length):0;
@@ -4350,7 +4348,7 @@ function renderMentorHome(){
 // ─── KPI DASHBOARD ───────────────────────────────────────────────────────────
 function exportKpiPDF(res,k){
   const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
-  const row=(label,val,weight,detail)=>`<tr><td>${label}</td><td style="text-align:center;font-weight:700;color:${kpiColor(val)}">${val}%</td><td style="text-align:center">${weight}%</td><td style="color:#6b7280;font-size:.85rem">${detail||""}</td></tr>`;
+  const row=(label,val,weight,detail)=>`<tr><td>${label}</td><td style="text-align:center;font-weight:700;color:${val==null?"#9ca3af":kpiColor(val)}">${val==null?"N/A":val+"%"}</td><td style="text-align:center">${weight}%</td><td style="color:#6b7280;font-size:.85rem">${detail||""}</td></tr>`;
   const ach=(icon,label,done)=>`<div style="display:inline-flex;align-items:center;gap:6px;background:${done?"#dcfce7":"#FEFBF3"};border-radius:8px;padding:6px 12px;margin:4px;font-size:.84rem;font-weight:600;color:${done?"#166534":"#64748b"}">${icon} ${label}: ${done?" Yes":"— No"}</div>`;
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>KPI Report – ${res.name}</title>
   <style>body{font-family:Arial,sans-serif;margin:32px;color:#111827}h1{color:#c96a4a;margin-bottom:4px}
@@ -4731,6 +4729,8 @@ function renderKPI(){
   function kpiMetricRow(label,iconPaths,val,valLabel,weight,color,detail,isLast,isRight){
     const borderR=isRight?"":"1px solid rgba(31,26,18,.07)";
     const borderB=isLast?"none":"1px solid rgba(31,26,18,.07)";
+    const noData=val==null;
+    if(noData){valLabel="N/A";color="#9ca3af";}
     return el("div",{st:{padding:"18px 0",borderBottom:borderB,borderRight:borderR,paddingRight:isRight?"0":"28px",paddingLeft:isRight?"28px":"0"}},
       el("div",{st:{display:"flex",alignItems:"center",gap:"5px",marginBottom:"8px",fontSize:".68rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.35)"}},
         svgIcon(iconPaths,11,11),
@@ -4741,9 +4741,9 @@ function renderKPI(){
         valLabel?null:el("span",{st:{fontSize:"1rem",fontWeight:"400",color:"rgba(31,26,18,.22)",marginLeft:"1px"}},"%")
       ),
       el("div",{st:{height:"3px",background:"rgba(31,26,18,.08)",borderRadius:"99px",overflow:"hidden",marginBottom:"5px"}},
-        el("div",{st:{height:"100%",borderRadius:"99px",background:color,width:Math.min(val,100)+"%",transition:"width .6s cubic-bezier(.4,0,.2,1)"}})
+        el("div",{st:{height:"100%",borderRadius:"99px",background:color,width:Math.min(val||0,100)+"%",transition:"width .6s cubic-bezier(.4,0,.2,1)"}})
       ),
-      el("div",{st:{fontSize:".66rem",color:"rgba(31,26,18,.35)"}},detail+" · "+weight+"% weight")
+      el("div",{st:{fontSize:".66rem",color:"rgba(31,26,18,.35)"}},(noData?"No attendance data yet":detail)+" · "+weight+"% weight")
     );
   }
 
@@ -4977,8 +4977,8 @@ function renderKPI(){
               el("td",null,el("div",{cls:"flex-gap"},avEl(r),el("span",{cls:"name",st:{fontSize:".82rem"}},r.name),chiefBadge(r.id))),
               el("td",null,levelBadge(r.level)),
               el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:"rgba(5,150,105,.1)",color:"#059669"}},kk.qAvg+"%")),
-              el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:"rgba(5,150,105,.1)",color:"#059669"}},kk.mmPct+"%")),
-              el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:"rgba(217,119,6,.1)",color:"#D97706"}},kk.tPct+"%")),
+              el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:kk.mmPct==null?"rgba(156,163,175,.12)":"rgba(5,150,105,.1)",color:kk.mmPct==null?"#9ca3af":"#059669"}},kk.mmPct==null?"N/A":kk.mmPct+"%")),
+              el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:kk.tPct==null?"rgba(156,163,175,.12)":"rgba(217,119,6,.1)",color:kk.tPct==null?"#9ca3af":"#D97706"}},kk.tPct==null?"N/A":kk.tPct+"%")),
               el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:kk.pres?"rgba(5,150,105,.1)":"rgba(220,38,38,.08)",color:kk.pres?"#059669":"#DC2626"}},kk.presCount+"x")),
               el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:"rgba(124,58,237,.08)",color:"#7c3aed"}},(COMM_SC[r.id]||0)+"/10")),
               el("td",{st:{textAlign:"center"}},
@@ -5892,7 +5892,7 @@ function renderPDOverview(){
     const k=calcKPI(r.id);
     const cRecs=COUNSEL_CACHE[r.id];
     const counselCount=Array.isArray(cRecs)?cRecs.length:null;
-    const atRisk=k.overall<60||k.mmPct<60||k.tPct<60;
+    const atRisk=k.overall<60||(k.mmPct!=null&&k.mmPct<60)||(k.tPct!=null&&k.tPct<60);
     return{...r,k,counselCount,atRisk};
   });
   if(filterLevel!=="all")rows=rows.filter(r=>r.level===filterLevel);
@@ -5945,12 +5945,13 @@ function renderPDOverview(){
     },label+(sortBy===key?" ↓":""));
   }
   function pctCell(val){
-    const col=kpiColor(val);
+    const noData=val==null;
+    const col=noData?"#9ca3af":kpiColor(val);
     return el("td",{st:{padding:"8px 10px",textAlign:"center"}},
       el("div",{st:{display:"flex",flexDirection:"column",alignItems:"center",gap:"3px"}},
-        el("span",{st:{fontWeight:"700",fontSize:".86rem",color:col}},val+"%"),
+        el("span",{st:{fontWeight:"700",fontSize:".86rem",color:col}},noData?"N/A":val+"%"),
         el("div",{st:{width:"48px",height:"4px",background:"rgba(31,26,18,.1)",borderRadius:"2px"}},
-          el("div",{st:{width:Math.min(val,100)+"%",height:"100%",background:col,borderRadius:"2px"}})
+          el("div",{st:{width:Math.min(val||0,100)+"%",height:"100%",background:col,borderRadius:"2px"}})
         )
       )
     );
@@ -6016,8 +6017,8 @@ function renderPDOverview(){
     ...rows.filter(r=>r.atRisk).map(r=>{
       const flags=[];
       if(r.k.overall<60)flags.push("KPI "+r.k.overall+"%");
-      if(r.k.mmPct<60)flags.push("MM "+r.k.mmPct+"%");
-      if(r.k.tPct<60)flags.push("Teaching "+r.k.tPct+"%");
+      if(r.k.mmPct!=null&&r.k.mmPct<60)flags.push("MM "+r.k.mmPct+"%");
+      if(r.k.tPct!=null&&r.k.tPct<60)flags.push("Teaching "+r.k.tPct+"%");
       return el("div",{st:{fontSize:".82rem",marginTop:"3px",cursor:"pointer"},onClick:()=>set({mod:"admin",adminProfile:r.id,adminResTab:"kpi"})}, "– "+r.name+" ("+r.level+") — "+flags.join(", ")+" → Click to view" );
     })
   ):null;
@@ -6869,11 +6870,11 @@ function renderProfileKPI(res){
           el("div",{cls:"sh",st:{fontSize:".72rem"}}," Quiz")
         ),
         el("div",{cls:"card",st:{background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"10px",textAlign:"center"}},
-          el("div",{st:{fontWeight:"800",color:kpiColor(k.mmPct)}},k.mmPct+"%"),
+          el("div",{st:{fontWeight:"800",color:k.mmPct==null?"#9ca3af":kpiColor(k.mmPct)}},k.mmPct==null?"N/A":k.mmPct+"%"),
           el("div",{cls:"sh",st:{fontSize:".72rem"}}," MM Att")
         ),
         el("div",{cls:"card",st:{background:"#fefce8",border:"1px solid #fef08a",padding:"10px",textAlign:"center"}},
-          el("div",{st:{fontWeight:"800",color:kpiColor(k.tPct)}},k.tPct+"%"),
+          el("div",{st:{fontWeight:"800",color:k.tPct==null?"#9ca3af":kpiColor(k.tPct)}},k.tPct==null?"N/A":k.tPct+"%"),
           el("div",{cls:"sh",st:{fontSize:".72rem"}}," Teaching")
         )
       ),
@@ -8004,11 +8005,11 @@ function renderBrDetailModal(){
       ...rows.map(r=>el("div",{st:{marginBottom:"10px"}},
         el("div",{st:{display:"flex",justifyContent:"space-between",fontSize:".82rem",marginBottom:"3px"}},
           el("span",null,r.label+" ("+r.w+"% weight)"),
-          el("span",{st:{fontWeight:"700",color:kpiColor(r.val)}},r.val+"%")
+          el("span",{st:{fontWeight:"700",color:r.val==null?"#9ca3af":kpiColor(r.val)}},r.val==null?"N/A":r.val+"%")
         ),
         el("div",{cls:"sh",st:{fontSize:".72rem",marginBottom:"3px"}},r.sub),
         el("div",{st:{background:"rgba(31,26,18,.08)",borderRadius:"4px",height:"6px"}},
-          el("div",{st:{background:kpiColor(r.val),width:Math.min(r.val,100)+"%",height:"6px",borderRadius:"4px"}})
+          el("div",{st:{background:r.val==null?"#9ca3af":kpiColor(r.val),width:Math.min(r.val||0,100)+"%",height:"6px",borderRadius:"4px"}})
         )
       )),
       el("div",{st:{height:"1px",background:"rgba(31,26,18,.1)",margin:"16px 0"}}),
@@ -8049,8 +8050,10 @@ function renderKPIExecutive(){
   const scored=active.map(r=>({...r,k:calcKPI(r.id)})).sort((a,b)=>b.k.overall-a.k.overall);
   const total=scored.length||1;
   const avgKPI=Math.round(scored.reduce((s,r)=>s+r.k.overall,0)/total);
-  const avgMM=Math.round(scored.reduce((s,r)=>s+r.k.mmPct,0)/total);
-  const avgTeach=Math.round(scored.reduce((s,r)=>s+r.k.tPct,0)/total);
+  const mmScored=scored.filter(r=>r.k.mmPct!=null);
+  const tScored=scored.filter(r=>r.k.tPct!=null);
+  const avgMM=mmScored.length?Math.round(mmScored.reduce((s,r)=>s+r.k.mmPct,0)/mmScored.length):0;
+  const avgTeach=tScored.length?Math.round(tScored.reduce((s,r)=>s+r.k.tPct,0)/tScored.length):0;
   const avgQuiz=Math.round(scored.reduce((s,r)=>s+r.k.qAvg,0)/total);
   const avgComm=Math.round(scored.reduce((s,r)=>{const ks=KPI_SCORES[r.id]||{};return s+(ks.commScore||0);},0)/total);
   function achCount(field){
@@ -8347,8 +8350,9 @@ function renderKPIExecutive(){
       const drillRows=el("div",{st:{padding:"40px 64px 64px",background:"#FEFBF3"}},
         el("div",{st:{fontSize:".6rem",fontWeight:"700",letterSpacing:".14em",textTransform:"uppercase",color:"rgba(31,26,18,.3)",marginBottom:"16px",paddingBottom:"10px",borderBottom:"1px solid rgba(31,26,18,.07)"}},"KPI Breakdown"),
         el("div",null,...kRowDefs.map(row=>{
-          const clr=row.val>=80?"#26523A":row.val>=60?"#A47A28":row.val>0?"#c96a4a":"rgba(31,26,18,.22)";
-          const barClr=row.val>=80?"#7FB89C":row.val>=60?"#CBA155":row.val>0?"#c96a4a":"rgba(31,26,18,.08)";
+          const noData=row.val==null;
+          const clr=noData?"#9ca3af":row.val>=80?"#26523A":row.val>=60?"#A47A28":row.val>0?"#c96a4a":"rgba(31,26,18,.22)";
+          const barClr=noData?"rgba(31,26,18,.08)":row.val>=80?"#7FB89C":row.val>=60?"#CBA155":row.val>0?"#c96a4a":"rgba(31,26,18,.08)";
           const ic=svgI(row.icon,13);ic.style.color="rgba(31,26,18,.25)";ic.style.flexShrink="0";
           return el("div",{st:{display:"flex",alignItems:"center",gap:"14px",padding:"15px 0",borderBottom:"1px solid rgba(31,26,18,.06)"}},
             ic,
@@ -8357,9 +8361,9 @@ function renderKPIExecutive(){
               row.sub?el("div",{st:{fontSize:".68rem",color:"rgba(31,26,18,.35)"}},row.sub):null
             ),
             el("div",{st:{width:"100px",height:"3px",background:"rgba(31,26,18,.07)",borderRadius:"9999px",overflow:"hidden"}},
-              el("div",{st:{width:Math.min(row.val,100)+"%",height:"100%",background:barClr,borderRadius:"9999px"}})
+              el("div",{st:{width:Math.min(row.val||0,100)+"%",height:"100%",background:barClr,borderRadius:"9999px"}})
             ),
-            el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:".92rem",fontWeight:"700",minWidth:"40px",textAlign:"right",color:clr}},row.val>0?row.val+"%":"\u2014"),
+            el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:".92rem",fontWeight:"700",minWidth:"40px",textAlign:"right",color:clr}},noData?"N/A":row.val>0?row.val+"%":"\u2014"),
             el("div",{st:{fontSize:".6rem",color:"rgba(31,26,18,.25)",minWidth:"32px",textAlign:"right"}},"\u00D7"+row.w+"%")
           );
         })),
