@@ -753,6 +753,25 @@ async function saveLeavePlan(status){
   showToast(status==="submitted"?"Leave plan submitted successfully":"Draft saved","success");
   render();
 }
+async function revokeLpSuggestion(residentId,which){
+  const plan=LEAVE_PLAN[residentId];if(!plan)return;
+  const row={...plan};
+  if(which==="first"){
+    row.first_leave_key=null;row.first_leave_block=null;row.first_leave_half=null;
+    row.first_leave_from=null;row.first_leave_to=null;row.first_leave_alt_key=null;
+  }else{
+    row.second_leave_key=null;row.second_leave_block=null;row.second_leave_half=null;
+    row.second_leave_from=null;row.second_leave_to=null;row.second_leave_alt_key=null;
+  }
+  row.status="draft";row.updated_at=new Date().toISOString();
+  const{error}=await sb.from("leave_plan").upsert(row,{onConflict:"resident_id,academic_year"});
+  if(error){showToast("Revoke failed: "+error.message,"error");return;}
+  LEAVE_PLAN[residentId]=row;
+  const resProfile=PROFILE_BY_RESIDENT[residentId];
+  if(resProfile)createNotification(resProfile.id,"warning","Your "+(which==="first"?"First":"Second")+" Leave suggestion could not be accommodated and was revoked. Please choose another period and resubmit your Leave Plan.","leave_plan",null);
+  showToast("Suggestion revoked — resident notified","success");
+  render();
+}
 async function loadKpiQuarterly(){
   const{data,error}=await sb.from("kpi_quarterly").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR);
   if(error){console.warn("kpi_quarterly load error",error.message);return;}
@@ -6839,7 +6858,7 @@ function renderLeavePlan(){
             ),
             el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.45)",marginTop:"3px"}},period.disp),
             altPeriod?el("div",{st:{fontSize:".7rem",color:"rgba(31,26,18,.5)",marginTop:"6px"}},"Backup: ",el("strong",null,altPeriod.label.replace(" - "," — "))):null,
-            !submitted&&!passed?el("button",{st:{position:"absolute",top:"12px",right:"12px",background:"none",border:"none",cursor:"pointer",color:"rgba(31,26,18,.3)",fontSize:"1.1rem",padding:"2px 6px",borderRadius:"6px"},
+            !passed?el("button",{st:{position:"absolute",top:"12px",right:"12px",background:"none",border:"none",cursor:"pointer",color:"rgba(31,26,18,.3)",fontSize:"1.1rem",padding:"2px 6px",borderRadius:"6px"},
               onClick:()=>set({[which==="a"?"lpFirstKey":"lpSecondKey"]:null,[which==="a"?"lpFirstAltKey":"lpSecondAltKey"]:null})},"x"):null]
           :el("div",{st:{fontSize:".8rem",color:"rgba(31,26,18,.3)",fontStyle:"italic",marginTop:"4px"}},"Not selected yet")
       );
@@ -6860,7 +6879,7 @@ function renderLeavePlan(){
           el("span",{st:{fontFamily:"'Playfair Display',serif",fontSize:".88rem",fontWeight:"600",color:"#1F1A12",textTransform:"none",letterSpacing:"0"}},blkLabel)
         ),
         ...periods.map(p=>{
-          const locked=(isR1&&!!p.r1lock)||(!!p.r3only&&!isR3)||submitted||passed;
+          const locked=(isR1&&!!p.r1lock)||(!!p.r3only&&!isR3)||passed;
           const isFirst=fk===p.key,isSecond=sk===p.key;
           const bg=isFirst?"rgba(201,106,74,.08)":isSecond?"rgba(38,90,72,.08)":"";
           return el("div",{st:{display:"flex",alignItems:"center",gap:"12px",padding:"10px 14px",borderRadius:"10px",background:bg}},
@@ -6870,7 +6889,7 @@ function renderLeavePlan(){
             ),
             isFirst?el("span",{st:{fontSize:".6rem",fontWeight:"700",padding:"2px 8px",borderRadius:"9999px",background:"#c96a4a",color:"#FEFBF3",flexShrink:"0"}},"First Leave"):null,
             isSecond?el("span",{st:{fontSize:".6rem",fontWeight:"700",padding:"2px 8px",borderRadius:"9999px",background:"#26523A",color:"#FEFBF3",flexShrink:"0"}},"Second Leave"):null,
-            !submitted&&!passed&&!locked
+            !passed&&!locked
               ?el("div",{st:{display:"flex",gap:"6px",flexShrink:"0"}},
                   el("button",{st:{border:"none",borderRadius:"9999px",padding:"5px 14px",fontFamily:"Inter,sans-serif",fontSize:".72rem",fontWeight:"600",cursor:"pointer",transition:"all .15s",background:isFirst?"#c96a4a":"rgba(201,106,74,.12)",color:isFirst?"#FEFBF3":"#c96a4a"},
                     onClick:()=>{
@@ -6935,7 +6954,7 @@ function renderLeavePlan(){
     return el("div",null,
       cdBanner(),
       submitted
-        ?el("div",{st:{background:"rgba(38,90,72,.08)",border:"1px solid rgba(38,90,72,.2)",borderRadius:"10px",padding:"12px 16px",marginBottom:"20px",fontSize:".82rem",color:"#26523A",fontWeight:"500"}},"Your leave plan has been submitted. Contact the PD to make changes.")
+        ?el("div",{st:{background:"rgba(38,90,72,.08)",border:"1px solid rgba(38,90,72,.2)",borderRadius:"10px",padding:"12px 16px",marginBottom:"20px",fontSize:".82rem",color:"#26523A",fontWeight:"500"}},"Your leave plan has been submitted. You can still edit or cancel your selections anytime before the 18 Jul 2026 deadline.")
         :el("div",{st:{background:"#fef9ec",border:"1px solid #f0d98a",borderRadius:"10px",padding:"12px 16px",marginBottom:"24px",fontSize:".8rem",color:"#92680a",lineHeight:"1.5"}},
           "Select your ",el("strong",null,"First Leave")," and ",el("strong",null,"Second Leave")," periods — 2 weeks each. Both will be written into your AY 2026-27 rota once the PD applies the plan."
         ),
@@ -6948,12 +6967,14 @@ function renderLeavePlan(){
           onInput:e=>{_lpNoteDraft=e.target.value;}},
           _lpNoteDraft!==null?_lpNoteDraft:(myPlan?.note||""))
       ),
-      !submitted&&!passed&&el("div",{st:{display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"20px"}},
+      !passed&&el("div",{st:{display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"20px"}},
         el("button",{st:{background:"#F6EFE2",color:"#1F1A12",border:"none",borderRadius:"9999px",padding:"10px 22px",fontFamily:"Inter,sans-serif",fontWeight:"500",fontSize:".85rem",cursor:"pointer"},
           onClick:async()=>saveLeavePlan("draft")},"Save Draft"),
         el("button",{st:{background:fk&&sk?"#c96a4a":"rgba(31,26,18,.12)",color:fk&&sk?"#FEFBF3":"rgba(31,26,18,.35)",border:"none",borderRadius:"9999px",padding:"10px 28px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".85rem",cursor:fk&&sk?"pointer":"not-allowed"},
           disabled:!(fk&&sk),
-          onClick:async()=>{if(fk&&sk)saveLeavePlan("submitted");}},"Submit Leave Plan")
+          onClick:async()=>{if(fk&&sk)saveLeavePlan("submitted");}},submitted?"Update Leave Plan":"Submit Leave Plan"),
+        submitted?el("button",{st:{background:"none",color:"#b52040",border:"1px solid rgba(181,32,64,.3)",borderRadius:"9999px",padding:"10px 22px",fontFamily:"Inter,sans-serif",fontWeight:"500",fontSize:".85rem",cursor:"pointer"},
+          onClick:()=>showConfirm("Cancel your submitted leave plan? It will revert to a draft and won't count toward the rota until resubmitted.",async()=>{await saveLeavePlan("draft");},"Cancel Submission","danger")},"Cancel Submission"):null
       )
     );
   }
@@ -6997,13 +7018,13 @@ function renderLeavePlan(){
             const over=(counts[p.key]||0)>LP_CAP;
             if(isF){
               const alt=plan.first_leave_alt_key?LP_PERIODS.find(x=>x.key===plan.first_leave_alt_key):null;
-              const tt="First Leave"+(over?" — Suggestion (over cap)":"")+(alt?" — Backup: "+alt.label.replace(" - "," — "):"");
-              return el("td",{st:{textAlign:"center"}},el("span",{title:tt,st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#c96a4a",boxShadow:over?"0 0 0 2px #b52040":"none"}}));
+              const tt="First Leave"+(over?" — Suggestion (over cap) — click to revoke":"")+(alt?" — Backup: "+alt.label.replace(" - "," — "):"");
+              return el("td",{st:{textAlign:"center"}},el("span",{title:tt,onClick:over?()=>showConfirm("Revoke "+dname(r.name)+"'s First Leave suggestion for "+p.label.replace(" - "," — ")+"? They'll be notified and must choose another period.",()=>revokeLpSuggestion(r.id,"first"),"Revoke","danger"):null,st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#c96a4a",boxShadow:over?"0 0 0 2px #b52040":"none",cursor:over?"pointer":"default"}}));
             }
             if(isS){
               const alt=plan.second_leave_alt_key?LP_PERIODS.find(x=>x.key===plan.second_leave_alt_key):null;
-              const tt="Second Leave"+(over?" — Suggestion (over cap)":"")+(alt?" — Backup: "+alt.label.replace(" - "," — "):"");
-              return el("td",{st:{textAlign:"center"}},el("span",{title:tt,st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#26523A",boxShadow:over?"0 0 0 2px #b52040":"none"}}));
+              const tt="Second Leave"+(over?" — Suggestion (over cap) — click to revoke":"")+(alt?" — Backup: "+alt.label.replace(" - "," — "):"");
+              return el("td",{st:{textAlign:"center"}},el("span",{title:tt,onClick:over?()=>showConfirm("Revoke "+dname(r.name)+"'s Second Leave suggestion for "+p.label.replace(" - "," — ")+"? They'll be notified and must choose another period.",()=>revokeLpSuggestion(r.id,"second"),"Revoke","danger"):null,st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#26523A",boxShadow:over?"0 0 0 2px #b52040":"none",cursor:over?"pointer":"default"}}));
             }
             return el("td",{st:{textAlign:"center",fontSize:".65rem",color:"rgba(31,26,18,.18)"}},"-");
           })
