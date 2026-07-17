@@ -1715,8 +1715,9 @@ function calcKPI(id){
   const rotPct=Math.round(((ROT_H[id]||[]).length/MANDATORY.length)*100);
   const pubQ=QUIZZES.filter(q=>q.published&&q.sc[id]!=null);
   const qAvg=pubQ.length?Math.round(pubQ.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/pubQ.length):0;
-  const pres=MM_SESSIONS.some(m=>m.presenter_resident_id===id)||MM_SESSIONS.some(m=>m.moderator_resident_id===id);
-  const presCount=MM_SESSIONS.filter(m=>m.presenter_resident_id===id||m.moderator_resident_id===id).length;
+  const presSessions=MM_SESSIONS.filter(m=>m.academic_year===CURRENT_ACADEMIC_YEAR);
+  const pres=presSessions.some(m=>m.presenter_resident_id===id)||presSessions.some(m=>m.moderator_resident_id===id);
+  const presCount=presSessions.filter(m=>m.presenter_resident_id===id||m.moderator_resident_id===id).length;
   const commPct=Math.round(((COMM_SC[id]||0)/10)*100);
   const ks=KPI_SCORES[id]||{};
   const af=getApprovedFields(id);
@@ -4227,7 +4228,7 @@ function calcKPIQ(id,qBlocks){
   const tPct=tTotal?Math.round(tScore/tTotal*100):null;
   const pubQ=QUIZZES.filter(q=>q.published&&q.sc[id]!=null&&qBlocks.includes(q.block));
   const qAvg=pubQ.length?Math.round(pubQ.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/pubQ.length):null;
-  const presCount=MM_SESSIONS.filter(s=>s.presenter_resident_id===id&&qBlocks.includes(s.block_number)).length;
+  const presCount=MM_SESSIONS.filter(s=>s.presenter_resident_id===id&&s.academic_year===CURRENT_ACADEMIC_YEAR&&qBlocks.includes(s.block_number)).length;
   return{mmPct,mmAtt,mmTotal,tPct,tAtt,tTotal,qAvg,quizCount:pubQ.length,presCount};
 }
 // Compact quarterly breakdown card — reused in resident KPI page and admin profile.
