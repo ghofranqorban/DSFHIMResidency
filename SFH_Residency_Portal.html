@@ -3391,43 +3391,10 @@ async function handleSchedImportFile(file,type){
     showToast("Could not read that file: "+(e.message||e));
   }
 }
-// Free, no-API image/text import: OCR runs entirely in the browser (Tesseract.js,
-// loaded on demand from CDN so it doesn't slow down the initial page load), and
-// pasted/scanned text is parsed with simple tab/column-splitting into the same
-// buildImportRow() pipeline the Excel importer uses. OCR is never 100% accurate,
-// so the extracted text lands in an editable textarea for the user to fix before
-// parsing — this is deliberate, not a placeholder.
-let SCHED_OCR_BUSY=false;
-let SCHED_OCR_TEXT="";
-let TESSERACT_LOAD_PROMISE=null;
-function loadTesseract(){
-  if(window.Tesseract)return Promise.resolve();
-  if(TESSERACT_LOAD_PROMISE)return TESSERACT_LOAD_PROMISE;
-  TESSERACT_LOAD_PROMISE=new Promise((resolve,reject)=>{
-    const s=document.createElement("script");
-    s.src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
-    s.onload=()=>resolve();
-    s.onerror=()=>reject(new Error("Could not load the OCR library — check your internet connection."));
-    document.head.appendChild(s);
-  });
-  return TESSERACT_LOAD_PROMISE;
-}
-async function handleSchedImportOcr(file){
-  try{
-    const ta=document.getElementById("sched_ocr_text");
-    if(ta)SCHED_OCR_TEXT=ta.value;
-    SCHED_OCR_BUSY=true;render();
-    await loadTesseract();
-    const{data}=await Tesseract.recognize(file,"eng");
-    SCHED_OCR_TEXT=(SCHED_OCR_TEXT?SCHED_OCR_TEXT+"\n":"")+(data.text||"").trim();
-    SCHED_OCR_BUSY=false;render();
-    showToast("Text scanned — check it over, then click Parse Text.","success");
-  }catch(e){
-    SCHED_OCR_BUSY=false;
-    showToast("Could not scan that image: "+(e.message||e));
-    render();
-  }
-}
+// Free, no-API text import: pasted text (e.g. copied straight out of Excel/Word)
+// is parsed with simple tab/column-splitting into the same buildImportRow()
+// pipeline the Excel importer uses.
+let SCHED_PASTE_TEXT="";
 function splitTextCells(line){
   if(line.includes("\t"))return line.split("\t").map(c=>c.trim());
   return line.split(/ {2,}|\s*\|\s*/).map(c=>c.trim()).filter(c=>c!=="");
@@ -3456,9 +3423,9 @@ function parseSchedImportText(text,type){
 }
 function handleSchedImportTextParse(type){
   try{
-    const ta=document.getElementById("sched_ocr_text");
+    const ta=document.getElementById("sched_paste_text");
     const rows=parseSchedImportText(ta?ta.value:"",type);
-    SCHED_IMPORT={type,fileName:"Pasted/scanned text",rows};
+    SCHED_IMPORT={type,fileName:"Pasted text",rows};
     render();
   }catch(e){
     showToast(e.message||String(e));
@@ -3468,7 +3435,7 @@ function renderSchedImportModal(){
   const type=STATE.schedImportType;
   if(!type)return null;
   const cfg=SCHED_IMPORT_CONFIG[type];
-  function close(){SCHED_IMPORT={type:null,fileName:"",rows:[]};SCHED_OCR_TEXT="";set({schedImportType:null});}
+  function close(){SCHED_IMPORT={type:null,fileName:"",rows:[]};SCHED_PASTE_TEXT="";set({schedImportType:null});}
   const validCount=SCHED_IMPORT.rows.filter(r=>r.include&&!r.error).length;
   return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
     el("div",{cls:"modal-card",st:{width:"780px"}},
@@ -3487,17 +3454,9 @@ function renderSchedImportModal(){
             return inp;
           })()
         ),
-        el("p",{cls:"sh",st:{marginBottom:"8px",fontWeight:"700"}},"Option 2 — Paste text, or scan a photo (free, no AI cost)"),
-        el("p",{cls:"sh",st:{marginBottom:"10px"}},"Copy the schedule cells straight from Excel/Word and paste below — that's the most reliable option since the columns come through exactly. Or scan a screenshot/photo: it runs OCR right in your browser (no server, no API cost), but always double-check the scanned text before parsing since OCR isn't perfect."),
-        el("div",{cls:"drop-zone",st:{marginBottom:"10px",opacity:SCHED_OCR_BUSY?".5":"1"}},
-          el("div",{st:{marginBottom:"8px"}},SCHED_OCR_BUSY?"Scanning image…":"Scan an image (.png, .jpg) into the text box below"),
-          (()=>{
-            const inp=el("input",{type:"file",accept:"image/*",...(SCHED_OCR_BUSY?{disabled:""}:{})});
-            inp.onchange=e=>{const f=e.target.files[0];if(f)handleSchedImportOcr(f);e.target.value="";};
-            return inp;
-          })()
-        ),
-        el("textarea",{id:"sched_ocr_text",rows:"6",cls:"input",st:{width:"100%",fontFamily:"monospace",fontSize:".78rem",marginBottom:"10px",resize:"vertical"},placeholder:"Paste tab-separated rows here, or scan an image above — e.g.\n"+cfg.fields.map(f=>f.aliases[0]).join("\t"),oninput:e=>{SCHED_OCR_TEXT=e.target.value;}},SCHED_OCR_TEXT),
+        el("p",{cls:"sh",st:{marginBottom:"8px",fontWeight:"700"}},"Option 2 — Paste text (free, no AI cost)"),
+        el("p",{cls:"sh",st:{marginBottom:"10px"}},"Copy the schedule cells straight from Excel/Word (or type them out) and paste below — columns come through exactly since there's no image-reading involved. For a photo/screenshot, send it to Claude directly in chat and it'll enter the sessions for you."),
+        el("textarea",{id:"sched_paste_text",rows:"6",cls:"input",st:{width:"100%",fontFamily:"monospace",fontSize:".78rem",marginBottom:"10px",resize:"vertical"},placeholder:"Paste tab-separated rows here — e.g.\n"+cfg.fields.map(f=>f.aliases[0]).join("\t"),oninput:e=>{SCHED_PASTE_TEXT=e.target.value;}},SCHED_PASTE_TEXT),
         el("button",{cls:"sbtn",onClick:()=>handleSchedImportTextParse(type)},"Parse Text"),
         el("p",{cls:"sh",st:{marginTop:"14px"}},"Either way, Block and Week are detected automatically from each session's Date, and imported sessions start as drafts so you can review before publishing.")
       ):el("div",null,
@@ -3545,7 +3504,7 @@ async function commitSchedImport(){
   if(error){showToast("Could not import: "+error.message);return;}
   showToast("Imported "+payload.length+" session"+(payload.length===1?"":"s")+" as drafts.","success");
   SCHED_IMPORT={type:null,fileName:"",rows:[]};
-  SCHED_OCR_TEXT="";
+  SCHED_PASTE_TEXT="";
   set({schedImportType:null});
   await loadSchedules();
 }
