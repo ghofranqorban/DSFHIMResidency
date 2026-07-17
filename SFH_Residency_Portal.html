@@ -735,6 +735,18 @@ async function loadLeavePlan(){
 async function saveLeavePlan(status){
   const u=STATE.user;if(!u?.rid)return;
   const fk=STATE.lpFirstKey||null,sk=STATE.lpSecondKey||null;
+  if(status==="submitted"){
+    if(fk&&!STATE.lpFirstAltKey&&lpPeriodCount(fk,u.rid)>=LP_CAP){
+      showToast("That period is at full capacity — choose a backup before submitting","error");
+      set({lpAltPending:{which:"a",key:fk,altChoice:null}});
+      return;
+    }
+    if(sk&&!STATE.lpSecondAltKey&&lpPeriodCount(sk,u.rid)>=LP_CAP){
+      showToast("That period is at full capacity — choose a backup before submitting","error");
+      set({lpAltPending:{which:"b",key:sk,altChoice:null}});
+      return;
+    }
+  }
   const fp=LP_PERIODS.find(p=>p.key===fk),sp=LP_PERIODS.find(p=>p.key===sk);
   const note=_lpNoteDraft!==null?_lpNoteDraft:(document.getElementById("lp-note")?.value||null);
   const row={
