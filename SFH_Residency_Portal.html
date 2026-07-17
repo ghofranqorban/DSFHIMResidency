@@ -3398,6 +3398,7 @@ async function handleSchedImportFile(file,type){
 // so the extracted text lands in an editable textarea for the user to fix before
 // parsing — this is deliberate, not a placeholder.
 let SCHED_OCR_BUSY=false;
+let SCHED_OCR_TEXT="";
 let TESSERACT_LOAD_PROMISE=null;
 function loadTesseract(){
   if(window.Tesseract)return Promise.resolve();
@@ -3413,11 +3414,12 @@ function loadTesseract(){
 }
 async function handleSchedImportOcr(file){
   try{
+    const ta=document.getElementById("sched_ocr_text");
+    if(ta)SCHED_OCR_TEXT=ta.value;
     SCHED_OCR_BUSY=true;render();
     await loadTesseract();
     const{data}=await Tesseract.recognize(file,"eng");
-    const ta=document.getElementById("sched_ocr_text");
-    if(ta)ta.value=(ta.value?ta.value+"\n":"")+(data.text||"").trim();
+    SCHED_OCR_TEXT=(SCHED_OCR_TEXT?SCHED_OCR_TEXT+"\n":"")+(data.text||"").trim();
     SCHED_OCR_BUSY=false;render();
     showToast("Text scanned — check it over, then click Parse Text.","success");
   }catch(e){
@@ -3466,7 +3468,7 @@ function renderSchedImportModal(){
   const type=STATE.schedImportType;
   if(!type)return null;
   const cfg=SCHED_IMPORT_CONFIG[type];
-  function close(){SCHED_IMPORT={type:null,fileName:"",rows:[]};set({schedImportType:null});}
+  function close(){SCHED_IMPORT={type:null,fileName:"",rows:[]};SCHED_OCR_TEXT="";set({schedImportType:null});}
   const validCount=SCHED_IMPORT.rows.filter(r=>r.include&&!r.error).length;
   return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
     el("div",{cls:"modal-card",st:{width:"780px"}},
@@ -3495,7 +3497,7 @@ function renderSchedImportModal(){
             return inp;
           })()
         ),
-        el("textarea",{id:"sched_ocr_text",rows:"6",cls:"input",st:{width:"100%",fontFamily:"monospace",fontSize:".78rem",marginBottom:"10px",resize:"vertical"},placeholder:"Paste tab-separated rows here, or scan an image above — e.g.\n"+cfg.fields.map(f=>f.aliases[0]).join("\t")}),
+        el("textarea",{id:"sched_ocr_text",rows:"6",cls:"input",st:{width:"100%",fontFamily:"monospace",fontSize:".78rem",marginBottom:"10px",resize:"vertical"},placeholder:"Paste tab-separated rows here, or scan an image above — e.g.\n"+cfg.fields.map(f=>f.aliases[0]).join("\t"),oninput:e=>{SCHED_OCR_TEXT=e.target.value;}},SCHED_OCR_TEXT),
         el("button",{cls:"sbtn",onClick:()=>handleSchedImportTextParse(type)},"Parse Text"),
         el("p",{cls:"sh",st:{marginTop:"14px"}},"Either way, Block and Week are detected automatically from each session's Date, and imported sessions start as drafts so you can review before publishing.")
       ):el("div",null,
@@ -3543,6 +3545,7 @@ async function commitSchedImport(){
   if(error){showToast("Could not import: "+error.message);return;}
   showToast("Imported "+payload.length+" session"+(payload.length===1?"":"s")+" as drafts.","success");
   SCHED_IMPORT={type:null,fileName:"",rows:[]};
+  SCHED_OCR_TEXT="";
   set({schedImportType:null});
   await loadSchedules();
 }
