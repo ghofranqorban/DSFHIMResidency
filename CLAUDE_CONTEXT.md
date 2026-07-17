@@ -125,6 +125,7 @@ QUIZZES_LOAD_ERR // string|null — set if quizzes table missing in Supabase
 
 **3-tab structure per resident:**
 - **📊 Ongoing (50%):** Quiz 15% · MM Att 15% · Teaching 15% · Presenter/Moderator 5% — all auto-tracked, **scoped to `CURRENT_ACADEMIC_YEAR` only** (MM/Teaching attendance and presenter/moderator sessions are filtered by academic_year before aggregating)
+  - **Outside-rotation attendance (18 Jul 2026):** the `O` attendance status (electives, Cardiology, etc.) is excluded entirely from MM/Teaching attendance % — not counted for or against, same as an unmarked day. `E` (Excused) still counts as full credit. If a resident has zero non-`O` days recorded for the whole year, `calcKPI()` returns `mmPct`/`tPct` as `null` (shown as gray "N/A" everywhere, excluded from cohort averages/at-risk flags) instead of the old behavior of defaulting to 100%.
 - **📆 Quarterly (informational, not scored):** Mentor sets Research Milestone + Area of Improvement per quarter as text. Anyone can submit "achieved" → PD approves. Resident can see (read-only).
 - **🏆 Yearly (50%):** Committee 10% (PD scores 0–10) + 5 achievement cards: QI Project 10% · Research Publication 10% · Oral-or-Poster Presentation 10% (merged bucket — either counts, no double credit) · Awards/Honors 5% · Volunteering 5%
 
