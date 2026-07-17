@@ -3223,6 +3223,33 @@ function schedInlineResident(sid,field,currentResId,currentLabel,saveFn,tbl){
   div.ondblclick=()=>set({schedInlineEdit:{id:sid,field,tbl}});
   return div;
 }
+function schedulePublishState(sessions){
+  if(!sessions.length)return"empty";
+  const pubCount=sessions.filter(s=>s.published).length;
+  if(pubCount===0)return"draft";
+  if(pubCount===sessions.length)return"published";
+  return"partial";
+}
+function renderPublishControls(sessions,tbl,blk,canEditSched){
+  if(!canEditSched)return null;
+  const state=schedulePublishState(sessions);
+  const badges={
+    empty:{txt:"No sessions yet",bg:"rgba(31,26,18,.06)",fg:"rgba(31,26,18,.45)"},
+    draft:{txt:"Draft — hidden from residents",bg:"rgba(164,122,40,.12)",fg:"#A47A28"},
+    partial:{txt:"Partially published — some sessions still hidden",bg:"rgba(164,122,40,.12)",fg:"#A47A28"},
+    published:{txt:"Published — visible to everyone",bg:"rgba(22,163,74,.12)",fg:"#16a34a"}
+  };
+  const b=badges[state];
+  const badge=el("span",{st:{fontSize:".72rem",fontWeight:"600",padding:"4px 12px",borderRadius:"999px",background:b.bg,color:b.fg}},b.txt);
+  const btn=state==="published"?el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.12)",color:"rgba(31,26,18,.55)",padding:"5px 14px",borderRadius:"999px",cursor:"pointer",fontSize:".78rem"},onClick:async()=>{
+    await sb.from(tbl).update({published:false}).eq("block_number",blk).eq("academic_year",CURRENT_ACADEMIC_YEAR);
+    await loadSchedules();
+  }},"Unpublish Block"):el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",padding:"5px 16px",borderRadius:"999px",cursor:sessions.length?"pointer":"not-allowed",fontSize:".78rem",fontWeight:"600",opacity:sessions.length?"1":".5"},onClick:sessions.length?async()=>{
+    await sb.from(tbl).update({published:true}).eq("block_number",blk).eq("academic_year",CURRENT_ACADEMIC_YEAR);
+    await loadSchedules();
+  }:null},"Publish Block");
+  return el("div",{st:{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px",flexWrap:"wrap"}},badge,btn);
+}
 function renderMMSchedule(){
   const blk=STATE.mmBlock;
   const sessions=MM_SESSIONS.filter(s=>s.block_number===blk);
@@ -3265,6 +3292,7 @@ function renderMMSchedule(){
   );
   return el("div",null,
     blkRow,
+    renderPublishControls(sessions,"mm_sessions",blk,canEditSched),
     canEditSched?el("div",{st:{marginBottom:"12px"}},
       el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.12)",color:"rgba(31,26,18,.55)",padding:"5px 14px",borderRadius:"999px",cursor:"pointer",fontSize:".78rem"},onClick:()=>generateMMSessions(blk)},"Auto-fill dates")
     ):null,
@@ -3607,6 +3635,7 @@ function renderTeachSchedule(){
       renderBlockPills(blk,n=>set({teachBlock:n}))
     ),
     el("div",{cls:"card"},
+      renderPublishControls(sessions,"teaching_sessions",blk,canEditSched),
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
         el("span",{cls:"card-title",st:{margin:"0"}},"Block "+blk+" Teaching Sessions"),
         canEditSched?el("button",{cls:"sbtn primary",onClick:()=>set({teachShowEntry:true,teachEntrySession:"new_teach"})},"+ Add Session"):null
