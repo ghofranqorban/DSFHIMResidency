@@ -744,6 +744,7 @@ async function saveLeavePlan(status){
     second_leave_key:sk,second_leave_block:sp?.blk||null,second_leave_half:sp?.half||null,
     second_leave_from:sp?.from||null,second_leave_to:sp?.to||null,
     second_leave_alt_key:STATE.lpSecondAltKey||null,
+    first_leave_approved:null,second_leave_approved:null,
     note,status,updated_at:new Date().toISOString(),
   };
   if(status==="submitted")row.submitted_at=new Date().toISOString();
@@ -753,23 +754,68 @@ async function saveLeavePlan(status){
   showToast(status==="submitted"?"Leave plan submitted successfully":"Draft saved","success");
   render();
 }
-async function revokeLpSuggestion(residentId,which){
+async function lpDecideApprove(residentId,which){
   const plan=LEAVE_PLAN[residentId];if(!plan)return;
   const row={...plan};
-  if(which==="first"){
-    row.first_leave_key=null;row.first_leave_block=null;row.first_leave_half=null;
-    row.first_leave_from=null;row.first_leave_to=null;row.first_leave_alt_key=null;
-  }else{
-    row.second_leave_key=null;row.second_leave_block=null;row.second_leave_half=null;
-    row.second_leave_from=null;row.second_leave_to=null;row.second_leave_alt_key=null;
-  }
-  row.status="draft";row.updated_at=new Date().toISOString();
+  row[which==="first"?"first_leave_approved":"second_leave_approved"]=true;
+  row.updated_at=new Date().toISOString();
   const{error}=await sb.from("leave_plan").upsert(row,{onConflict:"resident_id,academic_year"});
-  if(error){showToast("Revoke failed: "+error.message,"error");return;}
+  if(error){showToast("Approve failed: "+error.message,"error");return;}
   LEAVE_PLAN[residentId]=row;
   const resProfile=PROFILE_BY_RESIDENT[residentId];
-  if(resProfile)createNotification(resProfile.id,"warning","Your "+(which==="first"?"First":"Second")+" Leave suggestion could not be accommodated and was revoked. Please choose another period and resubmit your Leave Plan.","leave_plan",null);
-  showToast("Suggestion revoked — resident notified","success");
+  if(resProfile)createNotification(resProfile.id,"success","Your "+(which==="first"?"First":"Second")+" Leave suggestion was approved by the Program Director.","leave_plan",null);
+  showToast("Suggestion approved","success");
+  render();
+}
+async function lpDecideDecline(residentId,which){
+  const plan=LEAVE_PLAN[residentId];if(!plan)return;
+  const row={...plan};
+  const keyF=which==="first"?"first_leave_key":"second_leave_key";
+  const blkF=which==="first"?"first_leave_block":"second_leave_block";
+  const halfF=which==="first"?"first_leave_half":"second_leave_half";
+  const fromF=which==="first"?"first_leave_from":"second_leave_from";
+  const toF=which==="first"?"first_leave_to":"second_leave_to";
+  const altF=which==="first"?"first_leave_alt_key":"second_leave_alt_key";
+  const apprF=which==="first"?"first_leave_approved":"second_leave_approved";
+  const altKey=plan[altF];
+  const altPeriod=altKey?LP_PERIODS.find(p=>p.key===altKey):null;
+  if(altPeriod){
+    row[keyF]=altPeriod.key;row[blkF]=altPeriod.blk;row[halfF]=altPeriod.half;
+    row[fromF]=altPeriod.from;row[toF]=altPeriod.to;row[altF]=null;row[apprF]=null;
+  }else{
+    row[keyF]=null;row[blkF]=null;row[halfF]=null;row[fromF]=null;row[toF]=null;row[altF]=null;row[apprF]=null;
+    row.status="draft";
+  }
+  row.updated_at=new Date().toISOString();
+  const{error}=await sb.from("leave_plan").upsert(row,{onConflict:"resident_id,academic_year"});
+  if(error){showToast("Decline failed: "+error.message,"error");return;}
+  LEAVE_PLAN[residentId]=row;
+  const resProfile=PROFILE_BY_RESIDENT[residentId];
+  const msg=altPeriod
+    ?("Your "+(which==="first"?"First":"Second")+" Leave suggestion was declined by the PD — your backup period ("+altPeriod.label.replace(" - "," — ")+") has been assigned instead.")
+    :("Your "+(which==="first"?"First":"Second")+" Leave suggestion was declined by the PD. Please choose another period and resubmit your Leave Plan.");
+  if(resProfile)createNotification(resProfile.id,"warning",msg,"leave_plan",null);
+  showToast(altPeriod?"Declined — backup period assigned":"Declined — resident notified to resubmit","success");
+  render();
+}
+async function lpDecideEdit(residentId,which,newKey){
+  const plan=LEAVE_PLAN[residentId];if(!plan)return;
+  const np=LP_PERIODS.find(p=>p.key===newKey);if(!np)return;
+  const row={...plan};
+  if(which==="first"){
+    row.first_leave_key=np.key;row.first_leave_block=np.blk;row.first_leave_half=np.half;
+    row.first_leave_from=np.from;row.first_leave_to=np.to;row.first_leave_alt_key=null;row.first_leave_approved=true;
+  }else{
+    row.second_leave_key=np.key;row.second_leave_block=np.blk;row.second_leave_half=np.half;
+    row.second_leave_from=np.from;row.second_leave_to=np.to;row.second_leave_alt_key=null;row.second_leave_approved=true;
+  }
+  row.updated_at=new Date().toISOString();
+  const{error}=await sb.from("leave_plan").upsert(row,{onConflict:"resident_id,academic_year"});
+  if(error){showToast("Reassign failed: "+error.message,"error");return;}
+  LEAVE_PLAN[residentId]=row;
+  const resProfile=PROFILE_BY_RESIDENT[residentId];
+  if(resProfile)createNotification(resProfile.id,"info","Your "+(which==="first"?"First":"Second")+" Leave was reassigned by the Program Director to "+np.label.replace(" - "," — ")+".","leave_plan",null);
+  showToast("Period reassigned","success");
   render();
 }
 async function loadKpiQuarterly(){
@@ -1859,7 +1905,7 @@ function renderSidebar(){
         el("span",{cls:"sni"},el("svg",{width:"15",height:"15",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor","stroke-width":"2","stroke-linecap":"round","stroke-linejoin":"round"},el("path",{d:"M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"}),el("polyline",{points:"9 22 9 12 15 12 15 22"}))),
         el("span",null,"Home")
       ),
-      ...avail.map(m=>el("div",{cls:"snav"+(STATE.mod===m.id?" active":""),onClick:()=>set({mod:m.id,adminProfile:null,searchQ:"",showMobileNav:false,...(m.id==="kpi_exec"?{kpiExResident:null}:{}),...(m.id==="leave_plan"?{lpFirstKey:undefined,lpSecondKey:undefined,lpFirstAltKey:undefined,lpSecondAltKey:undefined,lpTab:undefined}:{})})},
+      ...avail.map(m=>el("div",{cls:"snav"+(STATE.mod===m.id?" active":""),onClick:()=>set({mod:m.id,adminProfile:null,searchQ:"",showMobileNav:false,...(m.id==="kpi_exec"?{kpiExResident:null}:{}),...(m.id==="leave_plan"?{lpFirstKey:undefined,lpSecondKey:undefined,lpFirstAltKey:undefined,lpSecondAltKey:undefined,lpTab:undefined,lpDecision:undefined,lpDecisionEditKey:undefined}:{})})},
         el("span",{cls:"sni"},modIcon(m.id,15)),
         el("span",null,m.label)
       ))
@@ -2209,7 +2255,7 @@ function renderModGrid(){
     el("p",{cls:"home-section-tag"},"Quick Access"),
     el("h2",{cls:"home-section-title"},"Where would you like to go?"),
     el("div",{cls:"home-mod-grid"},
-      ...avail.map(m=>el("div",{cls:"home-modbtn",onClick:()=>set({mod:m.id,adminProfile:null,...(m.id==="kpi_exec"?{kpiExResident:null}:{}),...(m.id==="leave_plan"?{lpFirstKey:undefined,lpSecondKey:undefined,lpFirstAltKey:undefined,lpSecondAltKey:undefined,lpTab:undefined}:{})})},
+      ...avail.map(m=>el("div",{cls:"home-modbtn",onClick:()=>set({mod:m.id,adminProfile:null,...(m.id==="kpi_exec"?{kpiExResident:null}:{}),...(m.id==="leave_plan"?{lpFirstKey:undefined,lpSecondKey:undefined,lpFirstAltKey:undefined,lpSecondAltKey:undefined,lpTab:undefined,lpDecision:undefined,lpDecisionEditKey:undefined}:{})})},
         el("div",{cls:"home-mod-ico-wrap",st:{background:(m.color||"#c96a4a")+"22"}},
           el("span",{cls:"home-mod-ico"},modIcon(m.id))
         ),
@@ -7018,13 +7064,15 @@ function renderLeavePlan(){
             const over=(counts[p.key]||0)>LP_CAP;
             if(isF){
               const alt=plan.first_leave_alt_key?LP_PERIODS.find(x=>x.key===plan.first_leave_alt_key):null;
-              const tt="First Leave"+(over?" — Suggestion (over cap) — click to revoke":"")+(alt?" — Backup: "+alt.label.replace(" - "," — "):"");
-              return el("td",{st:{textAlign:"center"}},el("span",{title:tt,onClick:over?()=>showConfirm("Revoke "+dname(r.name)+"'s First Leave suggestion for "+p.label.replace(" - "," — ")+"? They'll be notified and must choose another period.",()=>revokeLpSuggestion(r.id,"first"),"Revoke","danger"):null,st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#c96a4a",boxShadow:over?"0 0 0 2px #b52040":"none",cursor:over?"pointer":"default"}}));
+              const appr=!!plan.first_leave_approved;
+              const tt="First Leave"+(over?(appr?" — Approved":" — Suggestion (over cap)"):"")+(alt?" — Backup: "+alt.label.replace(" - "," — "):"")+" — click to manage";
+              return el("td",{st:{textAlign:"center"}},el("span",{title:tt,onClick:()=>set({lpDecision:{residentId:r.id,which:"first"},lpDecisionEditKey:undefined}),st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#c96a4a",boxShadow:over?(appr?"0 0 0 2px #1e7a43":"0 0 0 2px #b52040"):"none",cursor:"pointer"}}));
             }
             if(isS){
               const alt=plan.second_leave_alt_key?LP_PERIODS.find(x=>x.key===plan.second_leave_alt_key):null;
-              const tt="Second Leave"+(over?" — Suggestion (over cap) — click to revoke":"")+(alt?" — Backup: "+alt.label.replace(" - "," — "):"");
-              return el("td",{st:{textAlign:"center"}},el("span",{title:tt,onClick:over?()=>showConfirm("Revoke "+dname(r.name)+"'s Second Leave suggestion for "+p.label.replace(" - "," — ")+"? They'll be notified and must choose another period.",()=>revokeLpSuggestion(r.id,"second"),"Revoke","danger"):null,st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#26523A",boxShadow:over?"0 0 0 2px #b52040":"none",cursor:over?"pointer":"default"}}));
+              const appr=!!plan.second_leave_approved;
+              const tt="Second Leave"+(over?(appr?" — Approved":" — Suggestion (over cap)"):"")+(alt?" — Backup: "+alt.label.replace(" - "," — "):"")+" — click to manage";
+              return el("td",{st:{textAlign:"center"}},el("span",{title:tt,onClick:()=>set({lpDecision:{residentId:r.id,which:"second"},lpDecisionEditKey:undefined}),st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#26523A",boxShadow:over?(appr?"0 0 0 2px #1e7a43":"0 0 0 2px #b52040"):"none",cursor:"pointer"}}));
             }
             return el("td",{st:{textAlign:"center",fontSize:".65rem",color:"rgba(31,26,18,.18)"}},"-");
           })
@@ -7089,6 +7137,54 @@ function renderLeavePlan(){
     );
   }
 
+  function decisionModal(){
+    const dec=STATE.lpDecision;if(!dec)return null;
+    const resident=resById(dec.residentId);
+    const plan=LEAVE_PLAN[dec.residentId];
+    if(!resident||!plan)return null;
+    const which=dec.which;
+    const keyF=which==="first"?"first_leave_key":"second_leave_key";
+    const altF=which==="first"?"first_leave_alt_key":"second_leave_alt_key";
+    const apprF=which==="first"?"first_leave_approved":"second_leave_approved";
+    const period=LP_PERIODS.find(p=>p.key===plan[keyF])||null;
+    const altPeriod=plan[altF]?LP_PERIODS.find(p=>p.key===plan[altF]):null;
+    const over=period?lpPeriodCount(period.key,null)>=LP_CAP+1:false;
+    const approved=!!plan[apprF];
+    const rLevel=resident.level,isR1r=rLevel==="R1",isR3r=rLevel==="R3";
+    const editOptions=LP_PERIODS.filter(p=>!(isR1r&&p.r1lock)&&!(p.r3only&&!isR3r));
+    const editKey=STATE.lpDecisionEditKey!==undefined?STATE.lpDecisionEditKey:"";
+    function close(){set({lpDecision:null,lpDecisionEditKey:undefined});}
+    return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
+      el("div",{cls:"modal-card",st:{width:"460px",maxWidth:"92vw",padding:"26px"}},
+        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.1rem",fontWeight:"600",color:"#1F1A12",marginBottom:"4px"}},dname(resident.name)+" — "+(which==="first"?"First":"Second")+" Leave"),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.55)",marginBottom:"10px"}},
+          period?period.label.replace(" - "," — "):"No period selected",
+          over?el("span",{st:{marginLeft:"8px",fontSize:".58rem",fontWeight:"700",padding:"2px 8px",borderRadius:"9999px",background:approved?"#e6f4ea":"#fde8e8",color:approved?"#1e7a43":"#b52040"}},approved?"APPROVED":"OVER CAP"):null
+        ),
+        altPeriod?el("div",{st:{fontSize:".78rem",color:"rgba(31,26,18,.5)",marginBottom:"16px"}},"Backup on file: ",el("strong",null,altPeriod.label.replace(" - "," — "))):null,
+        period?el("div",{st:{display:"flex",gap:"8px",marginBottom:"18px",flexWrap:"wrap"}},
+          over&&!approved?el("button",{st:{background:"#1e7a43",color:"#FEFBF3",border:"none",borderRadius:"9999px",padding:"8px 16px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".78rem",cursor:"pointer"},
+            onClick:async()=>{await lpDecideApprove(dec.residentId,which);close();}},"Approve as Suggested"):null,
+          el("button",{st:{background:"none",color:"#b52040",border:"1px solid rgba(181,32,64,.35)",borderRadius:"9999px",padding:"8px 16px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".78rem",cursor:"pointer"},
+            onClick:()=>showConfirm("Decline "+dname(resident.name)+"'s "+(which==="first"?"First":"Second")+" Leave for "+period.label.replace(" - "," — ")+"?"+(altPeriod?" Their backup period ("+altPeriod.label.replace(" - "," — ")+") will be assigned instead.":" They'll be notified to choose another period."),async()=>{await lpDecideDecline(dec.residentId,which);},altPeriod?"Decline (use backup)":"Decline","danger")},altPeriod?"Decline (use backup)":"Decline")
+        ):null,
+        el("label",{st:{fontSize:".7rem",fontWeight:"600",textTransform:"uppercase",letterSpacing:".05em",color:"rgba(31,26,18,.45)",display:"block",marginBottom:"6px"}},"Reassign to a different period"),
+        el("select",{st:{width:"100%",padding:"9px 12px",borderRadius:"9px",border:"1px solid rgba(31,26,18,.15)",fontSize:".85rem",marginBottom:"20px",background:"#F6EFE2",color:"#1F1A12"},
+          onChange:e=>set({lpDecisionEditKey:e.target.value})},
+          el("option",{value:"",selected:editKey===""},"Select period…"),
+          ...editOptions.map(p=>el("option",{value:p.key,selected:editKey===p.key},p.label.replace(" - "," — ")))
+        ),
+        el("div",{st:{display:"flex",justifyContent:"flex-end",gap:"10px"}},
+          el("button",{st:{background:"#F6EFE2",color:"#1F1A12",border:"none",borderRadius:"9999px",padding:"9px 18px",fontFamily:"Inter,sans-serif",fontWeight:"500",fontSize:".82rem",cursor:"pointer"},
+            onClick:close},"Close"),
+          el("button",{st:{background:editKey&&editKey!==plan[keyF]?"#c96a4a":"rgba(31,26,18,.12)",color:editKey&&editKey!==plan[keyF]?"#FEFBF3":"rgba(31,26,18,.35)",border:"none",borderRadius:"9999px",padding:"9px 22px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".82rem",cursor:editKey&&editKey!==plan[keyF]?"pointer":"not-allowed"},
+            disabled:!editKey||editKey===plan[keyF],
+            onClick:async()=>{if(editKey&&editKey!==plan[keyF]){await lpDecideEdit(dec.residentId,which,editKey);close();}}},"Assign Period")
+        )
+      )
+    );
+  }
+
   const wrap=el("div",{st:{padding:"0 40px 40px"}});
   wrap.appendChild(el("div",{st:{padding:"36px 0 0"}},
     el("div",{st:{fontSize:".67rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"6px"}},"Academic Year 2026 - 27"),
@@ -7106,6 +7202,7 @@ function renderLeavePlan(){
   }
   wrap.appendChild(el("div",{st:{paddingTop:"28px"}},tab==="all"&&canManage?matrixTab():myTab()));
   if(STATE.lpAltPending)wrap.appendChild(altModal());
+  if(STATE.lpDecision)wrap.appendChild(decisionModal());
   return wrap;
 }
 
