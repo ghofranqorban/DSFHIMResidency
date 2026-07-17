@@ -98,6 +98,7 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .sched-tbl td,.sched-tbl th{border-right:1px solid rgba(31,26,18,.07);}
 .sched-tbl .wk-cell{background:#F6EFE2;font-weight:700;color:#1F1A12;text-align:center;vertical-align:middle;border-right:1px solid rgba(31,26,18,.1);white-space:nowrap;}
 .sched-tbl tr td{white-space:normal;}
+.wk-current-chip{display:inline-block;margin-top:4px;font-size:.58rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 7px;border-radius:20px;background:#fff3eb;color:#c96a4a;border:1px solid #f0c19e;white-space:nowrap;}
 /* ── On-Call Schedule table ── */
 .oncall-tbl{width:100%;border-collapse:collapse;}
 .oncall-tbl thead tr{background:#1F1A12;}
@@ -2815,6 +2816,13 @@ function renderRotTrack(){
 }
 // ─── SHARED: weekly-banded schedule table (mirrors the committee's distributed sheet) ──
 function weekInBlock(s,blk){return s.week_number-4*(blk-1)+1;}
+function currentWeekInBlock(blk){
+  const start=blockStartDate(blk,CURRENT_ACADEMIC_YEAR);if(!start)return null;
+  const today=new Date();today.setHours(0,0,0,0);
+  const diffDays=Math.floor((today-start)/86400000);
+  if(diffDays<0||diffDays>=28)return null;
+  return Math.floor(diffDays/7)+1;
+}
 function shortFmtDate(d){if(!d)return"";const p=d.split("-");const M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return parseInt(p[2])+" "+M[parseInt(p[1])-1];}
 function personLabel(residentId,label){
   if(residentId){const r=resById(residentId);if(r)return r.name;}
@@ -2844,19 +2852,28 @@ function renderScheduleTable(sessions,blk,cols){
     byWeek[w].push(s);
   });
   const weeks=Object.keys(byWeek).map(Number).sort((a,b)=>a-b);
+  const curWeek=currentWeekInBlock(blk);
   const bodyRows=[];
   weeks.forEach(w=>{
     const rows=byWeek[w].slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
+    const isCur=w===curWeek;
     rows.forEach((s,i)=>{
       const rowBg=s.row_highlight?s.row_highlight+"26":"#fff";
       const tds=[];
-      if(i===0)tds.push(el("td",{rowspan:rows.length,cls:"wk-cell"},"W"+w));
+      if(i===0){
+        const wkKids=["W"+w];
+        if(isCur)wkKids.push(el("div",{cls:"wk-current-chip"},"Current Week"));
+        tds.push(el("td",{rowspan:rows.length,cls:"wk-cell"},...wkKids));
+      }
       cols.forEach(c=>{
         const stickyStyle=c.stickyLeft?{position:"sticky",left:c.stickyLeft,zIndex:"2",background:rowBg,borderRight:"2px solid #ede5d8",minWidth:c.minW||"auto",maxWidth:c.maxW||"none",overflow:"hidden",whiteSpace:"nowrap"}:{};
         tds.push(el("td",{st:{textAlign:c.center?"center":"left",...stickyStyle}},c.render(s)));
       });
-      const rowStyle=s.row_highlight?{background:s.row_highlight+"26",borderLeft:"4px solid "+s.row_highlight}:null;
-      bodyRows.push(el("tr",{st:rowStyle},...tds));
+      const rowStyle={};
+      if(s.row_highlight){rowStyle.background=s.row_highlight+"26";rowStyle.borderLeft="4px solid "+s.row_highlight;}
+      if(isCur&&i===0)rowStyle.borderTop="3px solid #c96a4a";
+      if(isCur&&i===rows.length-1)rowStyle.borderBottom="3px solid #c96a4a";
+      bodyRows.push(el("tr",{st:Object.keys(rowStyle).length?rowStyle:null},...tds));
     });
   });
   return el("div",{cls:"tbl-wrap"},
@@ -3328,6 +3345,24 @@ function findColIndex(headerRow,aliases){
   }
   return-1;
 }
+// rawObj: {fieldKey: rawCellValue}. Shared by the Excel-parsing and AI-image-parsing
+// paths so both produce identically-validated rows for the same preview table.
+function buildImportRow(cfg,rawObj,rowIndex){
+  const parsed={};
+  cfg.fields.forEach(f=>{
+    const raw=rawObj[f.key];
+    parsed[f.key]=f.key==="date"?parseImportDate(raw):(raw==null?"":String(raw).trim());
+  });
+  let error=null;
+  if(!parsed.date)error="Could not read a date";
+  else if(cfg.fields.some(f=>f.required&&f.key!=="date"&&!parsed[f.key]))error="Missing required field";
+  let bw=null;
+  if(!error){
+    bw=blockWeekForDate(parsed.date,CURRENT_ACADEMIC_YEAR);
+    if(!bw)error="Date doesn't fall in any block of "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1);
+  }
+  return{excelRowIndex:rowIndex,parsed,block:bw?bw.block:null,week:bw?bw.week:null,weekNumber:bw?bw.weekNumber:null,error,include:!error};
+}
 async function handleSchedImportFile(file,type){
   try{
     const buf=await file.arrayBuffer();
@@ -3345,26 +3380,55 @@ async function handleSchedImportFile(file,type){
     for(let r=1;r<aoa.length;r++){
       const row=aoa[r]||[];
       if(row.every(c=>c==null||String(c).trim()===""))continue;
-      const parsed={};
-      cfg.fields.forEach(f=>{
-        const raw=colIdx[f.key]>=0?row[colIdx[f.key]]:"";
-        parsed[f.key]=f.key==="date"?parseImportDate(raw):(raw==null?"":String(raw).trim());
-      });
-      let error=null;
-      if(!parsed.date)error="Could not read a date";
-      else if(cfg.fields.some(f=>f.required&&f.key!=="date"&&!parsed[f.key]))error="Missing required field";
-      let bw=null;
-      if(!error){
-        bw=blockWeekForDate(parsed.date,CURRENT_ACADEMIC_YEAR);
-        if(!bw)error="Date doesn't fall in any block of "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1);
-      }
-      rows.push({excelRowIndex:r+1,parsed,block:bw?bw.block:null,week:bw?bw.week:null,weekNumber:bw?bw.weekNumber:null,error,include:!error});
+      const rawObj={};
+      cfg.fields.forEach(f=>{rawObj[f.key]=colIdx[f.key]>=0?row[colIdx[f.key]]:"";});
+      rows.push(buildImportRow(cfg,rawObj,r+1));
     }
     if(!rows.length)throw new Error("No session rows found under the header row.");
     SCHED_IMPORT={type,fileName:file.name,rows};
     render();
   }catch(e){
     showToast("Could not read that file: "+(e.message||e));
+  }
+}
+function fileToBase64(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>{const s=reader.result;resolve(s.slice(s.indexOf(",")+1));};
+    reader.onerror=()=>reject(new Error("Could not read the file."));
+    reader.readAsDataURL(file);
+  });
+}
+// The Supabase dashboard may assign this function a different routing slug than
+// its display name (see CREATE_LOGIN_FN above for precedent) — if so, update this
+// constant to match what's shown in Supabase Dashboard > Edge Functions.
+const IMPORT_IMAGE_FN="import-schedule-image";
+let SCHED_IMPORT_BUSY=false;
+async function handleSchedImportImage(file,type){
+  try{
+    SCHED_IMPORT_BUSY=true;render();
+    const cfg=SCHED_IMPORT_CONFIG[type];
+    const mediaType=file.type||"image/png";
+    const imageBase64=await fileToBase64(file);
+    const{data:sess}=await sb.auth.getSession();
+    const token=sess?.session?.access_token;
+    if(!token){showToast("Your session expired — please sign in again.");SCHED_IMPORT_BUSY=false;render();return;}
+    const{data,error}=await sb.functions.invoke(IMPORT_IMAGE_FN,{
+      body:{type,mediaType,imageBase64},
+      headers:{Authorization:"Bearer "+token}
+    });
+    SCHED_IMPORT_BUSY=false;
+    if(error){showToast("Could not read image: "+(error.message||error));render();return;}
+    if(data?.error){showToast("Could not read image: "+data.error);render();return;}
+    const items=data?.rows||[];
+    if(!items.length){showToast("No sessions detected in that image.","warning");render();return;}
+    const rows=items.map((it,idx)=>buildImportRow(cfg,it,idx+1));
+    SCHED_IMPORT={type,fileName:file.name,rows};
+    render();
+  }catch(e){
+    SCHED_IMPORT_BUSY=false;
+    showToast("Could not read that image: "+(e.message||e));
+    render();
   }
 }
 function renderSchedImportModal(){
@@ -3376,19 +3440,32 @@ function renderSchedImportModal(){
   return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
     el("div",{cls:"modal-card",st:{width:"780px"}},
       el("div",{cls:"flex-gap",st:{marginBottom:"14px",justifyContent:"space-between"}},
-        el("h3",null,"Import "+cfg.label+" Sessions from Excel"),
+        el("h3",null,"Import "+cfg.label+" Sessions"),
         el("button",{cls:"sbtn ghost",onClick:close},"×")
       ),
       !SCHED_IMPORT.rows.length?el("div",null,
-        el("p",{cls:"sh",st:{marginBottom:"12px"}},"Upload a spreadsheet with a header row containing columns like: "+cfg.fields.map(f=>f.aliases[0]).join(", ")+". One row per session — Block and Week are detected automatically from the Date, and imported sessions start as drafts so you can review before publishing."),
-        el("div",{cls:"drop-zone"},
+        SCHED_IMPORT_BUSY?el("div",{cls:"alert-yellow",st:{marginBottom:"12px"}},"Reading the image with AI — this can take up to 20 seconds…"):null,
+        el("p",{cls:"sh",st:{marginBottom:"8px",fontWeight:"700"}},"Option 1 — Excel file"),
+        el("p",{cls:"sh",st:{marginBottom:"12px"}},"Upload a spreadsheet with a header row containing columns like: "+cfg.fields.map(f=>f.aliases[0]).join(", ")+". One row per session."),
+        el("div",{cls:"drop-zone",st:{marginBottom:"20px",opacity:SCHED_IMPORT_BUSY?".5":"1"}},
           el("div",{st:{marginBottom:"8px"}},"Choose the .xlsx file to upload"),
           (()=>{
-            const inp=el("input",{type:"file",accept:".xlsx,.xls"});
+            const inp=el("input",{type:"file",accept:".xlsx,.xls",...(SCHED_IMPORT_BUSY?{disabled:""}:{})});
             inp.onchange=e=>{const f=e.target.files[0];if(f)handleSchedImportFile(f,type);};
             return inp;
           })()
-        )
+        ),
+        el("p",{cls:"sh",st:{marginBottom:"8px",fontWeight:"700"}},"Option 2 — Screenshot / photo"),
+        el("p",{cls:"sh",st:{marginBottom:"12px"}},"Upload a picture of the schedule (screenshot or photo of a printed table) and AI will read the sessions out of it."),
+        el("div",{cls:"drop-zone",st:{opacity:SCHED_IMPORT_BUSY?".5":"1"}},
+          el("div",{st:{marginBottom:"8px"}},"Choose an image (.png, .jpg)"),
+          (()=>{
+            const inp=el("input",{type:"file",accept:"image/*",...(SCHED_IMPORT_BUSY?{disabled:""}:{})});
+            inp.onchange=e=>{const f=e.target.files[0];if(f)handleSchedImportImage(f,type);};
+            return inp;
+          })()
+        ),
+        el("p",{cls:"sh",st:{marginTop:"14px"}},"Either way, Block and Week are detected automatically from each session's Date, and imported sessions start as drafts so you can review before publishing.")
       ):el("div",null,
         el("div",{cls:"flex-gap",st:{marginBottom:"10px",justifyContent:"space-between",flexWrap:"wrap"}},
           el("p",{cls:"sh",st:{margin:"0"}},SCHED_IMPORT.fileName+" — "+SCHED_IMPORT.rows.length+" row(s) found, "+validCount+" ready to import."),
