@@ -2912,45 +2912,92 @@ function renderMMScheduleForm(blk,editingSession){
     el("div",{st:{marginBottom:"10px"}},
       el("label",null,"Row highlight"),
       (()=>{
+        const NS="http://www.w3.org/2000/svg";
+        function svgEl(tag,attrs){const e=document.createElementNS(NS,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));return e;}
+        function pencilIcon(){
+          const svg=svgEl("svg",{width:"13",height:"13",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor","stroke-width":"2","stroke-linecap":"round","stroke-linejoin":"round"});
+          svg.appendChild(svgEl("path",{d:"M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"}));
+          return svg;
+        }
         const curVal=(editingSession&&editingSession.row_highlight)||"";
         const holder=document.createElement("div");
-        const sel=document.createElement("select");sel.id="mm_f_highlight";
+        const selRow=document.createElement("div");selRow.style.cssText="display:flex;gap:8px;align-items:center;";
+        const sel=document.createElement("select");sel.id="mm_f_highlight";sel.style.flex="1";
         [
           ["","None"],["#c2726a","Special (Dept Mtg / M&M)"],["#4a7fd6","Night Team Case"],
-          ["#a24a72","Dr. Nahed"],["#b8433a","Acute Coronary Syndrome"],["#f5e08a","Grand Round"],["#e8b4c8","Journal Club"],
-          ...MM_HIGHLIGHTS.map(h=>[h.color,h.label])
+          ["#a24a72","Dr. Nahed"],["#b8433a","Acute Coronary Syndrome"],["#f5e08a","Grand Round"],["#e8b4c8","Journal Club"]
         ].forEach(([v,l])=>{
           const o=document.createElement("option");o.value=v;o.textContent=l;if(v===curVal)o.selected=true;sel.appendChild(o);
         });
+        const optByHlId={};
+        MM_HIGHLIGHTS.forEach(h=>{
+          const o=document.createElement("option");o.value=h.color;o.textContent=h.label;if(h.color===curVal)o.selected=true;sel.appendChild(o);
+          optByHlId[h.id]=o;
+        });
         const addOpt=document.createElement("option");addOpt.value="__mm_new__";addOpt.textContent="+ Add New Highlight...";sel.appendChild(addOpt);
-        holder.appendChild(sel);
+        const editBtn=document.createElement("button");editBtn.type="button";editBtn.title="Edit this highlight";
+        editBtn.style.cssText="display:none;align-items:center;justify-content:center;width:34px;height:34px;flex-shrink:0;border-radius:8px;border:1px solid #ede5d8;background:#fff;cursor:pointer;color:#8a7a68;";
+        editBtn.appendChild(pencilIcon());
+        selRow.appendChild(sel);selRow.appendChild(editBtn);
+        holder.appendChild(selRow);
         const box=document.createElement("div");
         box.style.cssText="display:none;gap:8px;align-items:center;margin-top:8px;";
         const colorInput=document.createElement("input");colorInput.type="color";colorInput.value="#c96a4a";
         colorInput.style.cssText="width:44px;height:36px;padding:2px;border-radius:8px;border:1px solid #ede5d8;cursor:pointer;background:#fff;flex-shrink:0;";
         const labelInput=document.createElement("input");labelInput.type="text";labelInput.placeholder="Highlight name (e.g. Board Exam)";
         labelInput.style.cssText="flex:1;font-size:.84rem;padding:8px 12px;border-radius:8px;border:1px solid #ede5d8;background:#faf6f1;";
-        const addBtn=document.createElement("button");addBtn.type="button";addBtn.textContent="Add";addBtn.className="sbtn success";addBtn.style.cssText="padding:7px 16px;font-size:.8rem;flex-shrink:0;";
+        const saveBtn=document.createElement("button");saveBtn.type="button";saveBtn.className="sbtn success";saveBtn.style.cssText="padding:7px 16px;font-size:.8rem;flex-shrink:0;";
         const cancelBtn=document.createElement("button");cancelBtn.type="button";cancelBtn.textContent="Cancel";cancelBtn.className="sbtn ghost";cancelBtn.style.cssText="padding:7px 16px;font-size:.8rem;flex-shrink:0;";
-        function closeBox(){box.style.display="none";sel.value=curVal;labelInput.value="";colorInput.value="#c96a4a";}
+        let editingId=null;
+        function updateEditBtn(){
+          const match=MM_HIGHLIGHTS.find(h=>h.color===sel.value);
+          editBtn.style.display=match?"flex":"none";
+        }
+        function closeBox(){box.style.display="none";editingId=null;sel.value=curVal;labelInput.value="";colorInput.value="#c96a4a";updateEditBtn();}
         cancelBtn.onclick=closeBox;
-        addBtn.onclick=async()=>{
+        function openAdd(){editingId=null;saveBtn.textContent="Add";labelInput.value="";colorInput.value="#c96a4a";box.style.display="flex";}
+        function openEdit(h){editingId=h.id;saveBtn.textContent="Save";labelInput.value=h.label;colorInput.value=h.color;box.style.display="flex";}
+        editBtn.onclick=()=>{
+          const match=MM_HIGHLIGHTS.find(h=>h.color===sel.value);
+          if(match)openEdit(match);
+        };
+        saveBtn.onclick=async()=>{
           const label=labelInput.value.trim();
           const color=colorInput.value;
           if(!label){showToast("Enter a name for the highlight.","warning");return;}
-          addBtn.disabled=true;
-          const{data,error}=await sb.from("mm_highlights").insert({label,color,created_by:STATE.user.profileId}).select().single();
-          addBtn.disabled=false;
-          if(error){showToast("Could not add highlight: "+error.message);return;}
-          MM_HIGHLIGHTS.push(data);
-          const opt=document.createElement("option");opt.value=data.color;opt.textContent=data.label;
-          sel.insertBefore(opt,addOpt);
-          sel.value=data.color;
+          saveBtn.disabled=true;
+          if(editingId){
+            const{data,error}=await sb.from("mm_highlights").update({label,color}).eq("id",editingId).select().single();
+            saveBtn.disabled=false;
+            if(error){showToast("Could not update highlight: "+error.message);return;}
+            const idx=MM_HIGHLIGHTS.findIndex(h=>h.id===editingId);
+            if(idx>-1)MM_HIGHLIGHTS[idx]=data;
+            const opt=optByHlId[editingId];
+            if(opt){opt.value=data.color;opt.textContent=data.label;}
+            sel.value=data.color;
+            showToast("Highlight updated.","success");
+          }else{
+            const{data,error}=await sb.from("mm_highlights").insert({label,color,created_by:STATE.user.profileId}).select().single();
+            saveBtn.disabled=false;
+            if(error){showToast("Could not add highlight: "+error.message);return;}
+            MM_HIGHLIGHTS.push(data);
+            const opt=document.createElement("option");opt.value=data.color;opt.textContent=data.label;
+            sel.insertBefore(opt,addOpt);
+            optByHlId[data.id]=opt;
+            sel.value=data.color;
+            showToast("Highlight added.","success");
+          }
+          editingId=null;
           box.style.display="none";
-          showToast("Highlight added.","success");
+          updateEditBtn();
         };
-        sel.onchange=()=>{box.style.display=sel.value==="__mm_new__"?"flex":"none";};
-        box.appendChild(colorInput);box.appendChild(labelInput);box.appendChild(addBtn);box.appendChild(cancelBtn);
+        sel.onchange=()=>{
+          if(sel.value==="__mm_new__"){openAdd();}
+          else{box.style.display="none";}
+          updateEditBtn();
+        };
+        updateEditBtn();
+        box.appendChild(colorInput);box.appendChild(labelInput);box.appendChild(saveBtn);box.appendChild(cancelBtn);
         holder.appendChild(box);
         return holder;
       })()
