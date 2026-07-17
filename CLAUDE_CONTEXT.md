@@ -1196,3 +1196,9 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 Verified with `node --check` on the 3rd `<script>` block (per the documented command above) — passed. Committed `9db7801`, pushed to `main`.
 
 **Still TODO:** Decide whether to also year-scope `MM_SESSIONS`/presenter-moderator credit (flagged above, not done). Not browser-verified this session (requires login) — spot-check the Performance Report leaderboard, a resident's own KPI page (Ongoing/Yearly tabs), and the PDF export next login to confirm the new weights/labels render correctly.
+
+### Session — 18 Jul 2026 (continued — Presenter/Moderator KPI credit scoped to current AY)
+
+User confirmed the flagged item above: Presenter/Moderator credit (`pres`/`presCount` in `calcKPI()`, and the quarterly `presCount` in `calcKPIQ()`, ~lines 1717-1719 & 4231) read `MM_SESSIONS` unfiltered by `academic_year`, so a resident's presenter/moderator KPI credit accumulated across every AY ever recorded, unlike MM/Teaching attendance which was already scoped. Fixed: both functions now filter `MM_SESSIONS` to `CURRENT_ACADEMIC_YEAR` before computing presenter/moderator status. `node --check` passed. Committed `36fce41`, pushed to `main`.
+
+**Not changed** (flagged, out of scope): the "MM Presenters (unique)" cohort stat in the Performance Report's "Year Breakdown · {selYear}" sidebar (~line 8183) still counts `MM_SESSIONS` across all years — it's a display-only stat under a year-labeled section, not part of KPI scoring math, and fixing it properly would need `selYear`-based filtering (the Performance Report's year-picker dropdown), which is a broader pre-existing gap since `MM_ATT`/`TEACH_ATT` now only ever hold the current AY in memory regardless of `selYear`. Not touched this session.
