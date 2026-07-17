@@ -3345,6 +3345,18 @@ function findColIndex(headerRow,aliases){
   }
   return-1;
 }
+// Some real-world schedule templates (e.g. the MM/Teaching Excel template) label
+// their date column "Day" and put actual dates in it, with no separate weekday
+// column at all. If we couldn't find a "date"/"session date" header but the "day"
+// column's values all parse as dates, treat that column as the date source instead.
+function resolveDateColumnFallback(colIdx,getSampleValues){
+  if(colIdx.date===-1&&colIdx.day!==undefined&&colIdx.day>=0){
+    const samples=getSampleValues(colIdx.day);
+    if(samples.length&&samples.every(v=>parseImportDate(v))){
+      colIdx.date=colIdx.day;colIdx.day=-1;
+    }
+  }
+}
 // rawObj: {fieldKey: rawCellValue}. Shared by the Excel-parsing and AI-image-parsing
 // paths so both produce identically-validated rows for the same preview table.
 function buildImportRow(cfg,rawObj,rowIndex){
@@ -3374,6 +3386,7 @@ async function handleSchedImportFile(file,type){
     const headerRow=aoa[0]||[];
     const colIdx={};
     cfg.fields.forEach(f=>{colIdx[f.key]=findColIndex(headerRow,f.aliases);});
+    resolveDateColumnFallback(colIdx,ci=>aoa.slice(1,6).map(row=>(row||[])[ci]).filter(v=>v!=null&&v!==""));
     const missingRequired=cfg.fields.filter(f=>f.required&&colIdx[f.key]===-1);
     if(missingRequired.length)throw new Error("Could not find column(s): "+missingRequired.map(f=>f.aliases[0]).join(", ")+". Add a header row with these column names.");
     const rows=[];
@@ -3406,6 +3419,7 @@ function parseSchedImportText(text,type){
   const firstCells=splitTextCells(lines[0]);
   const headerIdx={};
   cfg.fields.forEach(f=>{headerIdx[f.key]=findColIndex(firstCells,f.aliases);});
+  resolveDateColumnFallback(headerIdx,ci=>lines.slice(1,6).map(l=>splitTextCells(l)[ci]).filter(v=>v!=null&&v!==""));
   const looksLikeHeader=cfg.fields.filter(f=>f.required).every(f=>headerIdx[f.key]>=0);
   let dataLines=lines,colOrder;
   if(looksLikeHeader){colOrder=cfg.fields.map(f=>headerIdx[f.key]);dataLines=lines.slice(1);}
