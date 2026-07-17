@@ -7893,7 +7893,7 @@ function renderBestResident(){
           ...ranked.map((item,i)=>{
             const isMe=item.res.id===u.rid;
             const rkCls="br-rank-row"+(i===0?" rk1":i===1?" rk2":i===2?" rk3":"")+(isMe?" br-you-row":"");
-            return el("div",{cls:rkCls},
+            return el("div",{cls:rkCls,st:{cursor:"pointer"},onClick:()=>set({brDetailRid:item.res.id})},
               el("div",{cls:"br-rank-num"},i+1),
               el("div",{cls:"br-rank-av "+avCls},ini(item.res.name)),
               el("div",{cls:"br-rank-info"},
@@ -7970,6 +7970,55 @@ function renderBestResident(){
     el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"28px"}},
       ...["vote","rank","hof"].map(t=>{const lbs={vote:"Vote",rank:"Live Rankings",hof:"Hall of Fame"};const active=tab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({brTab:t,...(t==="hof"?{brHofLoaded:false}:{})})},lbs[t]);})),
     tab==="vote"?renderVoteTab():tab==="rank"?renderRankTab():renderHofTab()
+  );
+}
+function renderBrDetailModal(){
+  const res=resById(STATE.brDetailRid);
+  const close=()=>set({brDetailRid:null});
+  if(!res)return null;
+  const k=calcKPI(res.id);
+  const col=(res.level==="R3"||res.level==="R4")?"senior":"junior";
+  const votes=brVoteCountFor(res.id,col);
+  const totalVoters=brTotalVoters();
+  const votePct=totalVoters>0?Math.round(votes/totalVoters*100):0;
+  const kpi=kpiOngoingScore(res.id);
+  const final=Math.round(kpi*0.5+votePct*0.5);
+  const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
+  const rows=[
+    {label:"Quiz Average",val:k.qAvg,w:KPI_W.quiz,sub:QUIZZES.filter(q=>q.published&&q.sc[res.id]!=null).length+" quizzes"},
+    {label:"MM Attendance",val:k.mmPct,w:KPI_W.mm,sub:k.mmAtt+"/"+k.mmTotal+" sessions"},
+    {label:"Teaching Attendance",val:k.tPct,w:KPI_W.teach,sub:k.tAtt+"/"+k.tTotal+" sessions"},
+    {label:"Presenter / Moderator",val:k.pres?100:0,w:KPI_W.pres,sub:k.presCount+" session"+(k.presCount!==1?"s":"")},
+  ];
+  return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
+    el("div",{cls:"modal-card",st:{width:"460px",maxWidth:"100%",position:"relative"}},
+      el("button",{cls:"modal-close",onClick:close,st:{position:"absolute",top:"14px",right:"14px",border:"none",background:"none",fontSize:"1.3rem",lineHeight:"1",cursor:"pointer",color:"rgba(31,26,18,.4)"}},"×"),
+      el("div",{st:{display:"flex",alignItems:"center",gap:"12px",marginBottom:"18px"}},
+        el("div",{cls:"br-rank-av "+(col==="senior"?"snr":"jnr"),st:{width:"44px",height:"44px",fontSize:"1rem"}},ini(res.name)),
+        el("div",null,
+          el("h3",{st:{margin:"0"}},dname(res.name)),
+          el("div",{cls:"sh",st:{fontSize:".8rem"}},res.level+" · "+(col==="senior"?"Senior":"Junior")+" category")
+        )
+      ),
+      el("div",{st:{fontSize:".68rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".08em",color:"rgba(31,26,18,.35)",marginBottom:"8px"}},"KPI Ongoing Score — "+kpi+"%"),
+      ...rows.map(r=>el("div",{st:{marginBottom:"10px"}},
+        el("div",{st:{display:"flex",justifyContent:"space-between",fontSize:".82rem",marginBottom:"3px"}},
+          el("span",null,r.label+" ("+r.w+"% weight)"),
+          el("span",{st:{fontWeight:"700",color:kpiColor(r.val)}},r.val+"%")
+        ),
+        el("div",{cls:"sh",st:{fontSize:".72rem",marginBottom:"3px"}},r.sub),
+        el("div",{st:{background:"rgba(31,26,18,.08)",borderRadius:"4px",height:"6px"}},
+          el("div",{st:{background:kpiColor(r.val),width:Math.min(r.val,100)+"%",height:"6px",borderRadius:"4px"}})
+        )
+      )),
+      el("div",{st:{height:"1px",background:"rgba(31,26,18,.1)",margin:"16px 0"}}),
+      el("div",{st:{display:"flex",justifyContent:"space-between",fontSize:".84rem",marginBottom:"6px"}},
+        el("span",null,"Votes"),el("span",{st:{fontWeight:"700"}},votes+(totalVoters>0?" ("+votePct+"%)":""))
+      ),
+      el("div",{st:{display:"flex",justifyContent:"space-between",fontSize:".95rem",fontWeight:"800",marginTop:"10px",paddingTop:"10px",borderTop:"1px solid rgba(31,26,18,.1)"}},
+        el("span",null,"Final Score"),el("span",{st:{color:"#c96a4a"}},final+"/100")
+      )
+    )
   );
 }
 
@@ -8945,6 +8994,7 @@ function render(){
   if(STATE.showPromoModal&&isPD())app.appendChild(renderPromoModal());
   if(STATE.showBroadcast)(isPD()||STATE.user?.role==="chief")&&app.appendChild(renderBroadcastModal());
   if(STATE.showCalModal)app.appendChild(renderCalModal());
+  if(STATE.brDetailRid)app.appendChild(renderBrDetailModal());
   const _np=renderNotifPanel();if(_np)app.appendChild(_np);
   const srch=renderSearchOverlay();if(srch)app.appendChild(srch);
   appendAccountModal(app);
