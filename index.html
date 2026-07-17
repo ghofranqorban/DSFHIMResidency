@@ -1249,7 +1249,7 @@ const ANN_ICON={task:"",research:"",qi:"",presentation:"",deadline:"",other:""};
 function downloadRotationICS(resId){
   const res=resById(resId);if(!res)return;
   const fullRota=FULL_ROTA[resId]||{};
-  function icsDate(d){return d.toISOString().split("T")[0].replace(/-/g,"");}
+  function icsDate(d){return toLocalYMD(d).replace(/-/g,"");}
   function icsEscape(s){return(s||"").replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\n/g,"\\n");}
   const uid=()=>Math.random().toString(36).slice(2,10);
   const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//DSFH//Residency Portal//EN","CALSCALE:GREGORIAN","METHOD:PUBLISH", "X-WR-CALNAME:"+icsEscape(res.name)+" — DSFH IM","X-WR-TIMEZONE:Asia/Riyadh"];
@@ -1268,7 +1268,7 @@ function downloadRotationICS(resId){
   (ld.manual||[]).filter(x=>x.approved&&x.from&&x.to).forEach(lv=>{
     const isEdu=lv.comment?.startsWith("[EDU]");
     const endD=new Date(new Date(lv.to).getTime()+86400000);
-    lines.push("BEGIN:VEVENT", "DTSTART;VALUE=DATE:"+lv.from.replace(/-/g,""), "DTEND;VALUE=DATE:"+endD.toISOString().split("T")[0].replace(/-/g,""), "SUMMARY:"+(isEdu?" Educational Leave":" Annual Leave")+" ("+lv.days+"d)", "DESCRIPTION:"+icsEscape((lv.comment?.replace("[EDU] ","")||"Approved leave")+" • "+res.name), "CATEGORIES:Leave", "UID:dsfh-leave-"+resId+"-"+uid()+"@dsfh.local", "END:VEVENT");
+    lines.push("BEGIN:VEVENT", "DTSTART;VALUE=DATE:"+lv.from.replace(/-/g,""), "DTEND;VALUE=DATE:"+toLocalYMD(endD).replace(/-/g,""), "SUMMARY:"+(isEdu?" Educational Leave":" Annual Leave")+" ("+lv.days+"d)", "DESCRIPTION:"+icsEscape((lv.comment?.replace("[EDU] ","")||"Approved leave")+" • "+res.name), "CATEGORIES:Leave", "UID:dsfh-leave-"+resId+"-"+uid()+"@dsfh.local", "END:VEVENT");
   });
 
   // 3 ── MM Presentations & Moderator duties
@@ -1733,6 +1733,9 @@ function pbar(pct,color){
   );
 }
 function fmtDate(d){if(!d)return"";const p=d.split("-");return p[2]+"/"+p[1]+"/"+p[0];}
+// Local-timezone Y-M-D string for a Date object. Never use d.toISOString().split("T")[0] —
+// that converts to UTC and shifts the date backward in positive-offset zones like KSA (UTC+3).
+function toLocalYMD(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function diffDays(from,to){return Math.round((new Date(to)-new Date(from))/(86400000))+1;}
 function resById(id){return RESIDENTS.find(r=>r.id==id);}
 function anyResById(id){return resById(id)||_inactiveResById[id]||null;}
@@ -2184,7 +2187,7 @@ function renderAccountModal(){
 function getMyDuties(){
   const u=STATE.user;
   if(!u||u.role!=="resident"||!u.rid)return[];
-  const todayStr=new Date().toISOString().slice(0,10);
+  const todayStr=toLocalYMD(new Date());
   const duties=[];
   MM_SESSIONS.forEach(s=>{
     if(s.session_date<todayStr)return;
@@ -2332,8 +2335,8 @@ function renderModGrid(){
   if(u.role==="resident"&&u.rid){
     const today=new Date();today.setHours(0,0,0,0);
     const in30=new Date(today.getTime()+30*86400000);
-    const todayStr=today.toISOString().split("T")[0];
-    const in30Str=in30.toISOString().split("T")[0];
+    const todayStr=toLocalYMD(today);
+    const in30Str=toLocalYMD(in30);
     const upcoming=announcementsForResident(u.rid).filter(a=>a.deadline_date&&a.deadline_date>=todayStr&&a.deadline_date<=in30Str).slice(0,5);
     if(upcoming.length>0) alerts.push(
       el("div",{cls:"alert-yellow",st:{marginTop:"16px"}},
@@ -2354,7 +2357,7 @@ function renderModGrid(){
   }
   // Oncall reminder — next upcoming oncall for this user
   if(u.rid){
-    const ocToday=new Date().toISOString().slice(0,10);
+    const ocToday=toLocalYMD(new Date());
     const nextOc=ONCALL_DATA.filter(e=>e.resident_id===u.rid&&e.schedule_date>=ocToday).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date))[0];
     if(nextOc){
       const ocSlot=ONCALL_SLOTS.find(s=>s.key===nextOc.slot_key);
@@ -3350,7 +3353,7 @@ function renderMMEntryForm(blk,sessions){
       el("div",{cls:"alert-yellow",st:{margin:"0"}},"No sessions scheduled for this block yet.")
     );
   }
-  const todayStr=new Date().toISOString().slice(0,10);
+  const todayStr=toLocalYMD(new Date());
   let selSession=STATE.mmEntrySession&&typeof STATE.mmEntrySession==="number"?MM_SESSION_BY_ID[STATE.mmEntrySession]?.session_date:(sessions.find(s=>s.session_date===todayStr)?.session_date||sessions[0]?.session_date);
   let attMap={};
   let cmtMap={};
@@ -3677,7 +3680,7 @@ function renderTeachEntryForm(blk,sessions){
       el("div",{cls:"alert-yellow",st:{margin:"0"}},"No sessions scheduled for this block yet.")
     );
   }
-  const todayStrT=new Date().toISOString().slice(0,10);
+  const todayStrT=toLocalYMD(new Date());
   let selSession=sessions.find(s=>s.session_date===todayStrT)?.session_date||sessions[0]?.session_date;
   let attMap={};
   let cmtMap={};
@@ -5057,7 +5060,7 @@ function renderLeaveRequests(){
       else if(l.position==="start"){fromDate=bs;toDate=new Date(bs.getTime()+(days-1)*86400000);}
       else{toDate=new Date(bs.getTime()+27*86400000);fromDate=new Date(toDate.getTime()-(days-1)*86400000);}
     }
-    const fmt=d=>d?fmtDate(d.toISOString().split("T")[0]):"—";
+    const fmt=d=>d?fmtDate(toLocalYMD(d)):"—";
     return el("div",{st:{padding:"12px",border:"1px solid rgba(164,122,40,.25)",borderRadius:"10px",marginBottom:"8px",background:"#fdf8ee"}},
       el("div",{cls:"flex-gap",st:{marginBottom:"6px",flexWrap:"wrap",gap:"8px"}},
         el("div",{cls:"flex-gap",st:{gap:"8px",alignItems:"center",flex:"1"}},
@@ -5075,8 +5078,8 @@ function renderLeaveRequests(){
       el("button",{cls:"sbtn success",st:{fontSize:".78rem"},onClick:async()=>{
         showConfirm("Approve rota leave Block "+l.period+" for "+l.res.name+"?",async()=>{
           if(!bs){showToast("Cannot compute dates for this block.","error");return;}
-          const from=fromDate.toISOString().split("T")[0];
-          const to=toDate.toISOString().split("T")[0];
+          const from=toLocalYMD(fromDate);
+          const to=toLocalYMD(toDate);
           await addManualLeave(l.res.id,from,to,days,"Rota leave B"+l.period);
         },"Approve","success");
       }},"Approve")
@@ -5143,8 +5146,8 @@ function renderLeaveDetail(rid,onBack){
       toDate=new Date(blockStart.getTime()+27*86400000);
       fromDate=new Date(toDate.getTime()-(days-1)*86400000);
     }
-    const from=fromDate.toISOString().split("T")[0];
-    const to=toDate.toISOString().split("T")[0];
+    const from=toLocalYMD(fromDate);
+    const to=toLocalYMD(toDate);
     await addManualLeave(rid,from,to,days,"Rota leave B"+l.period);
   }
   // Prev / Next navigation across visible residents
@@ -5554,7 +5557,7 @@ function renderCounselForm(rid,existing){
   const opts=existing?[]:counselRecipientOptions(res);
   return el("div",{cls:"inline-form",st:{marginBottom:"14px"}},
     el("div",{cls:"grid-2",st:{marginBottom:"10px"}},
-      el("div",null,el("label",null,"Date"),el("input",{type:"date",id:"cs_date",value:existing?existing.date:(new Date().toISOString().split("T")[0])})),
+      el("div",null,el("label",null,"Date"),el("input",{type:"date",id:"cs_date",value:existing?existing.date:toLocalYMD(new Date())})),
       el("div",null,el("label",null,"Reason"),el("input",{id:"cs_reason",placeholder:"Reason for counseling",value:existing?existing.reason:""}))
     ),
     el("div",{st:{marginBottom:"10px"}},el("label",null,"Details"),el("textarea",{id:"cs_details",rows:"3",placeholder:"Detailed notes..."},existing?existing.details:"")),
@@ -5956,7 +5959,7 @@ function renderAdminDeadlines(){
   const editing=STATE.annEditId;
   const showForm=STATE.annShowForm||editing;
   const CATS=[["task","Task"],["research"," Research"],["qi"," QI Project"],["presentation"," Presentation"],["deadline"," Deadline"],["other"," Other"]];
-  const today=new Date().toISOString().split("T")[0];
+  const today=toLocalYMD(new Date());
 
   function targetLabel(a){
     if(a.target_all)return "Everyone";
@@ -8382,7 +8385,7 @@ function renderOncall(){
     if(!byDate[e.schedule_date])byDate[e.schedule_date]={};
     byDate[e.schedule_date][e.slot_key]=e;
   });
-  const todayStr=new Date().toISOString().slice(0,10);
+  const todayStr=toLocalYMD(new Date());
   // Resident's own oncall across all blocks in current year
   const myEntries=u.rid?ONCALL_DATA.filter(e=>e.resident_id===u.rid).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date)):[];
   function oncallCell(entry,date,slotKey){
