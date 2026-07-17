@@ -124,6 +124,81 @@ Deno.serve(async (req) => {
     });
   }
 
+  // ── Apple Configuration Profile (.mobileconfig) ────────────────────────────
+  // Installs the feed as a native Subscribed Calendar account via iOS's own
+  // profile installer. This downloads over plain https (a normal Safari file
+  // download, not a webcal:// scheme handoff), so it never hits the iOS bug
+  // where webcal:// links get silently downgraded to http:// and fail
+  // validation. The https server/path/port are embedded directly in the
+  // profile, so Calendar always connects securely.
+  if (url.searchParams.get("format") === "mobileconfig") {
+    const host = url.hostname;
+    const path = "/functions/v1/ical?token=" + token;
+    const name = (profile.display_name || "Resident").replace(/^Dr\.?\s*/i, "").trim();
+    const xmlEscape = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const payloadUuid = crypto.randomUUID();
+    const profileUuid = crypto.randomUUID();
+    const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadDescription</key>
+      <string>Subscribes to the DSFH IM Residency live calendar feed.</string>
+      <key>PayloadDisplayName</key>
+      <string>DSFH IM Residency Calendar</string>
+      <key>PayloadIdentifier</key>
+      <string>com.dsfh.residency.subcal.${xmlEscape(token)}</string>
+      <key>PayloadType</key>
+      <string>com.apple.subscribedcalendar.account</string>
+      <key>PayloadUUID</key>
+      <string>${payloadUuid}</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>SubCalAccountDescription</key>
+      <string>${xmlEscape(name)} \u2014 DSFH IM</string>
+      <key>SubCalAccountHostName</key>
+      <string>${xmlEscape(host)}</string>
+      <key>SubCalAccountPath</key>
+      <string>${xmlEscape(path)}</string>
+      <key>SubCalAccountPort</key>
+      <integer>443</integer>
+      <key>SubCalAccountUseSSL</key>
+      <true/>
+    </dict>
+  </array>
+  <key>PayloadDescription</key>
+  <string>Adds your live DSFH IM Residency calendar. Events update automatically \u2014 no manual steps.</string>
+  <key>PayloadDisplayName</key>
+  <string>DSFH IM Residency Calendar</string>
+  <key>PayloadIdentifier</key>
+  <string>com.dsfh.residency.calendarprofile.${xmlEscape(token)}</string>
+  <key>PayloadOrganization</key>
+  <string>DSFH Internal Medicine Residency</string>
+  <key>PayloadRemovalDisallowed</key>
+  <false/>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadUUID</key>
+  <string>${profileUuid}</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+</dict>
+</plist>
+`;
+    return new Response(plist, {
+      headers: {
+        ...CORS_HEADERS,
+        "Content-Type": "application/x-apple-aspen-config",
+        "Content-Disposition": 'attachment; filename="dsfh-calendar.mobileconfig"',
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+      },
+    });
+  }
+
   const _p = profile.calendar_prefs ?? {};
   // Resolve prefs — support both new keys and old single-key format for backward compat
   const prefs = {
