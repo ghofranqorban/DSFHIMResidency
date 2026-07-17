@@ -386,19 +386,33 @@ Deno.serve(async (req) => {
       );
     });
 
-    // Leave Plan submission deadline — mirrors LP_DEADLINE in SFH_Residency_Portal.html
-    // (hardcoded client-side, not stored in a table; keep this date in sync with it).
+    // Leave Plan & GIM rotation preference deadlines are planned against NEXT
+    // academic year (client's LP_AY = ay + 1 — e.g. in Jul 2026, ay = 2025 for
+    // the ongoing 2025-26 year, while leave/GIM planning targets 2026-27).
+    const lpAy = ay + 1;
+
+    // Leave Plan submission deadline — DB-backed via leave_plan_status (falls
+    // back to nothing if the row hasn't been created yet).
     if (resId) {
-      push(
-        "BEGIN:VEVENT",
-        "UID:dsfh-lp-deadline-" + ay + "@dsfh.local",
-        "SUMMARY:\u23F0 Leave Plan Submission \u2014 DUE",
-        "DTSTART;VALUE=DATE:20260718",
-        "DTEND;VALUE=DATE:20260718",
-        fold("DESCRIPTION:" + icsEscape("Submit or finalize your leave plan for AY " + ay + "/" + String(ay + 1).slice(-2) + " \u2022 DSFH IM Residency")),
-        "CATEGORIES:Deadline",
-        "END:VEVENT",
-      );
+      const { data: lpStatus } = await sb
+        .from("leave_plan_status")
+        .select("deadline")
+        .eq("academic_year", lpAy)
+        .maybeSingle();
+      if (lpStatus?.deadline) {
+        const d = new Date(lpStatus.deadline);
+        const ds = d.toISOString().slice(0, 10).replace(/-/g, "");
+        push(
+          "BEGIN:VEVENT",
+          "UID:dsfh-lp-deadline-" + lpAy + "@dsfh.local",
+          "SUMMARY:\u23F0 Leave Plan Submission \u2014 DUE",
+          "DTSTART;VALUE=DATE:" + ds,
+          "DTEND;VALUE=DATE:" + ds,
+          fold("DESCRIPTION:" + icsEscape("Submit or finalize your leave plan for AY " + lpAy + "/" + String(lpAy + 1).slice(-2) + " \u2022 DSFH IM Residency")),
+          "CATEGORIES:Deadline",
+          "END:VEVENT",
+        );
+      }
     }
 
     // GIM rotation preference submission deadline — DB-backed, only if open with a deadline set
@@ -406,17 +420,17 @@ Deno.serve(async (req) => {
       const { data: gimStatus } = await sb
         .from("gim_rota_status")
         .select("is_open, deadline")
-        .eq("academic_year", ay)
+        .eq("academic_year", lpAy)
         .maybeSingle();
       if (gimStatus?.is_open && gimStatus.deadline) {
         const ds = String(gimStatus.deadline).slice(0, 10).replace(/-/g, "");
         push(
           "BEGIN:VEVENT",
-          "UID:dsfh-gim-deadline-" + ay + "@dsfh.local",
+          "UID:dsfh-gim-deadline-" + lpAy + "@dsfh.local",
           "SUMMARY:\u23F0 GIM Rotation Preferences \u2014 DUE",
           "DTSTART;VALUE=DATE:" + ds,
           "DTEND;VALUE=DATE:" + ds,
-          fold("DESCRIPTION:" + icsEscape("Submit your GIM rotation block preferences for AY " + ay + "/" + String(ay + 1).slice(-2) + " \u2022 DSFH IM Residency")),
+          fold("DESCRIPTION:" + icsEscape("Submit your GIM rotation block preferences for AY " + lpAy + "/" + String(lpAy + 1).slice(-2) + " \u2022 DSFH IM Residency")),
           "CATEGORIES:Deadline",
           "END:VEVENT",
         );

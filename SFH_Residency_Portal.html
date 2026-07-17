@@ -687,7 +687,15 @@ let CUMULATIVE_KPI_LOADING=false;
 // LEAVE PLAN (AY 2026-27 planning — separate from leave_records)
 const LP_AY=2026;
 const LP_CAP=4;
-const LP_DEADLINE=new Date("2026-07-18T23:59:59");
+let LP_DEADLINE=new Date("2026-07-18T23:59:59"); // fallback until loadLpStatus() resolves the DB value
+let LP_STATUS=null; // {academic_year,deadline} — loaded from leave_plan_status, PD/plan_rota-controlled
+function lpDeadlineShort(){return LP_DEADLINE.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
+function lpDeadlineLong(){
+  const wd=LP_DEADLINE.toLocaleDateString("en-GB",{weekday:"long"});
+  const dm=LP_DEADLINE.toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
+  const isMidnight=LP_DEADLINE.getHours()===23&&LP_DEADLINE.getMinutes()===59;
+  return wd+", "+dm+(isMidnight?" at midnight":" at "+LP_DEADLINE.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}));
+}
 let GIM_STATUS=null; // {academic_year,is_open,opened_at,deadline} — loaded from gim_rota_status, PD-controlled
 const LP_PERIODS=[
   {key:"1a",blk:1,half:"first",label:"Block 1 - First Half",from:"2026-10-04",to:"2026-10-17",disp:"4 - 17 Oct 2026",r1lock:true},
@@ -872,6 +880,18 @@ async function loadGimPrefs(){
   if(error){console.warn("gim_rota_prefs load error",error.message);return;}
   GIM_PREFS={};
   (data||[]).forEach(r=>{GIM_PREFS[r.resident_id]=r;});
+}
+async function loadLpStatus(){
+  const{data,error}=await sb.from("leave_plan_status").select("*").eq("academic_year",LP_AY).maybeSingle();
+  if(error){console.warn("leave_plan_status load error",error.message);return;}
+  if(data?.deadline){LP_STATUS=data;LP_DEADLINE=new Date(data.deadline);}
+}
+async function setLpDeadline(iso){
+  const{error}=await sb.from("leave_plan_status").upsert({academic_year:LP_AY,deadline:iso},{onConflict:"academic_year"});
+  if(error){showToast("Error: "+error.message,"error");return;}
+  await loadLpStatus();
+  showToast("Leave Plan deadline updated","success");
+  render();
 }
 async function loadGimStatus(){
   const{data,error}=await sb.from("gim_rota_status").select("*").eq("academic_year",LP_AY).maybeSingle();
@@ -7046,7 +7066,7 @@ function renderLeavePlan(){
   function cdBanner(){
     if(passed){
       return el("div",{st:{background:"rgba(181,32,64,.08)",border:"1px solid rgba(181,32,64,.2)",borderRadius:"10px",padding:"12px 16px",marginBottom:"20px",fontSize:".8rem",color:"#b52040",fontWeight:"600"}},
-        "Submission deadline has passed (18 Jul 2026). Contact the PD to update your plan.");
+        "Submission deadline has passed ("+lpDeadlineShort()+"). Contact the PD to update your plan.");
     }
     const diff=Math.max(0,Math.floor((LP_DEADLINE-now)/1000));
     const d=Math.floor(diff/86400),h=Math.floor((diff%86400)/3600),m=Math.floor((diff%3600)/60),s=diff%60;
@@ -7056,7 +7076,7 @@ function renderLeavePlan(){
     return el("div",{st:{display:"flex",alignItems:"center",gap:"14px",background:"linear-gradient(135deg,#2c1a0e,#4a2c1a)",borderRadius:"12px",padding:"14px 20px",marginBottom:"20px"}},
       el("div",{st:{flex:"1"}},
         el("div",{st:{fontSize:".72rem",fontWeight:"600",color:"rgba(254,251,243,.5)",textTransform:"uppercase",letterSpacing:".07em",marginBottom:"2px"}},"Submission Deadline"),
-        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1rem",fontWeight:"600",color:"#FEFBF3"}},"Friday, 18 July 2026 at midnight")
+        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1rem",fontWeight:"600",color:"#FEFBF3"}},lpDeadlineLong())
       ),
       el("div",{st:{display:"flex",gap:"8px",alignItems:"center"}},
         box(d,"Days"),
@@ -7185,7 +7205,7 @@ function renderLeavePlan(){
     return el("div",null,
       cdBanner(),
       submitted
-        ?el("div",{st:{background:"rgba(38,90,72,.08)",border:"1px solid rgba(38,90,72,.2)",borderRadius:"10px",padding:"12px 16px",marginBottom:"20px",fontSize:".82rem",color:"#26523A",fontWeight:"500"}},"Your leave plan has been submitted. You can still edit or cancel your selections anytime before the 18 Jul 2026 deadline.")
+        ?el("div",{st:{background:"rgba(38,90,72,.08)",border:"1px solid rgba(38,90,72,.2)",borderRadius:"10px",padding:"12px 16px",marginBottom:"20px",fontSize:".82rem",color:"#26523A",fontWeight:"500"}},"Your leave plan has been submitted. You can still edit or cancel your selections anytime before the "+lpDeadlineShort()+" deadline.")
         :el("div",{st:{background:"#fef9ec",border:"1px solid #f0d98a",borderRadius:"10px",padding:"12px 16px",marginBottom:"24px",fontSize:".8rem",color:"#92680a",lineHeight:"1.5"}},
           "Select your ",el("strong",null,"First Leave")," and ",el("strong",null,"Second Leave")," periods — 2 weeks each. Both will be written into your AY 2026-27 rota once the PD applies the plan."
         ),
@@ -7318,7 +7338,31 @@ function renderLeavePlan(){
       );
     }
 
+    function lpDeadlinePanel(){
+      if(STATE.lpDeadlineInput===undefined){
+        const d=LP_DEADLINE,pad=n=>String(n).padStart(2,"0");
+        STATE.lpDeadlineInput=d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+"T"+pad(d.getHours())+":"+pad(d.getMinutes());
+      }
+      return el("div",{cls:"card",st:{background:"#fdf5f0",border:"2px solid #c96a4a",marginBottom:"20px",maxWidth:"640px"}},
+        el("div",{cls:"card-title",st:{color:"#9c4a2e"}},"Leave Plan — Submission Deadline"),
+        el("div",{st:{display:"flex",gap:"12px",alignItems:"flex-end",flexWrap:"wrap"}},
+          el("div",null,
+            el("label",null,"Deadline"),
+            el("input",{type:"datetime-local",value:STATE.lpDeadlineInput,
+              onInput:e=>{STATE.lpDeadlineInput=e.target.value;},
+              st:{maxWidth:"220px"}})
+          ),
+          el("button",{cls:"sbtn primary",st:{background:"#c96a4a"},async onClick(){
+            if(!STATE.lpDeadlineInput)return;
+            await setLpDeadline(new Date(STATE.lpDeadlineInput).toISOString());
+          }},"Save Deadline")
+        ),
+        el("p",{cls:"sh",st:{marginTop:"8px",fontSize:".78rem"}},"Current: "+lpDeadlineLong()+". Updates the countdown, banners, and calendar feed for every resident.")
+      );
+    }
+
     return el("div",null,
+      lpDeadlinePanel(),
       gimControlPanel(),
       sumStrip,
       el("div",{st:{display:"flex",alignItems:"center",gap:"14px",marginBottom:"16px",flexWrap:"wrap"}},
@@ -7336,7 +7380,7 @@ function renderLeavePlan(){
               const{data:profs}=await sb.from("profiles").select("id,username").in("username",usernames);
               if(!profs||!profs.length){showToast("Could not find resident profiles","error");return;}
               const results=await Promise.all(profs.map(async p=>{
-                const{error}=await sb.from("notifications").insert({profile_id:p.id,type:"info",message:"Reminder: Please submit your AY 2026-27 Leave Plan before 18 July 2026.",link_mod:"leave_plan",link_param:null,read:false});
+                const{error}=await sb.from("notifications").insert({profile_id:p.id,type:"info",message:"Reminder: Please submit your AY 2026-27 Leave Plan before "+lpDeadlineShort()+".",link_mod:"leave_plan",link_param:null,read:false});
                 if(error)console.warn("notif insert failed for",p.username,error.message);
                 return !error;
               }));
@@ -8988,6 +9032,7 @@ function renderCalModal(){
         loadLeavePlan();
         loadGimPrefs();
         loadGimStatus();
+        loadLpStatus();
         loadNotifications();
         setInterval(()=>{if(STATE.user)loadNotifications();},60000);
         loadQuizzes().catch(e=>console.warn("Quiz load failed:",e));
