@@ -70,20 +70,21 @@ function fold(line: string): string {
 }
 
 const SLOT_LABELS: Record<string, string> = {
-  er_medical: "ER Medical", bldg1: "Floor (Bldg 1)", bldg2: "Floor (Bldg 2)",
-  consult: "Consult", we_er: "ER Medical (Weekend)", we_bldg1: "Floor Bldg 1 (Weekend)",
-  we_bldg2: "Floor Bldg 2 (Weekend)", we_consult: "Consult (Weekend)",
-  ctu_a: "CTU Cover A", ctu_b: "CTU Cover B",
+  er_medical: "ER Medical Oncall", bldg1: "Floor Oncall", bldg2: "Floor Oncall",
+  consult: "Floor Oncall", ctu1: "CTU Cover A", ctu2: "CTU Cover B",
 };
 
-// [start, end] in HHMMSS format for Asia/Riyadh
-const SLOT_TIMES: Record<string, [string, string]> = {
-  er_medical: ["160000","220000"], bldg1: ["160000","220000"],
-  bldg2: ["160000","220000"],     consult: ["160000","220000"],
-  we_er: ["080000","220000"],     we_bldg1: ["080000","220000"],
-  we_bldg2: ["080000","220000"],  we_consult: ["080000","220000"],
-  ctu_a: ["080000","160000"],     ctu_b: ["080000","160000"],
-};
+// Mirrors the client's isWeekendDate()/oncallHoursLabel() (SFH_Residency_Portal.html)
+// — CTU day-cover is always 08:00-16:00; other slots are 08:00-22:00 on Fri/Sat
+// (weekend) and 16:00-22:00 on weekdays. Must stay in sync with the client logic.
+function isWeekendDate(ds: string): boolean {
+  const [y, m, d] = ds.split("-").map(Number);
+  return [5, 6].includes(new Date(Date.UTC(y, m - 1, d)).getUTCDay());
+}
+function slotTimes(slotKey: string, ds: string): [string, string] {
+  if (slotKey === "ctu1" || slotKey === "ctu2") return ["080000", "160000"];
+  return isWeekendDate(ds) ? ["080000", "220000"] : ["160000", "220000"];
+}
 
 const ANN_ICON: Record<string, string> = {
   task: "📋", research: "🔬", qi: "📈",
@@ -267,7 +268,7 @@ Deno.serve(async (req) => {
 
     (ocs ?? []).forEach((e: { id: string; schedule_date: string; slot_key: string; is_extra: boolean }) => {
       const lbl = SLOT_LABELS[e.slot_key] ?? e.slot_key;
-      const [sh, eh] = SLOT_TIMES[e.slot_key] ?? ["160000", "220000"];
+      const [sh, eh] = slotTimes(e.slot_key, e.schedule_date);
       const ds = e.schedule_date.replace(/-/g, "");
       push(
         "BEGIN:VEVENT",
@@ -384,6 +385,43 @@ Deno.serve(async (req) => {
         "END:VEVENT",
       );
     });
+
+    // Leave Plan submission deadline — mirrors LP_DEADLINE in SFH_Residency_Portal.html
+    // (hardcoded client-side, not stored in a table; keep this date in sync with it).
+    if (resId) {
+      push(
+        "BEGIN:VEVENT",
+        "UID:dsfh-lp-deadline-" + ay + "@dsfh.local",
+        "SUMMARY:\u23F0 Leave Plan Submission \u2014 DUE",
+        "DTSTART;VALUE=DATE:20260718",
+        "DTEND;VALUE=DATE:20260718",
+        fold("DESCRIPTION:" + icsEscape("Submit or finalize your leave plan for AY " + ay + "/" + String(ay + 1).slice(-2) + " \u2022 DSFH IM Residency")),
+        "CATEGORIES:Deadline",
+        "END:VEVENT",
+      );
+    }
+
+    // GIM rotation preference submission deadline — DB-backed, only if open with a deadline set
+    if (resId) {
+      const { data: gimStatus } = await sb
+        .from("gim_rota_status")
+        .select("is_open, deadline")
+        .eq("academic_year", ay)
+        .maybeSingle();
+      if (gimStatus?.is_open && gimStatus.deadline) {
+        const ds = String(gimStatus.deadline).slice(0, 10).replace(/-/g, "");
+        push(
+          "BEGIN:VEVENT",
+          "UID:dsfh-gim-deadline-" + ay + "@dsfh.local",
+          "SUMMARY:\u23F0 GIM Rotation Preferences \u2014 DUE",
+          "DTSTART;VALUE=DATE:" + ds,
+          "DTEND;VALUE=DATE:" + ds,
+          fold("DESCRIPTION:" + icsEscape("Submit your GIM rotation block preferences for AY " + ay + "/" + String(ay + 1).slice(-2) + " \u2022 DSFH IM Residency")),
+          "CATEGORIES:Deadline",
+          "END:VEVENT",
+        );
+      }
+    }
   }
 
   lines.push("END:VCALENDAR");
