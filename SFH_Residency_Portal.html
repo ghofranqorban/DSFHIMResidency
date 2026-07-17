@@ -8935,8 +8935,8 @@ function renderCalModal(){
           onClick:function(e){navigator.clipboard.writeText(feedUrl).then(function(){var b=e.target;b.textContent="Copied!";setTimeout(function(){b.textContent="Copy";},2000);}).catch(function(){prompt("Copy this link:",feedUrl);});}},"Copy")
       ),
       el("div",{st:{display:"flex",flexDirection:"column",gap:"8px",marginBottom:"16px"}},
-        el("button",{cls:"sbtn",st:{fontSize:".84rem",background:"#1c1c1e",color:"#fff",border:"none"},
-          onClick:function(){window.location.href=webcalUrl;}},"Add to Apple Calendar / iPhone"),
+        el("a",{href:webcalUrl,
+          st:{fontSize:".84rem",background:"#1c1c1e",color:"#fff",border:"none",borderRadius:"8px",padding:"9px 14px",textDecoration:"none",display:"block",textAlign:"center",fontFamily:"inherit",cursor:"pointer"}},"Add to Apple Calendar / iPhone"),
         el("a",{href:gcalUrl,target:"_blank",
           st:{fontSize:".84rem",background:"#4285f4",color:"#fff",border:"none",borderRadius:"8px",padding:"9px 14px",textDecoration:"none",display:"block",textAlign:"center",fontFamily:"inherit",cursor:"pointer"}}, "Add to Google Calendar"),
         el("button",{cls:"sbtn ghost",st:{fontSize:".84rem"},
