@@ -6908,21 +6908,23 @@ function renderLeavePlan(){
       el("div",{cls:"modal-card",st:{width:"440px",maxWidth:"92vw",padding:"26px"}},
         el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.1rem",fontWeight:"600",color:"#1F1A12",marginBottom:"10px"}},"Keep as Suggestion"),
         el("div",{st:{fontSize:".85rem",color:"rgba(31,26,18,.6)",lineHeight:"1.5",marginBottom:"16px"}},
-          cnt+" resident"+(cnt===1?" has":"s have")+" already applied for "+(period?period.label.replace(" - "," — "):"this period")+". You can still submit it as your preferred pick — once the PD finalizes the rota, conflicts will be resolved. Optionally choose a backup period below in case this one can't be granted."
+          cnt+" resident"+(cnt===1?" has":"s have")+" already applied for "+(period?period.label.replace(" - "," — "):"this period")+" — it's already full. This choice will be kept only as your ",el("strong",null,"suggestion"),", not a guaranteed slot. Please choose a backup period the PD can fall back to if this one can't be granted."
         ),
-        el("label",{st:{fontSize:".7rem",fontWeight:"600",textTransform:"uppercase",letterSpacing:".05em",color:"rgba(31,26,18,.45)",display:"block",marginBottom:"6px"}},"Backup Period (optional)"),
+        el("label",{st:{fontSize:".7rem",fontWeight:"600",textTransform:"uppercase",letterSpacing:".05em",color:"rgba(31,26,18,.45)",display:"block",marginBottom:"6px"}},"Backup Period (required)"),
         el("select",{st:{width:"100%",padding:"9px 12px",borderRadius:"9px",border:"1px solid rgba(31,26,18,.15)",fontSize:".85rem",marginBottom:"20px",background:"#F6EFE2",color:"#1F1A12"},
           onChange:e=>set({lpAltPending:{...pend,altChoice:e.target.value||null}})},
-          el("option",{value:""},"No backup"),
+          el("option",{value:""},"Select a backup period…"),
           ...altOptions.map(p=>el("option",{value:p.key,selected:pend.altChoice===p.key},p.label.replace(" - "," — ")))
         ),
         el("div",{st:{display:"flex",justifyContent:"flex-end",gap:"10px"}},
           el("button",{st:{background:"#F6EFE2",color:"#1F1A12",border:"none",borderRadius:"9999px",padding:"9px 18px",fontFamily:"Inter,sans-serif",fontWeight:"500",fontSize:".82rem",cursor:"pointer"},
             onClick:()=>set({lpAltPending:null})},"Cancel — choose different period"),
-          el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"9999px",padding:"9px 22px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".82rem",cursor:"pointer"},
+          el("button",{st:{background:pend.altChoice?"#c96a4a":"rgba(31,26,18,.12)",color:pend.altChoice?"#FEFBF3":"rgba(31,26,18,.35)",border:"none",borderRadius:"9999px",padding:"9px 22px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".82rem",cursor:pend.altChoice?"pointer":"not-allowed"},
+            disabled:!pend.altChoice,
             onClick:()=>{
-              if(pend.which==="a")set({lpFirstKey:pend.key,lpFirstAltKey:pend.altChoice||null,lpAltPending:null});
-              else set({lpSecondKey:pend.key,lpSecondAltKey:pend.altChoice||null,lpAltPending:null});
+              if(!pend.altChoice)return;
+              if(pend.which==="a")set({lpFirstKey:pend.key,lpFirstAltKey:pend.altChoice,lpAltPending:null});
+              else set({lpSecondKey:pend.key,lpSecondAltKey:pend.altChoice,lpAltPending:null});
             }},"Save as Suggestion")
         )
       )
