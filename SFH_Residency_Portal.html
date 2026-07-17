@@ -740,8 +740,10 @@ async function saveLeavePlan(status){
     resident_id:Number(u.rid),academic_year:LP_AY,
     first_leave_key:fk,first_leave_block:fp?.blk||null,first_leave_half:fp?.half||null,
     first_leave_from:fp?.from||null,first_leave_to:fp?.to||null,
+    first_leave_alt_key:STATE.lpFirstAltKey||null,
     second_leave_key:sk,second_leave_block:sp?.blk||null,second_leave_half:sp?.half||null,
     second_leave_from:sp?.from||null,second_leave_to:sp?.to||null,
+    second_leave_alt_key:STATE.lpSecondAltKey||null,
     note,status,updated_at:new Date().toISOString(),
   };
   if(status==="submitted")row.submitted_at=new Date().toISOString();
@@ -1838,7 +1840,7 @@ function renderSidebar(){
         el("span",{cls:"sni"},el("svg",{width:"15",height:"15",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor","stroke-width":"2","stroke-linecap":"round","stroke-linejoin":"round"},el("path",{d:"M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"}),el("polyline",{points:"9 22 9 12 15 12 15 22"}))),
         el("span",null,"Home")
       ),
-      ...avail.map(m=>el("div",{cls:"snav"+(STATE.mod===m.id?" active":""),onClick:()=>set({mod:m.id,adminProfile:null,searchQ:"",showMobileNav:false,...(m.id==="kpi_exec"?{kpiExResident:null}:{}),...(m.id==="leave_plan"?{lpFirstKey:undefined,lpSecondKey:undefined,lpTab:undefined}:{})})},
+      ...avail.map(m=>el("div",{cls:"snav"+(STATE.mod===m.id?" active":""),onClick:()=>set({mod:m.id,adminProfile:null,searchQ:"",showMobileNav:false,...(m.id==="kpi_exec"?{kpiExResident:null}:{}),...(m.id==="leave_plan"?{lpFirstKey:undefined,lpSecondKey:undefined,lpFirstAltKey:undefined,lpSecondAltKey:undefined,lpTab:undefined}:{})})},
         el("span",{cls:"sni"},modIcon(m.id,15)),
         el("span",null,m.label)
       ))
@@ -2188,7 +2190,7 @@ function renderModGrid(){
     el("p",{cls:"home-section-tag"},"Quick Access"),
     el("h2",{cls:"home-section-title"},"Where would you like to go?"),
     el("div",{cls:"home-mod-grid"},
-      ...avail.map(m=>el("div",{cls:"home-modbtn",onClick:()=>set({mod:m.id,adminProfile:null,...(m.id==="kpi_exec"?{kpiExResident:null}:{}),...(m.id==="leave_plan"?{lpFirstKey:undefined,lpSecondKey:undefined,lpTab:undefined}:{})})},
+      ...avail.map(m=>el("div",{cls:"home-modbtn",onClick:()=>set({mod:m.id,adminProfile:null,...(m.id==="kpi_exec"?{kpiExResident:null}:{}),...(m.id==="leave_plan"?{lpFirstKey:undefined,lpSecondKey:undefined,lpFirstAltKey:undefined,lpSecondAltKey:undefined,lpTab:undefined}:{})})},
         el("div",{cls:"home-mod-ico-wrap",st:{background:(m.color||"#c96a4a")+"22"}},
           el("span",{cls:"home-mod-ico"},modIcon(m.id))
         ),
@@ -6786,6 +6788,8 @@ function renderLeavePlan(){
   const myPlan=LEAVE_PLAN[u.rid]||null;
   if(STATE.lpFirstKey===undefined)STATE.lpFirstKey=myPlan?.first_leave_key||null;
   if(STATE.lpSecondKey===undefined)STATE.lpSecondKey=myPlan?.second_leave_key||null;
+  if(STATE.lpFirstAltKey===undefined)STATE.lpFirstAltKey=myPlan?.first_leave_alt_key||null;
+  if(STATE.lpSecondAltKey===undefined)STATE.lpSecondAltKey=myPlan?.second_leave_alt_key||null;
   const fk=STATE.lpFirstKey,sk=STATE.lpSecondKey;
   const fp=LP_PERIODS.find(p=>p.key===fk),sp=LP_PERIODS.find(p=>p.key===sk);
   const submitted=myPlan?.status==="submitted";
@@ -6823,13 +6827,20 @@ function renderLeavePlan(){
   function slotBar(){
     function slot(which,period,label,colorHex,bgRgb){
       const filled=!!period;
+      const altKey=which==="a"?STATE.lpFirstAltKey:STATE.lpSecondAltKey;
+      const altPeriod=altKey?LP_PERIODS.find(x=>x.key===altKey):null;
+      const overCap=filled&&lpPeriodCount(period.key,u.rid)>=LP_CAP;
       return el("div",{st:{flex:"1",borderRadius:"14px",padding:"18px 20px",border:"2px solid "+(filled?colorHex:"rgba(31,26,18,.1)"),background:filled?"rgba("+bgRgb+",.05)":"#FEFBF3",position:"relative",minHeight:"80px"}},
         el("div",{st:{fontSize:".63rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",marginBottom:"7px",color:colorHex}},label),
         filled
-          ?[el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",fontWeight:"600",lineHeight:"1.3",color:"#1F1A12"}},period.label.replace(" - "," — ")),
+          ?[el("div",{st:{display:"flex",alignItems:"center",gap:"8px"}},
+              el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",fontWeight:"600",lineHeight:"1.3",color:"#1F1A12"}},period.label.replace(" - "," — ")),
+              overCap?el("span",{st:{fontSize:".58rem",fontWeight:"700",padding:"2px 8px",borderRadius:"9999px",background:"#fde8e8",color:"#b52040"}},"SUGGESTION"):null
+            ),
             el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.45)",marginTop:"3px"}},period.disp),
+            altPeriod?el("div",{st:{fontSize:".7rem",color:"rgba(31,26,18,.5)",marginTop:"6px"}},"Backup: ",el("strong",null,altPeriod.label.replace(" - "," — "))):null,
             !submitted&&!passed?el("button",{st:{position:"absolute",top:"12px",right:"12px",background:"none",border:"none",cursor:"pointer",color:"rgba(31,26,18,.3)",fontSize:"1.1rem",padding:"2px 6px",borderRadius:"6px"},
-              onClick:()=>set({[which==="a"?"lpFirstKey":"lpSecondKey"]:null})},"x"):null]
+              onClick:()=>set({[which==="a"?"lpFirstKey":"lpSecondKey"]:null,[which==="a"?"lpFirstAltKey":"lpSecondAltKey"]:null})},"x"):null]
           :el("div",{st:{fontSize:".8rem",color:"rgba(31,26,18,.3)",fontStyle:"italic",marginTop:"4px"}},"Not selected yet")
       );
     }
@@ -6863,23 +6874,17 @@ function renderLeavePlan(){
               ?el("div",{st:{display:"flex",gap:"6px",flexShrink:"0"}},
                   el("button",{st:{border:"none",borderRadius:"9999px",padding:"5px 14px",fontFamily:"Inter,sans-serif",fontSize:".72rem",fontWeight:"600",cursor:"pointer",transition:"all .15s",background:isFirst?"#c96a4a":"rgba(201,106,74,.12)",color:isFirst?"#FEFBF3":"#c96a4a"},
                     onClick:()=>{
-                      if(isFirst){set({lpFirstKey:null});return;}
+                      if(isFirst){set({lpFirstKey:null,lpFirstAltKey:null});return;}
                       const cnt=lpPeriodCount(p.key,u.rid);
-                      if(cnt>=LP_CAP){
-                        showConfirm(cnt+" residents have already applied for this time frame. If possible, choose an alternative period — once the PD finalizes the rota, conflicts will be resolved. Keep this as your suggestion anyway?",()=>set({lpFirstKey:p.key}),"Keep as Suggestion","warn");
-                        return;
-                      }
-                      set({lpFirstKey:p.key});
+                      if(cnt>=LP_CAP){set({lpAltPending:{which:"a",key:p.key,altChoice:null}});return;}
+                      set({lpFirstKey:p.key,lpFirstAltKey:null});
                     }},"First Leave"),
                   el("button",{st:{border:"none",borderRadius:"9999px",padding:"5px 14px",fontFamily:"Inter,sans-serif",fontSize:".72rem",fontWeight:"600",cursor:"pointer",transition:"all .15s",background:isSecond?"#26523A":"rgba(38,90,72,.1)",color:isSecond?"#FEFBF3":"#26523A"},
                     onClick:()=>{
-                      if(isSecond){set({lpSecondKey:null});return;}
+                      if(isSecond){set({lpSecondKey:null,lpSecondAltKey:null});return;}
                       const cnt=lpPeriodCount(p.key,u.rid);
-                      if(cnt>=LP_CAP){
-                        showConfirm(cnt+" residents have already applied for this time frame. If possible, choose an alternative period — once the PD finalizes the rota, conflicts will be resolved. Keep this as your suggestion anyway?",()=>set({lpSecondKey:p.key}),"Keep as Suggestion","warn");
-                        return;
-                      }
-                      set({lpSecondKey:p.key});
+                      if(cnt>=LP_CAP){set({lpAltPending:{which:"b",key:p.key,altChoice:null}});return;}
+                      set({lpSecondKey:p.key,lpSecondAltKey:null});
                     }},"Second Leave")
                 )
               :locked&&isR1&&!!p.r1lock&&!isFirst&&!isSecond
@@ -6891,6 +6896,37 @@ function renderLeavePlan(){
         })
       );
     }));
+  }
+
+  function altModal(){
+    const pend=STATE.lpAltPending;if(!pend)return null;
+    const period=LP_PERIODS.find(x=>x.key===pend.key);
+    const cnt=lpPeriodCount(pend.key,u.rid);
+    const otherKey=pend.which==="a"?sk:fk;
+    const altOptions=LP_PERIODS.filter(p=>p.key!==pend.key&&p.key!==otherKey&&!(isR1&&p.r1lock)&&!(p.r3only&&!isR3));
+    return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)set({lpAltPending:null});}},
+      el("div",{cls:"modal-card",st:{width:"440px",maxWidth:"92vw",padding:"26px"}},
+        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.1rem",fontWeight:"600",color:"#1F1A12",marginBottom:"10px"}},"Keep as Suggestion"),
+        el("div",{st:{fontSize:".85rem",color:"rgba(31,26,18,.6)",lineHeight:"1.5",marginBottom:"16px"}},
+          cnt+" resident"+(cnt===1?" has":"s have")+" already applied for "+(period?period.label.replace(" - "," — "):"this period")+". You can still submit it as your preferred pick — once the PD finalizes the rota, conflicts will be resolved. Optionally choose a backup period below in case this one can't be granted."
+        ),
+        el("label",{st:{fontSize:".7rem",fontWeight:"600",textTransform:"uppercase",letterSpacing:".05em",color:"rgba(31,26,18,.45)",display:"block",marginBottom:"6px"}},"Backup Period (optional)"),
+        el("select",{st:{width:"100%",padding:"9px 12px",borderRadius:"9px",border:"1px solid rgba(31,26,18,.15)",fontSize:".85rem",marginBottom:"20px",background:"#F6EFE2",color:"#1F1A12"},
+          onChange:e=>set({lpAltPending:{...pend,altChoice:e.target.value||null}})},
+          el("option",{value:""},"No backup"),
+          ...altOptions.map(p=>el("option",{value:p.key,selected:pend.altChoice===p.key},p.label.replace(" - "," — ")))
+        ),
+        el("div",{st:{display:"flex",justifyContent:"flex-end",gap:"10px"}},
+          el("button",{st:{background:"#F6EFE2",color:"#1F1A12",border:"none",borderRadius:"9999px",padding:"9px 18px",fontFamily:"Inter,sans-serif",fontWeight:"500",fontSize:".82rem",cursor:"pointer"},
+            onClick:()=>set({lpAltPending:null})},"Cancel — choose different period"),
+          el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"9999px",padding:"9px 22px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".82rem",cursor:"pointer"},
+            onClick:()=>{
+              if(pend.which==="a")set({lpFirstKey:pend.key,lpFirstAltKey:pend.altChoice||null,lpAltPending:null});
+              else set({lpSecondKey:pend.key,lpSecondAltKey:pend.altChoice||null,lpAltPending:null});
+            }},"Save as Suggestion")
+        )
+      )
+    );
   }
 
   function myTab(){
@@ -6956,8 +6992,17 @@ function renderLeavePlan(){
             if(p.r1lock&&r.level==="R1")return el("td",{st:{textAlign:"center",fontSize:".58rem",color:"rgba(31,26,18,.15)"}},"-");
             if(!plan||plan.status!=="submitted")return el("td",{st:{textAlign:"center",fontSize:".65rem",color:"rgba(31,26,18,.15)"}},"-");
             const isF=plan.first_leave_key===p.key,isS=plan.second_leave_key===p.key;
-            if(isF)return el("td",{st:{textAlign:"center"}},el("span",{title:"First Leave",st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#c96a4a"}}));
-            if(isS)return el("td",{st:{textAlign:"center"}},el("span",{title:"Second Leave",st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#26523A"}}));
+            const over=(counts[p.key]||0)>LP_CAP;
+            if(isF){
+              const alt=plan.first_leave_alt_key?LP_PERIODS.find(x=>x.key===plan.first_leave_alt_key):null;
+              const tt="First Leave"+(over?" — Suggestion (over cap)":"")+(alt?" — Backup: "+alt.label.replace(" - "," — "):"");
+              return el("td",{st:{textAlign:"center"}},el("span",{title:tt,st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#c96a4a",boxShadow:over?"0 0 0 2px #b52040":"none"}}));
+            }
+            if(isS){
+              const alt=plan.second_leave_alt_key?LP_PERIODS.find(x=>x.key===plan.second_leave_alt_key):null;
+              const tt="Second Leave"+(over?" — Suggestion (over cap)":"")+(alt?" — Backup: "+alt.label.replace(" - "," — "):"");
+              return el("td",{st:{textAlign:"center"}},el("span",{title:tt,st:{display:"inline-block",width:"9px",height:"9px",borderRadius:"50%",background:"#26523A",boxShadow:over?"0 0 0 2px #b52040":"none"}}));
+            }
             return el("td",{st:{textAlign:"center",fontSize:".65rem",color:"rgba(31,26,18,.18)"}},"-");
           })
         ));
@@ -7037,6 +7082,7 @@ function renderLeavePlan(){
     wrap.appendChild(tabBar);
   }
   wrap.appendChild(el("div",{st:{paddingTop:"28px"}},tab==="all"&&canManage?matrixTab():myTab()));
+  if(STATE.lpAltPending)wrap.appendChild(altModal());
   return wrap;
 }
 
