@@ -1142,3 +1142,17 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 **Net effect:** No in-app schedule-import feature exists anymore, by explicit final user decision after trying 3 approaches. New/updated MM & Teaching schedules go through: user sends file/screenshot in chat → Claude reads it and writes rows via direct Supabase calls or the normal Add/Edit form.
 
 **Still TODO (carried forward, unchanged):** `add_schedule_draft_publish.sql` and `fix_leave_records_source_check.sql` migrations not yet run; historical KPI data entry; On-Call Statistics tab visibility; `renderKPI()`/`renderAdminProfile()` splits; new AY 2026-27 master rota setup. Not yet addressed: whether to delete stale untracked `perf_report_preview.html`.
+
+---
+
+### Session — 18 Jul 2026 (Abdulmajeed login fix, Leave Plan Block 13 cap removed for R3s)
+
+**Support fix — Dr. Abdulmajeed couldn't log in:** He forgot his password after changing it, and his linked email is a synthetic `@dsfh.local` address (not real), so no email-reset flow was possible. Reset directly via Supabase Auth Admin API (`auth.admin.updateUserById` over REST with the service role key) — issued a fresh temporary password, no code change needed.
+
+**Data fix — username typo corrected:** His account had been seeded as `abdulmajee` (missing the trailing "d" — see `supabase/seed.mjs:71`), while his display name was always the correct "Dr. Abdulmajeed". User confirmed the mismatch was unintentional, so updated the auth email, `profiles.username`, and `residents.username` all to `abdulmajeed` via direct REST calls. DB-only, no portal code touched.
+
+**Feature — Leave Plan Block 13 uncapped for R3s (committed `c25a69c`, pushed):** Block 13 (both halves) was already restricted to current R3s only (`r3only:true` on `13a`/`13b` in `LP_PERIODS`, next AY's R4s, exam-prep block). Per PD agreement, ALL R3s can now take annual leave there with no residency cap (previously shared the portal-wide `LP_CAP=4`). Added `lpCapFor(period)` helper (~line 752, right after `lpPeriodCount()`) — returns `Infinity` when `period.r3only` is true, else `LP_CAP`. Applied everywhere a cap comparison happened: `saveLeavePlan()`'s mandatory-second-preference check, the slot bar's "SUGGESTION" badge, the period picker's over-cap backup prompt, the PD matrix's over-cap count/dot-ring/tooltip and bottom "on leave / period" row, and the PD decision modal's "OVER CAP"/"Approve as Suggested" flow. The two generic legend/summary labels that just say "Over cap (4)" were left referencing `LP_CAP` directly since they still describe every other block correctly.
+
+**Reminder:** Leave Plan submissions deadline (`LP_DEADLINE`/`LP_STATUS`) is set for 18 Jul 2026 — check with PD whether it needs extending before residents lose the ability to submit/edit.
+
+**Still TODO (carried forward, unchanged):** `add_schedule_draft_publish.sql` and `fix_leave_records_source_check.sql` migrations not yet run; historical KPI data entry; On-Call Statistics tab visibility; `renderKPI()`/`renderAdminProfile()` splits; new AY 2026-27 master rota setup; stale untracked `perf_report_preview.html` not yet addressed.
