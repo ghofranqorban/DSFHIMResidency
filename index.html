@@ -715,6 +715,16 @@ const LP_PERIODS=[
 ];
 let LEAVE_PLAN={}; // {resident_id: row}
 let _lpNoteDraft=null;
+function lpPeriodCount(periodKey,excludeResId){
+  let c=0;
+  RESIDENTS.forEach(r=>{
+    if(r.id===excludeResId)return;
+    const plan=LEAVE_PLAN[r.id];
+    if(!plan||plan.status!=="submitted")return;
+    if(plan.first_leave_key===periodKey||plan.second_leave_key===periodKey)c++;
+  });
+  return c;
+}
 async function loadLeavePlan(){
   const{data,error}=await sb.from("leave_plan").select("*").eq("academic_year",LP_AY);
   if(error){console.warn("leave_plan load error",error.message);return;}
@@ -6854,11 +6864,21 @@ function renderLeavePlan(){
                   el("button",{st:{border:"none",borderRadius:"9999px",padding:"5px 14px",fontFamily:"Inter,sans-serif",fontSize:".72rem",fontWeight:"600",cursor:"pointer",transition:"all .15s",background:isFirst?"#c96a4a":"rgba(201,106,74,.12)",color:isFirst?"#FEFBF3":"#c96a4a"},
                     onClick:()=>{
                       if(isFirst){set({lpFirstKey:null});return;}
+                      const cnt=lpPeriodCount(p.key,u.rid);
+                      if(cnt>=LP_CAP){
+                        showConfirm(cnt+" residents have already applied for this time frame. If possible, choose an alternative period — once the PD finalizes the rota, conflicts will be resolved. Keep this as your suggestion anyway?",()=>set({lpFirstKey:p.key}),"Keep as Suggestion","warn");
+                        return;
+                      }
                       set({lpFirstKey:p.key});
                     }},"First Leave"),
                   el("button",{st:{border:"none",borderRadius:"9999px",padding:"5px 14px",fontFamily:"Inter,sans-serif",fontSize:".72rem",fontWeight:"600",cursor:"pointer",transition:"all .15s",background:isSecond?"#26523A":"rgba(38,90,72,.1)",color:isSecond?"#FEFBF3":"#26523A"},
                     onClick:()=>{
                       if(isSecond){set({lpSecondKey:null});return;}
+                      const cnt=lpPeriodCount(p.key,u.rid);
+                      if(cnt>=LP_CAP){
+                        showConfirm(cnt+" residents have already applied for this time frame. If possible, choose an alternative period — once the PD finalizes the rota, conflicts will be resolved. Keep this as your suggestion anyway?",()=>set({lpSecondKey:p.key}),"Keep as Suggestion","warn");
+                        return;
+                      }
                       set({lpSecondKey:p.key});
                     }},"Second Leave")
                 )
