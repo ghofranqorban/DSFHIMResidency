@@ -2963,6 +2963,13 @@ function renderMMScheduleForm(blk,editingSession){
           svg.appendChild(svgEl("path",{d:"M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"}));
           return svg;
         }
+        function trashIcon(){
+          const svg=svgEl("svg",{width:"13",height:"13",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor","stroke-width":"2","stroke-linecap":"round","stroke-linejoin":"round"});
+          svg.appendChild(svgEl("path",{d:"M3 6h18"}));
+          svg.appendChild(svgEl("path",{d:"M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"}));
+          svg.appendChild(svgEl("path",{d:"M10 11v6M14 11v6"}));
+          return svg;
+        }
         const curVal=(editingSession&&editingSession.row_highlight)||"";
         const holder=document.createElement("div");
         const selRow=document.createElement("div");selRow.style.cssText="display:flex;gap:8px;align-items:center;";
@@ -2977,7 +2984,10 @@ function renderMMScheduleForm(blk,editingSession){
         const editBtn=document.createElement("button");editBtn.type="button";editBtn.title="Edit this highlight";
         editBtn.style.cssText="display:none;align-items:center;justify-content:center;width:34px;height:34px;flex-shrink:0;border-radius:8px;border:1px solid #ede5d8;background:#fff;cursor:pointer;color:#8a7a68;";
         editBtn.appendChild(pencilIcon());
-        selRow.appendChild(sel);selRow.appendChild(editBtn);
+        const delHlBtn=document.createElement("button");delHlBtn.type="button";delHlBtn.title="Delete this highlight";
+        delHlBtn.style.cssText="display:none;align-items:center;justify-content:center;width:34px;height:34px;flex-shrink:0;border-radius:8px;border:1px solid #ede5d8;background:#fff;cursor:pointer;color:#b8433a;";
+        delHlBtn.appendChild(trashIcon());
+        selRow.appendChild(sel);selRow.appendChild(editBtn);selRow.appendChild(delHlBtn);
         holder.appendChild(selRow);
         const box=document.createElement("div");
         box.style.cssText="display:none;gap:8px;align-items:center;margin-top:8px;";
@@ -2991,6 +3001,7 @@ function renderMMScheduleForm(blk,editingSession){
         function updateEditBtn(){
           const match=MM_HIGHLIGHTS.find(h=>h.color===sel.value);
           editBtn.style.display=match?"flex":"none";
+          delHlBtn.style.display=match?"flex":"none";
         }
         function closeBox(){box.style.display="none";editingId=null;sel.value=curVal;labelInput.value="";colorInput.value="#c96a4a";updateEditBtn();}
         cancelBtn.onclick=closeBox;
@@ -2999,6 +3010,23 @@ function renderMMScheduleForm(blk,editingSession){
         editBtn.onclick=()=>{
           const match=MM_HIGHLIGHTS.find(h=>h.color===sel.value);
           if(match)openEdit(match);
+        };
+        delHlBtn.onclick=()=>{
+          const match=MM_HIGHLIGHTS.find(h=>h.color===sel.value);
+          if(!match)return;
+          showConfirm("Delete highlight \""+match.label+"\"? Sessions already using it keep their color, but it will no longer be selectable.",async()=>{
+            const{error}=await sb.from("mm_highlights").delete().eq("id",match.id);
+            if(error){showToast("Could not delete: "+error.message);return;}
+            const idx=MM_HIGHLIGHTS.findIndex(h=>h.id===match.id);
+            if(idx>-1)MM_HIGHLIGHTS.splice(idx,1);
+            const opt=optByHlId[match.id];
+            if(opt)opt.remove();
+            delete optByHlId[match.id];
+            box.style.display="none";
+            sel.value="";
+            updateEditBtn();
+            showToast("Highlight deleted.","success");
+          },"Delete","danger");
         };
         saveBtn.onclick=async()=>{
           const label=labelInput.value.trim();
