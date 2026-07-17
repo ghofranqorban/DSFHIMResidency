@@ -120,21 +120,25 @@ QUIZZES_LOAD_ERR // string|null — set if quizzes table missing in Supabase
 - Attendance logging (P/L/A/E/O) with comment field
 - MM overview table · Export to Excel
 
-### KPI Dashboard (rebuilt Jul 2026)
+### KPI Dashboard (rebuilt Jul 2026, weights overhauled Jul 2026)
+**Central weight table:** `KPI_W` (~line 417) — all scoring below derives from this constant. **When changing `KPI_W`, grep for every consumer** — `calcKPI()`, `calcKPIQ()`, `renderKPI()`'s duplicate `yearlyRaw` calc, and the independent `kpiOngoingScore()` (Best Resident module) all hardcode/derive weights separately and have gone out of sync before (see Known Bugs/Gotchas + session log).
+
 **3-tab structure per resident:**
-- **📊 Ongoing (60%):** Quiz 20% · MM Att 15% · Teaching 15% · Presenter/Moderator 10% — all auto-tracked
+- **📊 Ongoing (50%):** Quiz 15% · MM Att 15% · Teaching 15% · Presenter/Moderator 5% — all auto-tracked, **scoped to `CURRENT_ACADEMIC_YEAR` only** (MM/Teaching attendance and presenter/moderator sessions are filtered by academic_year before aggregating)
 - **📆 Quarterly (informational, not scored):** Mentor sets Research Milestone + Area of Improvement per quarter as text. Anyone can submit "achieved" → PD approves. Resident can see (read-only).
-- **🏆 Yearly (40%):** Committee 10% (PD scores 0–10) + 6 achievement cards: QI Project 5% · Research Publication 5% · Oral Presentation 5% · Poster Presentation 3% · Awards/Honors 4% · Volunteering 3%
+- **🏆 Yearly (50%):** Committee 10% (PD scores 0–10) + 5 achievement cards: QI Project 10% · Research Publication 10% · Oral-or-Poster Presentation 10% (merged bucket — either counts, no double credit) · Awards/Honors 5% · Volunteering 5%
 
 **Proposal/approval flow:** Resident, mentor, chief, or PD can submit any yearly achievement. PD entries are auto-approved. All others show as ⏳ Pending — PD sees inline Approve/Reject. Approved proposals update `kpi_scores` and `kpi_proposals`.
 
-**Summary card** shows Ongoing score/60 + Quarterly quarter + Yearly score/40 as clickable tiles.
+**Summary card** shows Ongoing score/50 + Quarterly quarter + Yearly score/50 as clickable tiles.
 
-**All-residents table** adds Achievements column (X/6) with pending indicator.
+**All-residents table** adds Achievements column (X/5) with pending indicator.
 
 `exportKpiPDF(res, k)` generates a 3-section print report (Ongoing · Yearly · Quarterly).
 
 `renderProfileKPI` in admin panel shows compact version with link to full KPI tab.
+
+**Best Resident Live Rankings detail modal:** clicking a resident row opens `renderBrDetailModal()` (`STATE.brDetailRid`), showing the same 4 Ongoing components plus vote count and the final KPI 50% + Votes 50% score — added so rankings can be sanity-checked against `calcKPI()`.
 
 ### Quiz Marks
 - Add/edit/delete/publish quizzes · Bulk Excel import
@@ -219,6 +223,7 @@ QUIZZES_LOAD_ERR // string|null — set if quizzes table missing in Supabase
 - **Never build inline SVGs with `el("svg",...)`:** `el()` uses `document.createElement`, which is NOT namespace-aware — it silently produces a non-rendering element for `svg`/`path`/etc. This is why the sidebar Home icon was invisible for weeks with no error. Always add icons to `modIcon()`'s `D` map (uses `document.createElementNS`) and call `modIcon(id, size)` instead of hand-rolling SVG via `el()`.
 - **`render()` rebuilds the entire DOM from scratch:** never mutate a form element's `.value`/content directly (e.g. `document.getElementById(id).value=...`) and then call `render()` — the freshly-rebuilt element has no memory of that mutation and the change is silently lost. Store the value in a module-level var and pass it back in as the element's rendered content instead (caused the "scanned OCR text disappears after the toast shows" bug, 17 Jul 2026).
 - **New Supabase Storage buckets need RLS policies added manually:** creating a private bucket does NOT grant authenticated users any access — only the service_role key can read/write until explicit `storage.objects` INSERT/SELECT/UPDATE policies are added (same category of bug as the `profiles_write` RLS gap that broke calendar tokens). Caused KPI evidence file uploads to fail for every user from 10 Jul until fixed 18 Jul (`fix_kpi_evidence_storage_rls.sql`). If a new feature adds a Storage bucket, write the RLS policies in the same migration that creates it.
+- **`KPI_W` has multiple independent consumers — grep all of them before changing weights:** `calcKPI()`/`calcKPIQ()` read it directly, but `renderKPI()` also has its own duplicate `yearlyRaw` calc, and `kpiOngoingScore()` (Best Resident module) is a fully separate function that used to hardcode its own weights instead of deriving from `KPI_W`. During the Jul 2026 weight overhaul (15/15/15/5/10/10/10/10/5/5), `kpiOngoingScore()` was missed in the first pass and kept using stale pre-overhaul weights — silently mis-scored every resident's Best Resident ranking (producing suspicious tied scores) until the user noticed and flagged it. `kpiOngoingScore()` now derives everything from `KPI_W` dynamically — do not re-hardcode it.
 - **init() has try-catch:** So render() always runs even if data loading fails.
 - **GitHub Actions:** Custom deploy at `.github/workflows/deploy.yml` retries 3× — don't remove.
 - **After every change:** `cp SFH_Residency_Portal.html index.html` then commit+push both.
@@ -545,7 +550,7 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
   - **Quarter mapping**: Q1=Oct–Dec, Q2=Jan–Mar, Q3=Apr–Jun, Q4=Jul–Sep (academic year aligned)
   - **Score formula**: KPI 50% (`kpiOngoingScore(id)` = ongoing KPI normalized to 0–100) + Votes 50% (vote share across all voters). Equal weight for all voter roles. Self-vote blocked.
   - **🗳️ Vote tab**: Two dropdowns (Senior = R3/R4, Junior = R1/R2). One vote per quarter per profile. After voting shows confirmation with who you voted for. Votes anonymous.
-  - **📊 Live Rankings tab**: Real-time leaderboard per tier (senior/junior). Shows KPI%, vote count, final combined score. Animated bars. "YOU" badge for logged-in resident.
+  - **📊 Live Rankings tab**: Real-time leaderboard per tier (senior/junior). Shows KPI%, vote count, final combined score. Animated bars. "YOU" badge for logged-in resident. Rows are clickable (18 Jul 2026) — opens `renderBrDetailModal()` breaking down the KPI half into its Quiz/MM/Teaching/Presenter components plus votes, so scores can be sanity-checked.
   - **🏆 Hall of Fame tab**: All announced winners by quarter, loaded lazily via `loadBestResidentAll()`.
   - **PD controls** (pd/deputy_pd only): Open Voting (optional auto-close datetime), Close Voting, Announce Winners (auto-picks top scorer, asks confirmation).
   - **Home page Stars banner** (`renderBestResidentBanner()`): gold gradient banner between hero and alerts. Shows winner cards (crown, name, level, score) when announced; blurred mystery cards + pulsing voting strip with countdown when open; quiet placeholder otherwise.
