@@ -685,7 +685,7 @@ let CUMULATIVE_KPI_LOADING=false;
 const LP_AY=2026;
 const LP_CAP=4;
 const LP_DEADLINE=new Date("2026-07-18T23:59:59");
-const GIM_OPEN=false; // flip to true once PD announces the GIM Rotation Prefs submission window
+let GIM_STATUS=null; // {academic_year,is_open,opened_at,deadline} — loaded from gim_rota_status, PD-controlled
 const LP_PERIODS=[
   {key:"1a",blk:1,half:"first",label:"Block 1 - First Half",from:"2026-10-04",to:"2026-10-17",disp:"4 - 17 Oct 2026",r1lock:true},
   {key:"1b",blk:1,half:"second",label:"Block 1 - Second Half",from:"2026-10-18",to:"2026-11-01",disp:"18 Oct - 1 Nov 2026",r1lock:true},
@@ -829,6 +829,22 @@ function nextAYLevel(level){
   const map={R1:"R2",R2:"R3",R3:"R4"};
   return map[level]||null; // R4 -> null, graduating, not applicable next AY
 }
+function gimIsOpen(){
+  if(!GIM_STATUS||!GIM_STATUS.is_open)return false;
+  if(GIM_STATUS.deadline){const dl=new Date(GIM_STATUS.deadline);if(dl<new Date())return false;}
+  return true;
+}
+function gimDeadlineCountdown(){
+  if(!GIM_STATUS?.deadline)return null;
+  const diff=new Date(GIM_STATUS.deadline)-new Date();
+  if(diff<=0)return"Window closed";
+  const d=Math.floor(diff/86400000);
+  const h=Math.floor((diff%86400000)/3600000);
+  const mn=Math.floor((diff%3600000)/60000);
+  if(d>0)return d+"d "+h+"h left";
+  if(h>0)return h+"h "+mn+"m left";
+  return mn+"m left";
+}
 function gimLeaveBlocks(residentId){
   const plan=LEAVE_PLAN[residentId];if(!plan)return new Set();
   const s=new Set();
@@ -841,6 +857,26 @@ async function loadGimPrefs(){
   if(error){console.warn("gim_rota_prefs load error",error.message);return;}
   GIM_PREFS={};
   (data||[]).forEach(r=>{GIM_PREFS[r.resident_id]=r;});
+}
+async function loadGimStatus(){
+  const{data,error}=await sb.from("gim_rota_status").select("*").eq("academic_year",LP_AY).maybeSingle();
+  if(error){console.warn("gim_rota_status load error",error.message);return;}
+  GIM_STATUS=data||null;
+}
+async function gimOpenWindow(deadline){
+  const row={academic_year:LP_AY,is_open:true,opened_at:new Date().toISOString(),deadline:deadline||null};
+  const{error}=await sb.from("gim_rota_status").upsert(row,{onConflict:"academic_year"});
+  if(error){showToast("Error: "+error.message,"error");return;}
+  await loadGimStatus();
+  showToast("GIM Rotation Prefs submission window opened","success");
+  render();
+}
+async function gimCloseWindow(){
+  const{error}=await sb.from("gim_rota_status").upsert({academic_year:LP_AY,is_open:false},{onConflict:"academic_year"});
+  if(error){showToast("Error: "+error.message,"error");return;}
+  await loadGimStatus();
+  showToast("GIM Rotation Prefs submission window closed","success");
+  render();
 }
 async function saveGimPrefs(status){
   const u=STATE.user;if(!u?.rid)return;
@@ -7143,7 +7179,42 @@ function renderLeavePlan(){
       blkHeaders.push(el("th",{colSpan:"2",st:{background:"#EDE5DD",borderBottom:"1px solid rgba(31,26,18,.08)",borderLeft:"1px solid rgba(31,26,18,.06)",textAlign:"center",padding:"5px 4px",fontFamily:"'Playfair Display',serif",fontSize:".78rem",fontWeight:"600",color:"#1F1A12"}},"B"+b));
     }
     const halfHeaders=LP_PERIODS.map(p=>el("th",{st:{background:"#F6EFE2",fontSize:".55rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".04em",color:"rgba(31,26,18,.42)",padding:"5px 4px",textAlign:"center",whiteSpace:"nowrap",borderBottom:"1px solid rgba(31,26,18,.08)",borderLeft:p.half==="first"?"1px solid rgba(31,26,18,.06)":"none"}},p.half==="first"?"1st":"2nd"));
+
+    function gimControlPanel(){
+      const open=gimIsOpen();
+      if(!open){
+        let _dl=STATE.gimDeadlineInput||"";
+        return el("div",{cls:"card",st:{background:"#fff8e6",border:"2px solid #f5c518",marginBottom:"20px",maxWidth:"640px"}},
+          el("div",{cls:"card-title",st:{color:"#B8860B"}},"GIM Rotation Prefs — Submission Window Closed"),
+          el("div",{st:{display:"flex",gap:"12px",alignItems:"flex-end",flexWrap:"wrap"}},
+            el("div",null,
+              el("label",null,"Auto-close deadline (optional)"),
+              el("input",{type:"datetime-local",value:_dl,
+                onInput:e=>{STATE.gimDeadlineInput=e.target.value;},
+                st:{maxWidth:"220px"}})
+            ),
+            el("button",{cls:"sbtn primary",st:{background:"#B8860B"},async onClick(){
+              await gimOpenWindow(STATE.gimDeadlineInput?new Date(STATE.gimDeadlineInput).toISOString():null);
+              STATE.gimDeadlineInput="";
+            }},"Open Submission Window")
+          ),
+          el("p",{cls:"sh",st:{marginTop:"8px",fontSize:".78rem"}},"Residents will be able to suggest their GIM rotation blocks once opened. Leave deadline blank to close manually.")
+        );
+      }
+      const cd=gimDeadlineCountdown();
+      return el("div",{cls:"card",st:{background:"#f0f9ec",border:"2px solid #7ab648",marginBottom:"20px",maxWidth:"640px"}},
+        el("div",{st:{display:"flex",gap:"12px",alignItems:"center",flexWrap:"wrap"}},
+          el("div",{st:{flex:"1"}},
+            el("div",{st:{fontWeight:"800",fontSize:".95rem",color:"#2a6020"}},"GIM Rotation Prefs — Submission Window Open"),
+            el("div",{cls:"sh",st:{fontSize:".78rem"}},cd?cd+" until auto-close":"No deadline set — close manually when ready")
+          ),
+          el("button",{cls:"sbtn ghost",async onClick(){showConfirm("Close the GIM Rotation Prefs submission window now? Residents will no longer be able to submit or edit their preferences.",async()=>{await gimCloseWindow();},"Close Window","warn");}},"Close Window")
+        )
+      );
+    }
+
     return el("div",null,
+      gimControlPanel(),
       sumStrip,
       el("div",{st:{display:"flex",alignItems:"center",gap:"14px",marginBottom:"16px",flexWrap:"wrap"}},
         el("div",{st:{display:"flex",gap:"14px",flexWrap:"wrap"}},
@@ -7261,16 +7332,18 @@ function renderLeavePlan(){
     const gimPlan=GIM_PREFS[u.rid]||null;
     const required=gimSlotCount(myLevel);
     const gimNotApplicable=myLevel==="R4";
-    const gimLocked=!GIM_OPEN||gimNotApplicable;
+    const gimOpen=gimIsOpen();
+    const gimLocked=!gimOpen||gimNotApplicable;
     const gimCount=(gimPlan?.blocks||[]).length;
-    const gimStatusLabel=gimNotApplicable?"NOT APPLICABLE":!GIM_OPEN?"OPENS SOON":gimPlan?.status==="submitted"?"SUBMITTED":"DRAFT · "+gimCount+" of "+required;
-    const gimStatusColors=gimNotApplicable||!GIM_OPEN?{bg:"rgba(31,26,18,.06)",c:"rgba(31,26,18,.4)"}:gimPlan?.status==="submitted"?{bg:"#e6f4ea",c:"#1e7a43"}:{bg:"#fef3d6",c:"#92680a"};
+    const gimStatusLabel=gimNotApplicable?"NOT APPLICABLE":!gimOpen?"OPENS SOON":gimPlan?.status==="submitted"?"SUBMITTED":"DRAFT · "+gimCount+" of "+required;
+    const gimStatusColors=gimNotApplicable||!gimOpen?{bg:"rgba(31,26,18,.06)",c:"rgba(31,26,18,.4)"}:gimPlan?.status==="submitted"?{bg:"#e6f4ea",c:"#1e7a43"}:{bg:"#fef3d6",c:"#92680a"};
     const upcoming=nextAYLevel(myLevel);
+    const gimDeadlineNote=gimOpen&&GIM_STATUS?.deadline?" ("+gimDeadlineCountdown()+")":"";
     const gimDesc=gimNotApplicable
       ?"Not applicable — you're graduating this academic year."
-      :!GIM_OPEN
+      :!gimOpen
       ?"Opens once all Suggested Leave submissions are reviewed — date to be announced."
-      :"As next year's "+upcoming+", suggest "+required+" block"+(required===1?"":"s")+" you'd prefer for General Internal Medicine rotations (CTU, Night Float, ER Team).";
+      :"As next year's "+upcoming+", suggest "+required+" block"+(required===1?"":"s")+" you'd prefer for General Internal Medicine rotations (CTU, Night Float, ER Team)."+gimDeadlineNote;
 
     function card(opts){
       return el("div",{st:{flex:"1",minWidth:"260px",border:"1.5px solid rgba(31,26,18,.1)",borderRadius:"16px",padding:"22px",cursor:opts.locked?"not-allowed":"pointer",transition:"all .15s",background:"#fff",opacity:opts.locked?".65":"1"},
@@ -8807,6 +8880,7 @@ function renderCalModal(){
         loadBestResident();
         loadLeavePlan();
         loadGimPrefs();
+        loadGimStatus();
         loadNotifications();
         setInterval(()=>{if(STATE.user)loadNotifications();},60000);
         loadQuizzes().catch(e=>console.warn("Quiz load failed:",e));
