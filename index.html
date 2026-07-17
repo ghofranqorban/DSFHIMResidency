@@ -411,10 +411,14 @@ let ROTA_LEAVE_META={};
 let CHIEF_RES_ID=null;
 let CO_CHIEF_RES_ID=null;
 const MANDATORY=["GIM/CTU","Cardiology","Pulmonology","Nephrology","Gastroenterology","Endocrinology","Hematology","Rheumatology","Neurology","Infectious Disease","ICU","Emergency Medicine","Oncology"];
-// Ongoing 60%: Quiz 20 | MM 15 | Teaching 15 | Presentations 10
-// Yearly 40%: Committee 10 | QI 5 | Publication 5 | Oral 5 | Poster 3 | Awards 4 | Volunteering 3 (bonus system removed)
+// Ongoing 50%: Quiz 15 | MM 15 | Teaching 15 | Presentations 5
+// Yearly 50%: Committee 10 | QI 10 | Publication 10 | Oral-or-Poster 10 | Awards 5 | Volunteering 5
+// MM/Teaching attendance is scoped to the current academic year (see loadSchedules()).
+// Oral and Poster remain separate submittable achievement types, but score as ONE
+// combined bucket worth KPI_W.oral (10%) — achieving either grants the full 10%,
+// achieving both does not grant 20% (see calcKPI()'s oralPosterPct).
 // Quarterly: informational only — not scored
-const KPI_W={quiz:20,mm:15,teach:15,pres:10,comm:10,qi:5,pub:5,oral:5,poster:3,awards:4,volunteering:3};
+const KPI_W={quiz:15,mm:15,teach:15,pres:5,comm:10,qi:10,pub:10,oral:10,poster:10,awards:5,volunteering:5};
 const LC={R1:"#4a6a8a",R2:"#5a8a6a",R3:"#c9913a",R4:"#8a4a2a"};
 const ROT_COLORS={"GIM/CTU":{bg:"#ede9fe",tx:"#5b21b6"},"Night Duty":{bg:"#fef2f2",tx:"#991b1b"},"ICU":{bg:"rgba(38,82,58,.12)",tx:"#26523A"},"Cardiology":{bg:"rgba(201,106,74,.12)",tx:"#9d174d"},"Pulmonology":{bg:"#e0f2fe",tx:"#0c4a6e"},"Nephrology":{bg:"rgba(127,184,156,.15)",tx:"#26523A"},"Gastroenterology":{bg:"rgba(164,122,40,.12)",tx:"#6a4c10"},"Endocrinology":{bg:"#f0fdf4",tx:"#166534"},"Hematology":{bg:"#ffe4e6",tx:"#9f1239"},"Rheumatology":{bg:"#f5f3ff",tx:"#4c1d95"},"Neurology":{bg:"#fdf4ff",tx:"#7e22ce"},"Infectious Disease":{bg:"#fff7ed",tx:"#c2410c"},"Emergency Medicine":{bg:"#fee2e2",tx:"#7f1d1d"},"Oncology":{bg:"#f0f9ff",tx:"#0369a1"},"Outpatient Clinic":{bg:"#F6EFE2",tx:"#475569"},"Elective":{bg:"#f0fdf4",tx:"#166534"},"Annual Leave":{bg:"#fefce8",tx:"#854d0e"},"Maternity Leave":{bg:"#fdf4ff",tx:"#701a75"},"Medical Consult":{bg:"#eff6ff",tx:"#26523A"}};
 const ROT_ABBR={"GIM/CTU":"CTU","Night Duty":"Night","ICU":"ICU","Cardiology":"Cardio","Pulmonology":"Pulmo","Nephrology":"Nephro","Gastroenterology":"Gastro","Endocrinology":"Endo","Hematology":"Hema","Rheumatology":"Rheuma","Neurology":"Neuro","Infectious Disease":"ID","Emergency Medicine":"ER","Oncology":"Onco","Outpatient Clinic":"Clinic","Elective":"Elect","Annual Leave":"Leave","Maternity Leave":"Matern","Medical Consult":"M.Cons"};
@@ -572,6 +576,7 @@ async function loadSchedules(){
   MM_ATT={};MM_ATT_CMT={};
   (mmAErr?[]:(mmA||[])).forEach(a=>{
     const s=MM_SESSION_BY_ID[a.session_id];if(!s)return;
+    if(s.academic_year!==CURRENT_ACADEMIC_YEAR)return;
     if(!MM_ATT[s.block_number])MM_ATT[s.block_number]={};
     if(!MM_ATT[s.block_number][s.session_date])MM_ATT[s.block_number][s.session_date]={};
     MM_ATT[s.block_number][s.session_date][a.resident_id]=a.status;
@@ -584,6 +589,7 @@ async function loadSchedules(){
   TEACH_ATT={};TEACH_ATT_CMT={};
   (teAErr?[]:(teA||[])).forEach(a=>{
     const s=TEACH_SESSION_BY_ID[a.session_id];if(!s)return;
+    if(s.academic_year!==CURRENT_ACADEMIC_YEAR)return;
     if(!TEACH_ATT[s.block_number])TEACH_ATT[s.block_number]={};
     if(!TEACH_ATT[s.block_number][s.session_date])TEACH_ATT[s.block_number][s.session_date]={};
     TEACH_ATT[s.block_number][s.session_date][a.resident_id]=a.status;
@@ -1718,16 +1724,17 @@ function calcKPI(id){
   const pubPct=(ks.bonusPublished||af.has("publication"))?100:0;
   const oralPct=(ks.bonusOral||af.has("oral"))?100:0;
   const posterPct=(ks.bonusPoster||af.has("poster"))?100:0;
+  const oralPosterPct=(oralPct||posterPct)?100:0;
   const awardsPct=(ks.awardsHonors||af.has("awards"))?100:0;
   const volunteeringPct=(ks.volunteering||af.has("volunteering"))?100:0;
   const overall=Math.round(
     qAvg*KPI_W.quiz/100+mmPct*KPI_W.mm/100+tPct*KPI_W.teach/100+
     (pres?100:0)*KPI_W.pres/100+commPct*KPI_W.comm/100+
-    qiPct*KPI_W.qi/100+pubPct*KPI_W.pub/100+oralPct*KPI_W.oral/100+
-    posterPct*KPI_W.poster/100+awardsPct*KPI_W.awards/100+volunteeringPct*KPI_W.volunteering/100
+    qiPct*KPI_W.qi/100+pubPct*KPI_W.pub/100+oralPosterPct*KPI_W.oral/100+
+    awardsPct*KPI_W.awards/100+volunteeringPct*KPI_W.volunteering/100
   );
   return{mmPct,mmAtt,mmTotal,tPct,tAtt,tTotal,rotPct,qAvg,pres,presCount,commPct,
-    qiPct,pubPct,oralPct,posterPct,awardsPct,volunteeringPct,overall};
+    qiPct,pubPct,oralPct,posterPct,oralPosterPct,awardsPct,volunteeringPct,overall};
 }
 function pbar(pct,color){
   return el("div",{cls:"flex-gap",st:{width:"100%"}},
@@ -4355,20 +4362,19 @@ function exportKpiPDF(res,k){
   <div class="sub">${res.level} · Mentor: ${mentorName(res.id)} · AY ${CURRENT_ACADEMIC_YEAR}–${CURRENT_ACADEMIC_YEAR+1}</div>
   <div class="score">${k.overall}%</div><div style="color:#6b7280;margin-bottom:8px">Overall KPI Score</div>
   <div style="background:#e5e7eb;border-radius:4px;height:10px"><div style="background:${kpiColor(k.overall)};width:${Math.min(k.overall,100)}%;height:10px;border-radius:4px"></div></div>
-  <h2> Ongoing Performance (60%)</h2>
+  <h2> Ongoing Performance (50%)</h2>
   <table><thead><tr><th>Component</th><th style="text-align:center">Score</th><th style="text-align:center">Weight</th><th>Detail</th></tr></thead><tbody>
   ${row("Quiz Average",k.qAvg,KPI_W.quiz,QUIZZES.filter(q=>q.published&&q.sc[res.id]!=null).length+" quizzes")}
   ${row("Morning Meeting Attendance",k.mmPct,KPI_W.mm,k.mmAtt+"/"+k.mmTotal+" sessions")}
   ${row("Teaching Attendance",k.tPct,KPI_W.teach,k.tAtt+"/"+k.tTotal+" sessions")}
   ${row("Presenter / Moderator",k.pres?100:0,KPI_W.pres,k.presCount+" session"+(k.presCount!==1?"s":""))}
   </tbody></table>
-  <h2> Yearly Achievements (40%)</h2>
+  <h2> Yearly Achievements (50%)</h2>
   <table><thead><tr><th>Component</th><th style="text-align:center">Score</th><th style="text-align:center">Weight</th><th>Status</th></tr></thead><tbody>
   ${row("Committee Participation",k.commPct,KPI_W.comm,"Score: "+(COMM_SC[res.id]||0)+"/10")}
   ${row("QI Project",k.qiPct,KPI_W.qi,k.qiPct?" Achieved":"—")}
   ${row("Research Publication",k.pubPct,KPI_W.pub,k.pubPct?" Published":"—")}
-  ${row("Oral Presentation",k.oralPct,KPI_W.oral,k.oralPct?" Presented":"—")}
-  ${row("Poster Presentation",k.posterPct,KPI_W.poster,k.posterPct?" Presented":"—")}
+  ${row("Oral or Poster Presentation",k.oralPosterPct,KPI_W.oral,(k.oralPct&&k.posterPct)?" Oral + Poster":k.oralPct?" Oral":k.posterPct?" Poster":"—")}
   ${row("Award / Honor",k.awardsPct,KPI_W.awards,k.awardsPct?" Received":"—")}
   ${row("Volunteering",k.volunteeringPct,KPI_W.volunteering,k.volunteeringPct?" Participated":"—")}
   </tbody></table>
@@ -4698,7 +4704,7 @@ function renderKPI(){
 
   // ── Score totals ──────────────────────────────────────────────
   const ongoingRaw=k.qAvg*KPI_W.quiz/100+k.mmPct*KPI_W.mm/100+k.tPct*KPI_W.teach/100+(k.pres?KPI_W.pres:0);
-  const yearlyRaw=k.commPct*KPI_W.comm/100+k.qiPct*KPI_W.qi/100+k.pubPct*KPI_W.pub/100+k.oralPct*KPI_W.oral/100+k.posterPct*KPI_W.poster/100+k.awardsPct*KPI_W.awards/100+k.volunteeringPct*KPI_W.volunteering/100;
+  const yearlyRaw=k.commPct*KPI_W.comm/100+k.qiPct*KPI_W.qi/100+k.pubPct*KPI_W.pub/100+k.oralPosterPct*KPI_W.oral/100+k.awardsPct*KPI_W.awards/100+k.volunteeringPct*KPI_W.volunteering/100;
   const ongoingScore=Math.round(ongoingRaw);
   const yearlyScore=Math.round(yearlyRaw);
 
@@ -4740,7 +4746,7 @@ function renderKPI(){
   }
 
   // Achievement list row (no-box style)
-  function achRow(fieldKey,iconPaths,label,weight,isApproved){
+  function achRow(fieldKey,iconPaths,label,weight,isApproved,note){
     const pending=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.field_key===fieldKey&&p.quarter==null&&p.status==="pending");
     const approvedProps=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.field_key===fieldKey&&p.quarter==null&&p.status==="approved");
     const rejected=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.field_key===fieldKey&&p.quarter==null&&p.status==="rejected");
@@ -4753,7 +4759,7 @@ function renderKPI(){
         el("div",{st:{width:"7px",height:"7px",borderRadius:"50%",background:dotColor,flexShrink:"0"}}),
         svgIcon(iconPaths,14,14),
         el("div",{st:{flex:"1",fontSize:".82rem",fontWeight:"500",color:isApproved?"#1F1A12":pending.length?"#1F1A12":"rgba(31,26,18,.4)"}},label),
-        el("div",{st:{fontSize:".65rem",color:"rgba(31,26,18,.3)",marginRight:"6px"}},weight+"%"),
+        el("div",{st:{fontSize:".65rem",color:"rgba(31,26,18,.3)",marginRight:"6px"}},weight+"%"+(note?" "+note:"")),
         isApproved?el("span",{st:{fontSize:".63rem",fontWeight:"700",padding:"3px 10px",borderRadius:"9999px",background:"rgba(127,184,156,.2)",color:"#26523A",whiteSpace:"nowrap"}},approvedProps.length>1?"Verified ("+approvedProps.length+")":"Verified"):
         pending.length?el("span",{st:{fontSize:".63rem",fontWeight:"700",padding:"3px 10px",borderRadius:"9999px",background:"rgba(203,161,85,.18)",color:"#7a5a10",whiteSpace:"nowrap"}},"Pending review"):
         el("span",{st:{fontSize:".63rem",fontWeight:"700",padding:"3px 10px",borderRadius:"9999px",background:"rgba(31,26,18,.06)",color:"rgba(31,26,18,.35)",whiteSpace:"nowrap"}},"Not yet")
@@ -4834,7 +4840,7 @@ function renderKPI(){
     el("div",{st:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"10px"}},
       el("div",{st:{background:"#FEFBF3",borderRadius:"16px",padding:"16px 14px",textAlign:"center",cursor:"pointer",boxShadow:"0 4px 20px rgba(31,26,18,.10)",border:"2px solid "+(tab==="ongoing"?"#c96a4a":"transparent"),transition:"border-color .2s"},onClick:()=>set({kpiTab:"ongoing"})},
         el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1.5rem",fontWeight:"700",lineHeight:"1",marginBottom:"4px",color:"#c96a4a"}},
-          ongoingScore,el("span",{st:{fontSize:".85rem",fontWeight:"400",color:"rgba(31,26,18,.3)",fontFamily:"'Inter',sans-serif"}},"/60")
+          ongoingScore,el("span",{st:{fontSize:".85rem",fontWeight:"400",color:"rgba(31,26,18,.3)",fontFamily:"'Inter',sans-serif"}},"/50")
         ),
         el("div",{st:{fontSize:".65rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.35)",display:"flex",alignItems:"center",justifyContent:"center",gap:"4px"}},
           svgIcon('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',10,10),"Ongoing" )
@@ -4847,7 +4853,7 @@ function renderKPI(){
       ),
       el("div",{st:{background:"#FEFBF3",borderRadius:"16px",padding:"16px 14px",textAlign:"center",cursor:"pointer",boxShadow:"0 4px 20px rgba(31,26,18,.10)",border:"2px solid "+(tab==="yearly"?"#A47A28":"transparent"),transition:"border-color .2s"},onClick:()=>set({kpiTab:"yearly"})},
         el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1.5rem",fontWeight:"700",lineHeight:"1",marginBottom:"4px",color:"#A47A28"}},
-          yearlyScore,el("span",{st:{fontSize:".85rem",fontWeight:"400",color:"rgba(31,26,18,.3)",fontFamily:"'Inter',sans-serif"}},"/40")
+          yearlyScore,el("span",{st:{fontSize:".85rem",fontWeight:"400",color:"rgba(31,26,18,.3)",fontFamily:"'Inter',sans-serif"}},"/50")
         ),
         el("div",{st:{fontSize:".65rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.35)",display:"flex",alignItems:"center",justifyContent:"center",gap:"4px"}},
           svgIcon('<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>',10,10),"Yearly" )
@@ -4871,7 +4877,7 @@ function renderKPI(){
       txt,el("div",{st:{flex:"1",height:"1px",background:"rgba(31,26,18,.08)"}})
     );
     return el("div",null,
-      sectionLbl("Ongoing Performance · 60% of total"),
+      sectionLbl("Ongoing Performance · 50% of total"),
       el("div",{st:{display:"grid",gridTemplateColumns:"1fr 1fr",marginBottom:"32px"}},
         kpiMetricRow("Quiz Average",'<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>',k.qAvg,null,KPI_W.quiz,kpiColor(k.qAvg),QUIZZES.filter(q=>q.published&&q.sc[res.id]!=null).length+" quizzes",false,false),
         kpiMetricRow("Morning Meeting",'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',k.mmPct,null,KPI_W.mm,kpiColor(k.mmPct),k.mmAtt+"/"+k.mmTotal+" sessions",false,true),
@@ -4930,12 +4936,13 @@ function renderKPI(){
         ):el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"2.1rem",fontWeight:"700",color:kpiColor(k.commPct)}},k.commPct,el("span",{st:{fontSize:"1rem",fontWeight:"400",color:"rgba(31,26,18,.25)",marginLeft:"1px"}},"%"))
       ),
       el("div",{st:{background:"#F6EFE2",borderRadius:"16px",padding:"20px 24px 8px"}},
-        sectionLbl("Yearly Achievements · 40% of total"),
+        sectionLbl("Yearly Achievements · 50% of total"),
         el("div",null,
           achRow("publication",'<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>',"Research Publication",KPI_W.pub,k.pubPct>0),
           achRow("qi",'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',"QI Project",KPI_W.qi,k.qiPct>0),
-          achRow("oral",'<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',"Oral Presentation",KPI_W.oral,k.oralPct>0),
-          achRow("poster",'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>',"Poster Presentation",KPI_W.poster,k.posterPct>0),
+          achRow("oral",'<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',"Oral Presentation",KPI_W.oral,k.oralPct>0,"(shared)"),
+          achRow("poster",'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>',"Poster Presentation",KPI_W.poster,k.posterPct>0,"(shared)"),
+          el("div",{st:{fontSize:".64rem",color:"rgba(31,26,18,.32)",padding:"2px 0 8px 33px",fontStyle:"italic"}},"Either Oral or Poster grants the full "+KPI_W.oral+"% — achieving both does not add up to "+(KPI_W.oral+KPI_W.poster)+"%."),
           achRow("awards",'<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>',"Award / Honor",KPI_W.awards,k.awardsPct>0),
           achRow("volunteering",'<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',"Volunteering",KPI_W.volunteering,k.volunteeringPct>0)
         )
@@ -4962,7 +4969,7 @@ function renderKPI(){
         el("tbody",null,
           ...vr.map(r=>{
             const kk=calcKPI(r.id);
-            const achCount=[kk.qiPct,kk.pubPct,kk.oralPct,kk.posterPct,kk.awardsPct,kk.volunteeringPct].filter(v=>v>0).length;
+            const achCount=[kk.qiPct,kk.pubPct,kk.oralPosterPct,kk.awardsPct,kk.volunteeringPct].filter(v=>v>0).length;
             const pendRes=KPI_PROPOSALS.filter(p=>p.resident_id===r.id&&p.status==="pending").length;
             return el("tr",{st:{cursor:"pointer"},onClick:()=>set({kpiSelRes:r.id,kpiTab:"ongoing"})},
               el("td",null,el("div",{cls:"flex-gap"},avEl(r),el("span",{cls:"name",st:{fontSize:".82rem"}},r.name),chiefBadge(r.id))),
@@ -4973,7 +4980,7 @@ function renderKPI(){
               el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:kk.pres?"rgba(5,150,105,.1)":"rgba(220,38,38,.08)",color:kk.pres?"#059669":"#DC2626"}},kk.presCount+"x")),
               el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:"rgba(124,58,237,.08)",color:"#7c3aed"}},(COMM_SC[r.id]||0)+"/10")),
               el("td",{st:{textAlign:"center"}},
-                el("span",{cls:"bdg",st:{background:achCount>0?"rgba(164,122,40,.12)":"rgba(31,26,18,.06)",color:achCount>0?"#7a5a10":"rgba(31,26,18,.35)"}},achCount+"/6"),
+                el("span",{cls:"bdg",st:{background:achCount>0?"rgba(164,122,40,.12)":"rgba(31,26,18,.06)",color:achCount>0?"#7a5a10":"rgba(31,26,18,.35)"}},achCount+"/5"),
                 pendRes?el("span",{st:{background:"rgba(203,161,85,.18)",color:"#7a5a10",borderRadius:"6px",padding:"1px 5px",fontSize:".65rem",marginLeft:"3px",fontWeight:"700"}},pendRes+" pending"):null
               ),
               el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:kpiColor(kk.overall),color:"#fff"}},kk.overall+"%"))
@@ -6836,7 +6843,7 @@ function renderAdminProfile(rid){
 function renderProfileKPI(res){
   const k=calcKPI(res.id);
   const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
-  const achCount=[k.qiPct,k.pubPct,k.oralPct,k.posterPct,k.awardsPct,k.volunteeringPct].filter(v=>v>0).length;
+  const achCount=[k.qiPct,k.pubPct,k.oralPosterPct,k.awardsPct,k.volunteeringPct].filter(v=>v>0).length;
   const pendingCount=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.status==="pending").length;
   return el("div",null,
     el("div",{cls:"card"},
@@ -6874,7 +6881,7 @@ function renderProfileKPI(res){
           el("div",{cls:"sh",st:{fontSize:".72rem"}}," Committee ("+COMM_SC[res.id]+"/10)")
         ),
         el("div",{cls:"card",st:{background:"rgba(164,122,40,.12)",border:"1px solid #fde68a",padding:"10px",textAlign:"center"}},
-          el("div",{st:{fontWeight:"800",color:achCount>0?"#6a4c10":"#94a3b8"}},achCount+"/6"),
+          el("div",{st:{fontWeight:"800",color:achCount>0?"#6a4c10":"#94a3b8"}},achCount+"/5"),
           el("div",{cls:"sh",st:{fontSize:".72rem"}}," Yearly Achievements"+(pendingCount?" · "+pendingCount+" pending":""))
         )
       ),
@@ -8268,8 +8275,7 @@ function renderKPIExecutive(){
         {label:"Committee Score",val:k.commPct,sub:"Score "+(ks.commScore||0)+"/10",w:KPI_W.comm,icon:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'},
         {label:"QI Project",val:k.qiPct,sub:k.qiPct?"Completed":"Not completed",w:KPI_W.qi,icon:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'},
         {label:"Research Publication",val:k.pubPct,sub:k.pubPct?"Submitted":"Not submitted",w:KPI_W.pub,icon:'<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>'},
-        {label:"Oral Presentation",val:k.oralPct,sub:"",w:KPI_W.oral,icon:'<path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>'},
-        {label:"Poster Presentation",val:k.posterPct,sub:"",w:KPI_W.poster,icon:'<rect x="3" y="3" width="18" height="18" rx="2"/>'},
+        {label:"Oral or Poster Presentation",val:k.oralPosterPct,sub:(k.oralPct&&k.posterPct)?"Oral + Poster":k.oralPct?"Oral":k.posterPct?"Poster":"",w:KPI_W.oral,icon:'<path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/>'},
         {label:"Awards / Honors",val:k.awardsPct,sub:"",w:KPI_W.awards,icon:'<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>'},
         {label:"Volunteering",val:k.volunteeringPct,sub:"",w:KPI_W.volunteering,icon:'<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>'},
       ];
