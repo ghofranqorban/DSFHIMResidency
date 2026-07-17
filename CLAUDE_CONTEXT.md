@@ -1051,3 +1051,17 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 - `supabase/add_gim_rota_prefs.sql` — **not yet run in Supabase** (confirmed via direct REST query this session: table doesn't exist). Must run before flipping `GIM_OPEN` to true, or `loadGimPrefs()`/`saveGimPrefs()` will error.
 - **PD combined matrix** (leave dots + GIM-tinted blocks together, per `/tmp/ay_plan_preview.html` Mockup 3) — not built. PD "All Residents" tab still shows leave-only matrix.
 - Not visually verified in a browser this session (requires login) — only `node --check` syntax validation was run. Spot-check the landing cards + block-picker on next login.
+
+---
+
+### Session — 17 Jul 2026 (continued — PD combined matrix, GIM live toggle, mandatory 2nd preference, First/Second Preference wording)
+
+**Shipped (all committed, pushed):**
+- **PD "All Residents" combined matrix** (`a12e21c`) — `matrixTab()` now renders GIM-tinted cells alongside the existing leave dots in the same table; summary strip gained a "GIM Prefs Submitted" count; legend gained a GIM swatch. Fixed an early-bail bug that would've suppressed GIM tint for residents without a submitted leave plan.
+- **GIM open/close admin toggle** (`c5f318e`) — replaced the hardcoded `GIM_OPEN` const with a real `gim_rota_status` table + `gimIsOpen()`/`gimOpenWindow()`/`gimCloseWindow()`/`gimDeadlineCountdown()`. Farid/Deema (or any `plan_rota`/PD-role holder) get a control panel at the top of the "All Residents" matrix (`gimControlPanel()`) to open the window with an optional datetime-local auto-close deadline, or close it manually — no code edits needed to go live. Migration `supabase/add_gim_rota_status.sql` ✅ run (confirmed via direct REST query — table exists, empty). **GIM feature is now fully live end-to-end.**
+- **Mandatory Second Preference at submit time** (`58b2a11`) — fixed a TOCTOU bug: the over-cap backup prompt only fired when a resident clicked a period that was already full at that exact moment. If a period filled up *after* they'd drafted/saved a choice, Submit/Update let it through with no backup on file, leaving the PD stuck with no fallback to decline to (surfaced as: "a 6th resident has added a leave there but no suggested other leave" at Block 12 second period). `saveLeavePlan()` now re-checks capacity for both periods at submit time and forces the backup-period modal before saving if either is at cap with no alt selected.
+- **"Backup" → "First Preference"/"Second Preference" wording** (`8bcdaee`) — renamed the over-cap backup concept throughout: slot bar (small "First Preference" label above the chosen period when an alt exists), picker modal (title now "Add Your Second Preference", field label "Second Preference (required)"), matrix tooltips, PD decision modal ("Second Preference on file", "Decline (use 2nd preference)"), and resident notifications. Wording only, no logic changes. Previewed visually in a throwaway `_preview_lp_pref.html` mockup and approved by user before shipping. Confirmed via `grep -ni "backup"` — no stray "backup" wording remains anywhere in the app.
+
+**Still TODO:**
+- None outstanding from this segment — all four items shipped, migrations run, no known blockers.
+- Carried forward (unchanged): historical KPI data entry, On-Call Statistics tab visibility, `renderKPI()`/`renderAdminProfile()` splits, "Push to Rota" (Oct 2026), new AY 2026-27 master rota setup (Oct auto-promotion, archive R4s, 15 placeholder R1s, Excel rota import). Leave plan submissions deadline: 18 Jul 2026.
