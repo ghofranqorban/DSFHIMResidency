@@ -2925,7 +2925,8 @@ function renderMMScheduleForm(blk,editingSession){
         const presTxt=document.getElementById("mm_f_pres_txt").value.trim();
         const modRaw=document.getElementById("mm_f_mod_sel").value;
         const modTxt=document.getElementById("mm_f_mod_txt").value.trim();
-        // Values are prefixed "r:residentId" or "c:consultantId" or "" const presResId=presRaw.startsWith("r:")?parseInt(presRaw.slice(2)):null;
+        // Values are prefixed "r:residentId" or "c:consultantId" or ""
+        const presResId=presRaw.startsWith("r:")?parseInt(presRaw.slice(2)):null;
         const presConsName=presRaw.startsWith("c:")?consultById(parseInt(presRaw.slice(2)))?.name:null;
         const modResId=modRaw.startsWith("r:")?parseInt(modRaw.slice(2)):null;
         const modConsName=modRaw.startsWith("c:")?consultById(parseInt(modRaw.slice(2)))?.name:null;
