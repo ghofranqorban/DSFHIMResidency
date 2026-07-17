@@ -194,7 +194,12 @@ QUIZZES_LOAD_ERR // string|null — set if quizzes table missing in Supabase
 | `fix_leave_records_rls.sql` | ✅ Run (17 Jul) | Original `leave_records` write policy (schema.sql) was `is_pd_or_chief()` only — residents could never insert their own leave request row, so every resident "Request Leave" submission failed with an RLS error. Opens INSERT for a resident's own pending `type='leave_request', approved=false` row only; UPDATE/DELETE (approve/reject) stay PD/chief-only. |
 | `add_leave_plan_alt.sql` | ✅ Run (17 Jul) | Adds `first_leave_alt_key`/`second_leave_alt_key` to `leave_plan` for the backup-period "Suggestion" feature (over-cap picks get a named backup; PD matrix shows a red-ringed dot + tooltip). |
 | `add_leave_plan_decision.sql` | ✅ Run (17 Jul) | Adds `first_leave_approved`/`second_leave_approved` boolean columns to `leave_plan`. Powers the PD decision modal (click a dot in the matrix → Approve / Decline (falls back to named backup, else reverts to draft) / Assign Period directly). Resident's own `saveLeavePlan()` resets both flags on every save (re-triggers PD review). |
-| `add_gim_rota_prefs.sql` | ⚠️ NOT run yet | New `gim_rota_prefs` table for the in-progress "Academic Year Plan 26-27" GIM rotation block-preference feature (see 17 Jul session log). Migration file written but not executed in Supabase; feature not yet wired into the UI. |
+| `add_gim_rota_prefs.sql` | ✅ Run (17 Jul) | `gim_rota_prefs` table for "Academic Year Plan 26-27" GIM rotation block-preference feature — fully wired and live. |
+| `add_gim_rota_status.sql` | ✅ Run (17 Jul) | `gim_rota_status` table (`is_open`,`opened_at`,`deadline`) — backs the PD/`plan_rota` open/close control panel for the GIM window (`gimControlPanel()`), replacing the old hardcoded `GIM_OPEN` const. |
+| `add_leave_plan_status.sql` | ✅ Run (17 Jul) | `leave_plan_status(academic_year pk, deadline)` — single source of truth for the Leave Plan deadline, replacing a hardcoded `LP_DEADLINE` Date duplicated in both client and the `ical` edge function. PD/deputy_pd/chief/`plan_rota` can edit it live from the "All Residents" tab. |
+| `add_mm_highlights.sql` | ✅ Run (17 Jul) | Morning meeting highlights feature — table exists, has rows. |
+| `fix_calendar_rls.sql` | ✅ Run (17 Jul) | Adds `set_my_calendar_token`/`set_my_calendar_prefs` security-definer RPCs so non-PD/chief residents can save their own calendar token/prefs (the `profiles_write` RLS policy only allowed pd/chief to write to `profiles` at all, even their own row). |
+| `fix_leave_records_source_check.sql` | ⚠️ NOT run yet | Fixes `leave_records_source_check` blocking **all** leave requests (annual + educational) with "violates check constraint" — `submitLeaveRequest()`/`approveLeaveRequest()` insert `source:'resident'`/`'request'` but the constraint only allowed `rota_import`/`manual`. App code is correct; constraint was stale. **Run this before residents can submit any leave request.** |
 
 ---
 
@@ -204,6 +209,7 @@ QUIZZES_LOAD_ERR // string|null — set if quizzes table missing in Supabase
 - **async callbacks:** Any callback using `await` must be `async`. Missing it caused a site-wide crash (Jul 2026).
 - **Single script block = total failure:** One JS syntax error anywhere blanks the entire page with no visible error. Always validate before committing (see below).
 - **Curly/smart quotes in JS:** NEVER use `"` `"` `'` `'` inside JS strings or template expressions. They parse as separate tokens → "Unexpected string" crash. Use straight ASCII quotes only. This caused a blank-site incident Jul 2026.
+- **Never build inline SVGs with `el("svg",...)`:** `el()` uses `document.createElement`, which is NOT namespace-aware — it silently produces a non-rendering element for `svg`/`path`/etc. This is why the sidebar Home icon was invisible for weeks with no error. Always add icons to `modIcon()`'s `D` map (uses `document.createElementNS`) and call `modIcon(id, size)` instead of hand-rolling SVG via `el()`.
 - **init() has try-catch:** So render() always runs even if data loading fails.
 - **GitHub Actions:** Custom deploy at `.github/workflows/deploy.yml` retries 3× — don't remove.
 - **After every change:** `cp SFH_Residency_Portal.html index.html` then commit+push both.
@@ -234,9 +240,11 @@ Built as "Training Record" (`cumulative_kpi`, pd/deputy_pd/chief). Year rows exp
 ### 2. ~~KPI Page Redesign~~ ✅ Done (10 Jul 2026)
 Hero band, floating tiles, underline tabs, no-box metric rows, achievement list rows — all Eventevia-styled. Quarterly tab + milestone cards also redesigned this session.
 
-### 3. Supabase Storage bucket needed
-- Create bucket named `kpi-evidence` (public) in Supabase for KPI file uploads
-- Without it, file upload in proposal modal fails gracefully (text still submits fine)
+### 3. ~~Supabase Storage bucket~~ ✅ Done (10 Jul 2026)
+`kpi-evidence` bucket created — private, signed URLs (not public as originally planned).
+
+### 8. Historical KPI data (2024-25, 2023-24, 2022-23)
+Still shows "Under Progress" on Performance Report. Phase 2 data-entry work, no ETA.
 
 ### 4. ~~Quiz Persistence~~ ✅ Done (error banner added)
 ### 5. ~~KPI PDF Export~~ ✅ Done
@@ -1064,4 +1072,28 @@ if(STATE.showMyModal) app.appendChild(renderMyModal());
 
 **Still TODO:**
 - None outstanding from this segment — all four items shipped, migrations run, no known blockers.
+
+---
+
+### Session — 17 Jul 2026 (continued — leave request bug, sidebar/Stars icons, attendance overview redesign)
+
+**Bug fixed:**
+- **Educational (and all) leave requests failing with "violates check constraint leave_records_source_check"**: `submitLeaveRequest()` inserts `source:'resident'`, `approveLeaveRequest()` inserts `source:'request'`, but the DB constraint only allowed `rota_import`/`manual`. App code was correct; constraint was never updated when the request/approve flow was built. Wrote `supabase/fix_leave_records_source_check.sql` (adds `'resident'`,`'request'` to the allowed values) — committed & pushed (`986240c`). **⚠️ NOT yet run in Supabase — must run before any leave request will succeed.**
+
+**Bugs fixed (icons):**
+- **Sidebar "Home" icon invisible**: was hand-built with `el("svg",...)`, which uses `document.createElement` (no SVG namespace) and silently renders nothing. Added a `home` entry to `modIcon()`'s `D` map (filled house path) and call `modIcon("home",15)` instead. See new gotcha entry above — audit any other raw `el("svg"...)` usage if found.
+- **"Stars of Q4" bubble icon empty**: code had `announced?"":isOpen?"":""` — placeholder emoji lost at some point. Replaced with a `trophy` entry in `modIcon()`'s `D` map, rendered via `modIcon("trophy",22)`. Added `color:#fff` to `.stars-icon-bubble` CSS so the stroke-based icon shows white against the gold gradient.
+
+**Features built — Attendance Overview redesign (Morning Meetings + Teaching Attendance):**
+- Replaced the old combined "X/Y · L:.. A:.." per-block cell with a shared `renderAttOverview(cfg)` used by both `renderMMOverview()` and `renderTeachOverview()`. New `attCounts(sessions, attStore, resId)` helper tallies raw P/L/A/E/O counts (no blending — previously L counted toward P).
+- Two sub-tabs per module: **By Block** (block picker via existing `renderBlockPills()`, real P/L/A/E/O columns colored to match the existing attendance-entry palette: green/gold/red/purple/grey) and **Overall** (totals summed across every block in the AY, adds a Total column).
+- Sort buttons "Most Absent" / "Most Late" (`STATE.mmOvSort`/`STATE.teachOvSort`, `{field,dir}`) — click toggles ascending/descending, defaults descending (worst offenders first). Rank number shown next to each resident in the sticky column.
+- New state: `mmOvMode`/`mmOvSort` (Morning Meetings), `teachOvMode`/`teachOvSort` (Teaching Att.) — both default `mode:"block"`, `sort:{field:"a",dir:"desc"}`.
+- Design was iterated through 2 rounds of `/tmp` preview approval (icon options, then table-layout options + sort behavior) before any code was touched, per the standing design-workflow rule.
+- Committed & pushed (`413bdb3`). Only `node --check` run — not browser-verified this session (requires login), spot-check next login.
+
+**Still TODO:**
+- Run `supabase/fix_leave_records_source_check.sql` in Supabase SQL editor — blocks ALL leave requests until run.
+- Spot-check Home icon, Stars trophy icon, and both attendance Overview tabs (By Block + Overall, both sort buttons) live after next login.
+- Audited codebase for other raw `el("svg",...)` usage — none found; Home icon was the only instance.
 - Carried forward (unchanged): historical KPI data entry, On-Call Statistics tab visibility, `renderKPI()`/`renderAdminProfile()` splits, "Push to Rota" (Oct 2026), new AY 2026-27 master rota setup (Oct auto-promotion, archive R4s, 15 placeholder R1s, Excel rota import). Leave plan submissions deadline: 18 Jul 2026.
