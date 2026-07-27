@@ -1,0 +1,268 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-27T19:50:11Z",
+  "title": "Design System: DSFH Internal Medicine Residency Portal",
+  "extensions": {
+    "colorMeta": {
+      "terracotta": {
+        "role": "primary",
+        "displayName": "Terracotta",
+        "canonical": "#c96a4a",
+        "tonalRamp": ["#2e150c", "#4b2213", "#69301b", "#8e4429", "#c96a4a", "#dc9375", "#eebca8", "#fae6dc"]
+      },
+      "terracotta-deep": {
+        "role": "primary",
+        "displayName": "Terracotta Deep",
+        "canonical": "#b5593a",
+        "tonalRamp": ["#28120b", "#421e11", "#5d2a18", "#87401f", "#b5593a", "#d08668", "#e6b39c", "#f7e2d7"]
+      },
+      "terracotta-light": {
+        "role": "primary",
+        "displayName": "Terracotta Light",
+        "canonical": "#e8956d",
+        "tonalRamp": ["#3a1c0d", "#5b2c15", "#7d3e1e", "#a9592d", "#e8956d", "#f0b294", "#f7d2bd", "#fdeee5"]
+      },
+      "ember": {
+        "role": "primary",
+        "displayName": "Ember",
+        "canonical": "#7c3820",
+        "tonalRamp": ["#1c0c06", "#2e140a", "#431d0f", "#5e2917", "#7c3820", "#a85b3c", "#cf9276", "#eccbbc"]
+      },
+      "blush": {
+        "role": "primary",
+        "displayName": "Blush",
+        "canonical": "#fde0c8",
+        "tonalRamp": ["#4a3021", "#6c4630", "#8f5e42", "#b57e5c", "#d9a985", "#eec5a8", "#fde0c8", "#fef3e9"]
+      },
+      "honors-gold": {
+        "role": "secondary",
+        "displayName": "Honors Gold",
+        "canonical": "#A47A28",
+        "tonalRamp": ["#241a08", "#3b2b0e", "#543c14", "#75551c", "#A47A28", "#c9a055", "#e0c48f", "#f4e7cd"]
+      },
+      "gold-light": {
+        "role": "secondary",
+        "displayName": "Gold Light",
+        "canonical": "#CBA155",
+        "tonalRamp": ["#2c220f", "#463718", "#614d22", "#87692c", "#CBA155", "#dcbc82", "#ead4ae", "#f8eeda"]
+      },
+      "cream": {
+        "role": "neutral",
+        "displayName": "Cream",
+        "canonical": "#FEFBF3",
+        "tonalRamp": ["#3a352b", "#57503f", "#756c56", "#9a917a", "#c0b8a4", "#ded7c8", "#f3eee2", "#FEFBF3"]
+      },
+      "parchment": {
+        "role": "neutral",
+        "displayName": "Parchment",
+        "canonical": "#F6EFE2",
+        "tonalRamp": ["#332d22", "#4e4635", "#6a6049", "#8d8267", "#b3a88c", "#d3c9b3", "#F6EFE2", "#fbf7ef"]
+      },
+      "parchment-deep": {
+        "role": "neutral",
+        "displayName": "Parchment Deep",
+        "canonical": "#ede5d4",
+        "tonalRamp": ["#302a1e", "#4a4230", "#655a42", "#877a5c", "#ada086", "#cec2a9", "#ede5d4", "#f8f3ea"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#1F1A12",
+        "tonalRamp": ["#1F1A12", "#3a3123", "#564935", "#75654a", "#978667", "#bbae94", "#dcd3c3", "#f2ede4"]
+      },
+      "success-green": {
+        "role": "tertiary",
+        "displayName": "Present Green",
+        "canonical": "#2a7a5a",
+        "tonalRamp": ["#0a1f16", "#103425", "#164a35", "#1e6247", "#2a7a5a", "#4ba483", "#84c7ac", "#c6e6d8"]
+      },
+      "sage": {
+        "role": "tertiary",
+        "displayName": "Sage",
+        "canonical": "#7FB89C",
+        "tonalRamp": ["#1a2e24", "#274736", "#356049", "#487d60", "#5e9a78", "#7FB89C", "#a9d0be", "#dcece4"]
+      },
+      "alert-red": {
+        "role": "tertiary",
+        "displayName": "Absent Red",
+        "canonical": "#b52040",
+        "tonalRamp": ["#2c0810", "#48101c", "#651829", "#8e1c34", "#b52040", "#d0526e", "#e4909f", "#f6d3da"]
+      },
+      "excused-violet": {
+        "role": "tertiary",
+        "displayName": "Excused Violet",
+        "canonical": "#7c3aed",
+        "tonalRamp": ["#1d0d3a", "#2f155c", "#421d80", "#5c28ad", "#7c3aed", "#9d6bf2", "#c0a0f7", "#e4d7fc"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Hero titles only. Stacks to three lines on cinematic surfaces with the middle line italic at weight 400." },
+      "headline": { "displayName": "Headline", "purpose": "Section titles on report and home surfaces." },
+      "title": { "displayName": "Title", "purpose": "Card and modal headings." },
+      "body": { "displayName": "Body", "purpose": "All interface prose and table cells. Inter is genuinely loaded (400/500/600/700/800) as of 27 Jul 2026; never declare a family the document does not serve." },
+      "label": { "displayName": "Label", "purpose": "Uppercase table headers and stat captions." },
+      "eyebrow": { "displayName": "Eyebrow", "purpose": "The wide-tracked uppercase line that opens every section above its serif title." }
+    },
+    "shadows": [
+      { "name": "hover-lift", "value": "0 6px 20px rgba(31,26,18,.10)", "purpose": "Grouped tiles responding to the pointer, paired with translateY(-2px)." },
+      { "name": "resting-group", "value": "0 2px 12px rgba(31,26,18,.08)", "purpose": "Countdown blocks and small standalone figures at rest." },
+      { "name": "glass-card", "value": "0 8px 32px rgba(31,26,18,.15)", "purpose": "The blurred hero info card floating on the clay gradient." },
+      { "name": "floating-panel", "value": "0 24px 60px rgba(31,26,18,.28)", "purpose": "Modals." },
+      { "name": "stage", "value": "0 32px 80px rgba(31,26,18,.35)", "purpose": "The login card against the full-bleed gradient." },
+      { "name": "drawer", "value": "-4px 0 28px rgba(31,26,18,.15)", "purpose": "The right-edge notification panel." },
+      { "name": "focus-ring", "value": "0 0 0 3px rgba(201,106,74,.1)", "purpose": "Input focus, paired with a terracotta border." },
+      { "name": "gold-glow", "value": "0 4px 12px rgba(232,160,0,.35)", "purpose": "Gold avatar and star rings only." },
+      { "name": "clay-glow", "value": "0 4px 12px rgba(201,106,74,.35)", "purpose": "Terracotta avatar rings only." },
+      { "name": "today-rail", "value": "inset 4px 0 0 #c96a4a", "purpose": "Marks today's row in the on-call table without an outline." }
+    ],
+    "motion": [
+      { "name": "state", "value": "all .14s", "purpose": "Default for buttons, pills, tabs, and rows. Fast enough to feel immediate." },
+      { "name": "state-fast", "value": "background .1s", "purpose": "Table row and list item hover." },
+      { "name": "bar-fill", "value": "width .4s", "purpose": "Progress bar fills." },
+      { "name": "rank-bar", "value": "width 1s ease", "purpose": "Best Resident ranking bars, slow enough to be watched." },
+      { "name": "drawer-slide", "value": "left .25s ease", "purpose": "Mobile sidebar drawer." },
+      { "name": "star-pulse", "value": "starPulse 3s ease-in-out infinite", "purpose": "Ambient pulse on the Stars banner icon bubble; scale 1 to 1.06 with a widening glow." },
+      { "name": "vote-pulse", "value": "vPulse 1.5s ease-in-out infinite", "purpose": "Expanding ring on the live-voting dot." },
+      { "name": "spin", "value": "spin .85s linear infinite", "purpose": "Loading spinner only." },
+      { "name": "toast-in", "value": "toastIn .2s", "purpose": "Toasts enter from 20px right." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "600px" },
+      { "name": "tablet", "value": "900px" },
+      { "name": "content-max", "value": "1040px" }
+    ],
+    "gradients": [
+      { "name": "clay-stage", "value": "linear-gradient(148deg,#7c3820 0%,#c96a4a 38%,#e8956d 65%,#f2b48a 82%,#fde0c8 100%)", "purpose": "Full-bleed cinematic grounds: login, loading, home hero, Performance Report hero." },
+      { "name": "gold-object", "value": "linear-gradient(135deg,#A47A28,#CBA155)", "purpose": "Senior-tier avatars, rails, and quarter pills." },
+      { "name": "clay-object", "value": "linear-gradient(135deg,#c96a4a,#e8956d)", "purpose": "Junior-tier avatars and rails." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single primary action on a view. Terracotta ground, no lift.",
+      "html": "<button class=\"ds-btn-primary\">Save Changes</button>",
+      "css": ".ds-btn-primary { background: #c96a4a; color: #FEFBF3; padding: 8px 20px; border: none; border-radius: 8px; font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: .84rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all .14s; } .ds-btn-primary:hover { background: #b5593a; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(201,106,74,.25); } .ds-btn-primary:active { background: #a04f33; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Default secondary action. Parchment ground with a warm hairline — never an outline-only button.",
+      "html": "<button class=\"ds-btn-ghost\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M19 12H5\"/><path d=\"M12 19l-7-7 7-7\"/></svg>Back</button>",
+      "css": ".ds-btn-ghost { background: #F6EFE2; color: #1F1A12; padding: 8px 20px; border: 1px solid rgba(31,26,18,.12); border-radius: 8px; font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: .84rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all .14s; } .ds-btn-ghost:hover { background: #ede5d4; } .ds-btn-ghost:focus-visible { outline: none; border-color: #c96a4a; box-shadow: 0 0 0 3px rgba(201,106,74,.1); }"
+    },
+    {
+      "name": "Block Pill",
+      "kind": "chip",
+      "refersTo": "pill",
+      "description": "Block and filter selector. Transparent at rest, terracotta when selected, gold when it marks the current block.",
+      "html": "<div style=\"display:flex;gap:6px;flex-wrap:wrap\"><span class=\"ds-pill\">B7</span><span class=\"ds-pill ds-pill-on\">B8</span><span class=\"ds-pill ds-pill-cur\">B9</span></div>",
+      "css": ".ds-pill { display: inline-block; padding: 4px 14px; border-radius: 20px; font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: .76rem; font-weight: 600; cursor: pointer; border: 1px solid rgba(31,26,18,.12); background: transparent; color: rgba(31,26,18,.45); transition: all .14s; } .ds-pill:hover { border-color: rgba(201,106,74,.4); color: #c96a4a; } .ds-pill-on { background: #c96a4a; color: #FEFBF3; border-color: #c96a4a; } .ds-pill-cur { background: #A47A28; color: #FEFBF3; border-color: #A47A28; }"
+    },
+    {
+      "name": "Underline Tab",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "Section tabs. Text-only with a 2px bottom border; never gains a background.",
+      "html": "<div class=\"ds-tabbar\"><span class=\"ds-tab ds-tab-on\">Ongoing</span><span class=\"ds-tab\">Quarterly</span><span class=\"ds-tab\">Yearly</span></div>",
+      "css": ".ds-tabbar { border-bottom: 1px solid rgba(31,26,18,.1); } .ds-tab { display: inline-block; padding: 7px 18px; font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: .82rem; font-weight: 600; cursor: pointer; color: rgba(31,26,18,.38); border: none; border-bottom: 2px solid transparent; margin-right: 4px; margin-bottom: -1px; background: transparent; transition: all .14s; } .ds-tab:hover { color: rgba(31,26,18,.65); } .ds-tab-on { color: #c96a4a; border-bottom-color: #c96a4a; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Standard field with its label. Focus turns the border terracotta and adds a soft clay ring.",
+      "html": "<div><label class=\"ds-label\" for=\"ds-f1\">Rotation</label><input class=\"ds-input\" id=\"ds-f1\" type=\"text\" placeholder=\"CTU 1\"></div>",
+      "css": ".ds-label { display: block; font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: .78rem; font-weight: 600; color: rgba(31,26,18,.55); margin-bottom: 4px; } .ds-input { padding: 9px 12px; border: 1px solid rgba(31,26,18,.15); border-radius: 8px; font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: .87rem; width: 100%; outline: none; background: #FEFBF3; color: #1F1A12; transition: border .14s; } .ds-input::placeholder { color: rgba(31,26,18,.3); } .ds-input:focus { border-color: #c96a4a; box-shadow: 0 0 0 3px rgba(201,106,74,.1); }"
+    },
+    {
+      "name": "Stat Box",
+      "kind": "card",
+      "refersTo": "statbox",
+      "description": "Parchment tile with a serif figure over an uppercase caption. The system's smallest unit of measurement.",
+      "html": "<div class=\"ds-statbox\"><div class=\"ds-statval\">87%</div><div class=\"ds-statlbl\">MM Attendance</div></div>",
+      "css": ".ds-statbox { background: #F6EFE2; border: none; border-radius: 10px; padding: 16px; text-align: center; } .ds-statval { font-family: 'Playfair Display', Georgia, serif; font-size: 1.9rem; font-weight: 700; color: #1F1A12; letter-spacing: -.02em; line-height: 1.1; } .ds-statlbl { font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: .68rem; color: rgba(31,26,18,.4); margin-top: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }"
+    },
+    {
+      "name": "Content Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The default container: transparent, no radius, no shadow, one hairline bottom rule. This is why the page reads as a document rather than a grid of widgets.",
+      "html": "<div><div class=\"ds-card\"><div class=\"ds-card-title\">Block 8 Summary</div><div class=\"ds-card-body\">Twenty-eight days across four rotation slots.</div></div><div class=\"ds-card\"><div class=\"ds-card-title\">Block 9 Summary</div><div class=\"ds-card-body\">Twenty-eight days across four rotation slots.</div></div></div>",
+      "css": ".ds-card { background: transparent; border: none; border-bottom: 1px solid rgba(31,26,18,.07); border-radius: 0; box-shadow: none; padding: 22px 0; } .ds-card:last-child { border-bottom: none; } .ds-card-title { font-family: 'Playfair Display', Georgia, serif; font-weight: 700; font-size: 1.05rem; color: #1F1A12; margin-bottom: 14px; } .ds-card-body { font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: .87rem; color: rgba(31,26,18,.6); line-height: 1.5; }"
+    },
+    {
+      "name": "Star Card",
+      "kind": "custom",
+      "refersTo": "grouped-tile",
+      "description": "Recognition tile: leading accent bar, gradient avatar ring, serif score, and a corner color blob. Gold for senior, clay for junior.",
+      "html": "<div class=\"ds-star-card\"><span class=\"ds-star-glow\"></span><span class=\"ds-star-av\">AK</span><span class=\"ds-star-info\"><span class=\"ds-star-type\">Senior Star</span><span class=\"ds-star-name\">Amal Khan</span><span class=\"ds-star-level\">R4</span></span><span class=\"ds-star-score\">92<span class=\"ds-star-unit\">PTS</span></span></div>",
+      "css": ".ds-star-card { background: #FEFBF3; border-radius: 10px; padding: 16px 18px; border: 1px solid rgba(31,26,18,.08); display: flex; align-items: center; gap: 14px; position: relative; overflow: hidden; transition: transform .2s, box-shadow .2s; } .ds-star-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: linear-gradient(180deg,#A47A28,#CBA155); } .ds-star-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(31,26,18,.1); } .ds-star-glow { position: absolute; top: -20px; right: -20px; width: 80px; height: 80px; border-radius: 50%; opacity: .06; background: #A47A28; } .ds-star-av { width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: 18px; font-weight: 700; color: #fff; background: linear-gradient(135deg,#A47A28,#CBA155); box-shadow: 0 4px 12px rgba(164,122,40,.35); flex-shrink: 0; } .ds-star-info { flex: 1; min-width: 0; display: flex; flex-direction: column; } .ds-star-type { font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: 9px; letter-spacing: 2px; font-weight: 700; color: rgba(31,26,18,.38); text-transform: uppercase; margin-bottom: 2px; } .ds-star-name { font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: 15px; font-weight: 700; color: #1F1A12; } .ds-star-level { font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: 11px; color: rgba(31,26,18,.38); margin-top: 1px; } .ds-star-score { font-family: 'Playfair Display', Georgia, serif; font-size: 22px; font-weight: 700; line-height: 1; color: #A47A28; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; } .ds-star-unit { font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: 9px; font-weight: 400; color: rgba(31,26,18,.35); letter-spacing: 1px; margin-top: 3px; }"
+    },
+    {
+      "name": "Data Table",
+      "kind": "custom",
+      "refersTo": "table-header",
+      "description": "Parchment sticky header in label type, hairline rows, terracotta hover wash. No zebra striping.",
+      "html": "<div class=\"ds-tbl-wrap\"><table class=\"ds-tbl\"><thead><tr><th>Resident</th><th>Level</th><th>Attendance</th></tr></thead><tbody><tr><td>Lamar Hassan</td><td>R2</td><td>91%</td></tr><tr><td>Farid Nasser</td><td>R3</td><td>88%</td></tr></tbody></table></div>",
+      "css": ".ds-tbl-wrap { overflow-x: auto; border: 1px solid rgba(31,26,18,.08); border-radius: 10px; background: #FEFBF3; } .ds-tbl { border-collapse: collapse; width: 100%; font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: .84rem; color: #1F1A12; } .ds-tbl th { background: #F6EFE2; color: rgba(31,26,18,.4); font-weight: 700; padding: 10px 14px; text-align: left; border-bottom: 1px solid rgba(31,26,18,.1); white-space: nowrap; font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; } .ds-tbl td { padding: 10px 14px; border-bottom: 1px solid rgba(31,26,18,.06); vertical-align: middle; } .ds-tbl tbody tr:last-child td { border-bottom: none; } .ds-tbl tbody tr:hover td { background: rgba(201,106,74,.04); }"
+    },
+    {
+      "name": "Cinematic Hero",
+      "kind": "custom",
+      "refersTo": "cinematic-surface",
+      "description": "The signature leadership surface: clay gradient ground, wide-tracked eyebrow, stacked serif title with an italic middle line, oversized figure with superscript unit, hairline stat rail.",
+      "html": "<div class=\"ds-hero\"><div class=\"ds-hero-top\"><div><div class=\"ds-hero-eyebrow\">Dr. Solaiman Fakeeh Hospital &middot; Internal Medicine &middot; AY 2025-26</div><div class=\"ds-hero-t1\">Residency</div><div class=\"ds-hero-t2\">Performance</div><div class=\"ds-hero-t1\">Report</div></div><div class=\"ds-hero-right\"><div class=\"ds-hero-cap\">Cohort KPI Average</div><div class=\"ds-hero-fig\">87<span class=\"ds-hero-unit\">%</span></div><div class=\"ds-hero-sub\">15 active residents</div><div class=\"ds-hero-tier\">Outstanding</div></div></div><div class=\"ds-hero-rail\"><div class=\"ds-rail-cell\"><div class=\"ds-rail-lbl\">MM Attendance</div><div class=\"ds-rail-val\">87%</div></div><div class=\"ds-rail-cell\"><div class=\"ds-rail-lbl\">Teaching</div><div class=\"ds-rail-val\">91%</div></div><div class=\"ds-rail-cell ds-rail-last\"><div class=\"ds-rail-lbl\">Quiz Average</div><div class=\"ds-rail-val\">78%</div></div></div></div>",
+      "css": ".ds-hero { background: linear-gradient(148deg,#7c3820 0%,#c96a4a 38%,#e8956d 65%,#f2b48a 82%,#fde0c8 100%); position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; padding: 40px 44px 0; border-radius: 14px; min-height: 380px; } .ds-hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 32px; } .ds-hero-eyebrow { font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: .63rem; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: rgba(254,251,243,.55); margin-bottom: 18px; } .ds-hero-t1 { font-family: 'Playfair Display', Georgia, serif; font-size: 2.6rem; font-weight: 700; color: #FEFBF3; line-height: 1.08; text-shadow: 0 2px 24px rgba(100,30,10,.25); } .ds-hero-t2 { font-family: 'Playfair Display', Georgia, serif; font-size: 2.6rem; font-weight: 400; font-style: italic; color: rgba(254,251,243,.82); line-height: 1.08; text-shadow: 0 2px 24px rgba(100,30,10,.25); } .ds-hero-right { text-align: right; flex-shrink: 0; } .ds-hero-cap { font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: .6rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: rgba(254,251,243,.45); margin-bottom: 6px; } .ds-hero-fig { font-family: 'Playfair Display', Georgia, serif; font-size: 5.4rem; font-weight: 700; color: #FEFBF3; line-height: 1; letter-spacing: -.03em; text-shadow: 0 4px 32px rgba(100,30,10,.3); } .ds-hero-unit { font-size: 2.2rem; font-weight: 400; color: rgba(254,251,243,.55); vertical-align: super; } .ds-hero-sub { font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: .74rem; color: rgba(254,251,243,.45); margin-top: 6px; } .ds-hero-tier { display: inline-block; margin-top: 12px; padding: 5px 18px; border-radius: 9999px; background: rgba(254,251,243,.12); border: 1px solid rgba(254,251,243,.28); font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: .68rem; font-weight: 700; color: rgba(254,251,243,.85); letter-spacing: .05em; } .ds-hero-rail { display: flex; align-items: center; border-top: 1px solid rgba(254,251,243,.15); margin-top: 32px; } .ds-rail-cell { flex: 1; padding: 18px 24px 26px 0; border-right: 1px solid rgba(254,251,243,.1); } .ds-rail-cell + .ds-rail-cell { padding-left: 24px; } .ds-rail-last { border-right: none; } .ds-rail-lbl { font-family: 'Inter','Segoe UI',system-ui,sans-serif; font-size: .58rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(254,251,243,.38); margin-bottom: 6px; } .ds-rail-val { font-family: 'Playfair Display', Georgia, serif; font-size: 1.9rem; font-weight: 700; color: #FEFBF3; line-height: 1; text-shadow: 0 2px 12px rgba(100,30,10,.2); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Editorial Record",
+    "overview": "This is a clinical record set with the care of a printed journal. The page is warm paper stock (#FEFBF3), the ink is near-black brown (#1F1A12), and a single fired-clay accent (#c96a4a) does all the pointing. Headlines and every number that matters are set in Playfair Display; the interface text steps back into a neutral sans so the figures carry the voice. Structure comes from hairline rules and background shifts, not from outlines — a table of attendance reads like a typeset page, not a grid of widgets.\n\nThe system runs at two registers, and the difference is deliberate. Working surfaces — rota, attendance, on-call, admin, leave — are quiet, dense, and restrained enough to sit under a resident's eyes all day; terracotta appears only to mark what is active or actionable. Leadership surfaces — the Performance Report, Best Resident, the home hero — are cinematic: full-bleed clay gradients, a stacked serif title with its middle line dropped into italic, a 7.5rem cohort figure, gold rails and pulsing stars. When the program is being presented to executives, the interface is expected to produce an effect, not merely display data.\n\nWhat it is not: it is not a hospital EMR (no grey chrome, no blue-on-white enterprise density), not a consumer analytics dashboard (no neon KPI cards, no gradient-on-black), and not a slide deck. It must never read as generically machine-generated or as a boring PowerPoint — and it does not use boring squares.",
+    "keyCharacteristics": [
+      "Warm paper canvas with zero pure white and zero pure black",
+      "One accent color, used sparingly and always meaningfully",
+      "Serif display for headings and for figures; sans for everything else",
+      "Hairline rules and tonal shifts instead of card outlines",
+      "Two registers: restrained in the working modules, cinematic in the leadership ones",
+      "Radius everywhere; status and identity elements are pills or circles"
+    ],
+    "rules": [
+      { "name": "The One Clay Rule", "body": "Terracotta means active, primary, or now — nothing else. It is never used to decorate, never to fill a large area outside a gradient, and never to distinguish two things that are both inactive.", "section": "colors" },
+      { "name": "The Earned Gold Rule", "body": "Gold appears only where a thing was earned (rank 1, senior star, Hall of Fame) or formally set by authority (a deadline, the current block). Gold used for ordinary emphasis breaks the ranking language.", "section": "colors" },
+      { "name": "The No Pure Values Rule", "body": "No #ffffff and no #000000 anywhere on a surface a user reads. Cream and Ink are the extremes. White is permitted only as text on saturated status fills.", "section": "colors" },
+      { "name": "The Serif-for-Numbers Rule", "body": "Any figure a person is meant to judge — a score, a percentage, a rank, a countdown — is set in Playfair. Sans is for labels and prose. A KPI number in the body font is a defect.", "section": "typography" },
+      { "name": "The Italic Second Line Rule", "body": "When a hero title stacks, the middle line drops to weight 400 italic in cream at 82% opacity. That single tonal break is what makes a three-word title cinematic rather than a heading.", "section": "typography" },
+      { "name": "The Eyebrow Always Rule", "body": "Every section opens with an uppercase, wide-tracked eyebrow before its serif title — terracotta on cream, cream-at-45% on clay.", "section": "typography" },
+      { "name": "The Rail-Not-Reflow Rule", "body": "On tablet the sidebar narrows to icons; it never becomes a hamburger until true mobile. Two different navigation models at two different widths is intentional.", "section": "layout" },
+      { "name": "The Lift-When-It-Floats Rule", "body": "A shadow means this is above the page — a modal, a drawer, a glass card, a hovering tile. A surface that is simply a different kind of content gets parchment and a hairline instead.", "section": "elevation" },
+      { "name": "The Warm Shadow Rule", "body": "Every shadow is tinted with rgba(31,26,18,…). A neutral or blue-black shadow is out of system.", "section": "elevation" },
+      { "name": "The No Boring Square Rule", "body": "Nothing ships with a 0 radius on a light surface. Full-screen mobile modals are the single sanctioned exception, because they meet the viewport edge.", "section": "shapes" },
+      { "name": "The Two Registers Rule", "body": "Cinematic treatment belongs to leadership and recognition surfaces. Working modules (attendance, rota, admin, leave) stay quiet — a gradient hero over an attendance grid is out of system.", "section": "components" }
+    ],
+    "dos": [
+      "Do set every judged figure — score, percentage, rank, countdown — in Playfair Display.",
+      "Do separate content with a 1px rgba(31,26,18,.07) hairline or a shift to parchment, in that order of preference.",
+      "Do use terracotta only for active, primary, or current, and gold only for earned or formally imposed.",
+      "Do open every section with an uppercase wide-tracked eyebrow above its serif title.",
+      "Do give leadership-facing surfaces a genuine cinematic moment — full-bleed gradient, oversized serif figure, stat rail.",
+      "Do keep ambient motion slow (0.08–0.5 drift speeds, 1.5–3s pulses) and state transitions fast (.12–.16s).",
+      "Do use logical alignment and direction-neutral spacing where possible — Arabic/RTL support is a planned requirement and hard-coded left assumptions will block it.",
+      "Do keep effects cheap enough for older hospital PCs: canvas confetti and CSS keyframes, no heavy compositing stacks."
+    ],
+    "donts": [
+      "Don't use #ffffff or #000000 on any surface a user reads.",
+      "Don't put a border: 1px solid outline all the way around a content card — the system separates with one edge, not four.",
+      "Don't ship a 0-radius element on a light surface. No boring squares.",
+      "Don't let it read like a hospital EMR — no grey chrome, no blue-on-white enterprise density, no windowed panel stacks.",
+      "Don't let it read like a consumer analytics dashboard — no neon KPI cards, no gradient-on-black, no vanity sparklines.",
+      "Don't let it read as generically machine-generated or as a slide deck. Every surface should look like someone decided it.",
+      "Don't apply cinematic treatment to a working module, or leave a leadership surface flat.",
+      "Don't build icons as emoji or via el(\"svg\", …) — stroked 18–24px SVG through the namespaced builder only.",
+      "Don't introduce a second accent color. One clay, one gold, five status colors, and that is the whole vocabulary."
+    ]
+  }
+}
