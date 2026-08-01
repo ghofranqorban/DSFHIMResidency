@@ -132,6 +132,22 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .oc-hover-tip .oc-dp-line{display:flex;gap:5px;margin-top:2px;}
 .oc-hover-tip .oc-dp-warn{color:#f2b8a0;}
 .oc-hover-tip .oc-dp-leave{color:#f2c98a;}
+/* ── Full-screen schedule view ── */
+#oc-fullscreen{position:fixed;inset:0;background:#F6EFE2;z-index:9000;display:none;flex-direction:column;}
+#oc-fullscreen.open{display:flex;}
+.oc-fs-bar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:#1F1A12;color:#FEFBF3;}
+.oc-fs-bar .oc-fs-title{font-family:'Playfair Display',serif;font-weight:400;font-size:1.15rem;}
+.oc-fs-close{background:rgba(254,251,243,.12);color:#FEFBF3;border:none;border-radius:8px;padding:8px 16px;font-size:.82rem;font-weight:600;cursor:pointer;}
+.oc-fs-close:hover{background:rgba(254,251,243,.2);}
+.oc-fs-body{flex:1 1 auto;overflow:hidden;padding:16px 24px 20px;display:flex;gap:18px;}
+.oc-fs-tbl-wrap{flex:1 1 auto;min-width:0;overflow:hidden;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);border:1px solid #ddd6cc;}
+.oc-fs-tbl-wrap .oncall-tbl{height:100%;table-layout:fixed;}
+.oc-dock-panel{flex:0 0 280px;background:#1F1A12;color:#FEFBF3;border-radius:12px;padding:18px;font-size:.8rem;line-height:1.6;overflow-y:auto;}
+.oc-dock-empty{color:rgba(254,251,243,.4);font-style:italic;}
+.oc-dock-panel .oc-dp-name{font-weight:700;font-size:.88rem;color:#fff;margin-bottom:8px;}
+.oc-dock-panel .oc-dp-line{display:flex;gap:6px;margin-top:6px;}
+.oc-dock-panel .oc-dp-warn{color:#f2b8a0;}
+.oc-dock-panel .oc-dp-leave{color:#f2c98a;}
 /* ── Inputs ── */
 .input-sm{padding:5px 9px;border:1px solid rgba(31,26,18,.14);border-radius:6px;font-size:.82rem;width:100%;background:#FEFBF3;}
 input,select,textarea{padding:9px 12px;border:1px solid rgba(31,26,18,.15);border-radius:8px;font-size:.87rem;width:100%;outline:none;transition:border .14s;background:#FEFBF3;color:#1F1A12;}
@@ -1598,29 +1614,38 @@ function oncallConflictPreview(blk,targetDate,rid,rname,blockStart,blockEnd){
 }
 // Shared highlight+tooltip used both by the inline cell picker dropdown and
 // by hovering a resident's name directly in the on-call table.
+const OC_DOCK_EMPTY="<div class='oc-dock-empty'>Hover a resident's name to see conflict &amp; leave details</div>";
 function oncallClearSpotlight(){
-  document.querySelectorAll("#oncall-sched-tbl .oc-spotlight").forEach(el=>el.classList.remove("oc-spotlight","oc-conflict"));
+  document.querySelectorAll(".oc-spotlight").forEach(el=>el.classList.remove("oc-spotlight","oc-conflict"));
   const tip=document.getElementById("oc-hover-tip");
   if(tip)tip.remove();
+  const dockBody=document.getElementById("oc-dock-body");
+  if(dockBody)dockBody.innerHTML=OC_DOCK_EMPTY;
 }
 function oncallSpotlight(blk,targetDate,rid,rname,blockStart,blockEnd,anchorEl){
   oncallClearSpotlight();
   const{dates,lines,conflictDates}=oncallConflictPreview(blk,targetDate,rid,rname,blockStart,blockEnd);
   dates.forEach(ds=>{
     const sel=rid?'[data-oc-rid="'+rid+'"][data-oc-date="'+ds+'"]':'[data-oc-rname="'+rname+'"][data-oc-date="'+ds+'"]';
-    document.querySelectorAll("#oncall-sched-tbl "+sel).forEach(el=>{
+    document.querySelectorAll(sel).forEach(el=>{
       el.classList.add("oc-spotlight");
       if(conflictDates.has(ds))el.classList.add("oc-conflict");
     });
   });
-  if(!anchorEl)return;
   const label=rid?dname(anyResById(rid)?.name||""):rname;
-  const tip=document.createElement("div");
-  tip.id="oc-hover-tip";
-  tip.className="oc-hover-tip";
   let html="<div class='oc-dp-name'>"+label+" \u2014 "+dates.length+" on-call day"+(dates.length===1?"":"s")+" this block</div>";
   lines.forEach(l=>{html+="<div class='oc-dp-line "+(l.type==="leave"?"oc-dp-leave":"oc-dp-warn")+"'>"+(l.type==="leave"?"\uD83C\uDF34 ":"\u26A0 ")+l.text+"</div>";});
   if(!lines.length)html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.55);'>No conflicts detected</div>";
+  const fsOpen=document.getElementById("oc-fullscreen")?.classList.contains("open");
+  const dockBody=document.getElementById("oc-dock-body");
+  if(fsOpen&&dockBody){
+    dockBody.innerHTML=html;
+    return;
+  }
+  if(!anchorEl)return;
+  const tip=document.createElement("div");
+  tip.id="oc-hover-tip";
+  tip.className="oc-hover-tip";
   tip.innerHTML=html;
   document.body.appendChild(tip);
   const r=anchorEl.getBoundingClientRect();
@@ -1632,6 +1657,27 @@ function oncallSpotlight(blk,targetDate,rid,rname,blockStart,blockEnd,anchorEl){
   let top=Math.max(8,Math.min(r.top,window.innerHeight-tipH-8));
   tip.style.top=top+"px";
 }
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&STATE.oncallFullscreen)set({oncallFullscreen:false});});
+function fitOncallFullscreen(){
+  const overlay=document.getElementById("oc-fullscreen");
+  if(!overlay||!overlay.classList.contains("open"))return;
+  const wrap=overlay.querySelector(".oc-fs-tbl-wrap");
+  const thead=wrap?.querySelector("thead");
+  const tbody=wrap?.querySelector("tbody");
+  if(!wrap||!thead||!tbody||!tbody.children.length)return;
+  const availH=wrap.getBoundingClientRect().height;
+  const theadH=thead.getBoundingClientRect().height;
+  const rows=tbody.children.length;
+  const rowH=Math.max(18,(availH-theadH)/rows);
+  const fontPx=Math.max(9,Math.min(13,Math.floor(rowH*0.32)));
+  const padV=Math.max(1,Math.floor(rowH*0.1));
+  const btnFontPx=Math.max(8,fontPx-2);
+  const cellMinH=Math.max(10,Math.floor(rowH-padV*2-2));
+  let style=document.getElementById("oc-fs-dyn-style");
+  if(!style){style=document.createElement("style");style.id="oc-fs-dyn-style";document.head.appendChild(style);}
+  style.textContent="#oc-fullscreen .oncall-tbl td{padding:"+padV+"px 12px;font-size:"+fontPx+"px;} #oc-fullscreen .oncall-tbl thead th{padding:5px 12px;font-size:.6rem;} #oc-fullscreen .oc-day-pill{font-size:"+btnFontPx+"px!important;padding:1px 7px!important;} #oc-fullscreen .oncall-tbl td button.sbtn{font-size:"+btnFontPx+"px!important;padding:1px 6px!important;} #oc-fullscreen .oc-sticky-date div{font-size:"+fontPx+"px!important;line-height:1.15!important;} #oc-fullscreen .oncall-tbl td>div{min-height:"+cellMinH+"px!important;}";
+}
+window.addEventListener("resize",()=>{if(STATE.oncallFullscreen)fitOncallFullscreen();});
 async function loadOncallData(){
   const{data,error}=await sb.from("oncall_schedule").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("schedule_date");
   if(!error&&data)ONCALL_DATA=data;
@@ -8753,53 +8799,75 @@ function renderOncall(){
   function renderScheduleTab(){
     if(!blockStart)return el("p",{cls:"sh"},"Block data not available.");
     const hasData=allDates.some(({date})=>byDate[date]&&Object.keys(byDate[date]).length>0);
+    function buildRows(){
+      return allDates.map(({date,day,isWe})=>{
+        const sl=byDate[date]||{};
+        const isToday=date===todayStr;
+        const rowCls=isToday?"oc-today":isWe?"oc-we":"";
+        const [_y,_mo,_dy]=date.split("-");
+        const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        const shortDate=parseInt(_dy)+" "+MONTHS[parseInt(_mo)-1];
+        const dateCellContent=document.createElement("div");
+        dateCellContent.style.cssText="font-weight:700;font-size:.83rem;color:"+(isToday?"#c96a4a":"#1F1A12")+";white-space:nowrap;line-height:1.3;";
+        dateCellContent.textContent=shortDate;
+        if(isToday){const badge=document.createElement("div");badge.style.cssText="font-size:.6rem;font-weight:800;color:#c96a4a;letter-spacing:.04em;margin-top:1px;";badge.textContent="TODAY";dateCellContent.appendChild(badge);}
+        return el("tr",{cls:rowCls},
+          el("td",{cls:"oc-sticky-date"},dateCellContent),
+          el("td",{cls:"oc-sticky-day"},el("span",{cls:"oc-day-pill "+(isToday?"today":isWe?"we":"wd")},day)),
+          el("td",null,oncallCell(sl.er_medical,date,"er_medical")),
+          el("td",null,oncallCell(sl.bldg1,date,"bldg1")),
+          el("td",null,oncallCell(sl.bldg2,date,"bldg2")),
+          el("td",null,oncallCell(sl.consult,date,"consult")),
+          el("td",null,isWe?oncallCell(sl.ctu1,date,"ctu1"):el("span",{st:{color:"#d1d5db",fontSize:".78rem"}},"—")),
+          el("td",null,isWe?oncallCell(sl.ctu2,date,"ctu2"):el("span",{st:{color:"#d1d5db",fontSize:".78rem"}},"—")),
+          canEdit?el("td",null,
+            el("button",{cls:"sbtn",st:{fontSize:".74rem",padding:"3px 9px"},onClick:()=>set({oncallEditDate:date})},"Edit")
+          ):null
+        );
+      });
+    }
+    function headRow(){
+      return el("tr",null,
+        el("th",{cls:"oc-sticky-date"},"Date"),
+        el("th",{cls:"oc-sticky-day"},"Day"),
+        el("th",null,"ER Medical Oncall"),
+        el("th",null,"Floor Oncall"),
+        el("th",null,"Floor Oncall"),
+        el("th",null,"Floor Oncall"),
+        el("th",{cls:"ctu-h"},"CTU A"),
+        el("th",{cls:"ctu-h"},"CTU B"),
+        canEdit?el("th",null,""):null
+      );
+    }
+    const fsOpen=!!STATE.oncallFullscreen;
+    if(fsOpen)requestAnimationFrame(fitOncallFullscreen);
     return el("div",null,
       renderPublishControls(blkEntriesAll,"oncall_schedule",blk,canEdit,loadOncallData),
-      canEdit?el("div",{st:{marginBottom:"16px"}},
-        el("button",{cls:"sbtn primary",onClick:()=>set({oncallEditDate:allDates[0]?.date||""})}, " Add / Edit Day")
-      ):null,
+      el("div",{st:{marginBottom:"16px",display:"flex",gap:"10px",flexWrap:"wrap"}},
+        canEdit?el("button",{cls:"sbtn primary",onClick:()=>set({oncallEditDate:allDates[0]?.date||""})}, " Add / Edit Day"):null,
+        el("button",{cls:"sbtn",onClick:()=>set({oncallFullscreen:true})},"⛶ Full Screen")
+      ),
       !hasData?el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},"No on-call data entered for Block "+blk+" yet."+(canEdit?" Use 'Edit' on any row to add assignments.":"")):null,
       el("div",{st:{overflowX:"auto",borderRadius:"12px",boxShadow:"0 2px 12px rgba(0,0,0,.08)",border:"1px solid #ddd6cc"}},
         el("table",{cls:"oncall-tbl",id:"oncall-sched-tbl",st:{minWidth:"820px"}},
-          el("thead",null,
-            el("tr",null,
-              el("th",{cls:"oc-sticky-date"},"Date"),
-              el("th",{cls:"oc-sticky-day"},"Day"),
-              el("th",null,"ER Medical Oncall"),
-              el("th",null,"Floor Oncall"),
-              el("th",null,"Floor Oncall"),
-              el("th",null,"Floor Oncall"),
-              el("th",{cls:"ctu-h"},"CTU A"),
-              el("th",{cls:"ctu-h"},"CTU B"),
-              canEdit?el("th",null,""):null
+          el("thead",null,headRow()),
+          el("tbody",null,...buildRows())
+        )
+      ),
+      el("div",{id:"oc-fullscreen",cls:fsOpen?"open":""},
+        el("div",{cls:"oc-fs-bar"},
+          el("div",{cls:"oc-fs-title"},"Block "+blk+" \u00b7 Full Schedule"),
+          el("button",{cls:"oc-fs-close",onClick:()=>set({oncallFullscreen:false})},"\u2715 Exit Full Screen (Esc)")
+        ),
+        el("div",{cls:"oc-fs-body"},
+          el("div",{cls:"oc-fs-tbl-wrap"},
+            el("table",{cls:"oncall-tbl"},
+              el("thead",null,headRow()),
+              el("tbody",null,...buildRows())
             )
           ),
-          el("tbody",null,
-            ...allDates.map(({date,day,isWe})=>{
-              const sl=byDate[date]||{};
-              const isToday=date===todayStr;
-              const rowCls=isToday?"oc-today":isWe?"oc-we":"";
-              const [_y,_mo,_dy]=date.split("-");
-              const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-              const shortDate=parseInt(_dy)+" "+MONTHS[parseInt(_mo)-1];
-              const dateCellContent=document.createElement("div");
-              dateCellContent.style.cssText="font-weight:700;font-size:.83rem;color:"+(isToday?"#c96a4a":"#1F1A12")+";white-space:nowrap;line-height:1.3;";
-              dateCellContent.textContent=shortDate;
-              if(isToday){const badge=document.createElement("div");badge.style.cssText="font-size:.6rem;font-weight:800;color:#c96a4a;letter-spacing:.04em;margin-top:1px;";badge.textContent="TODAY";dateCellContent.appendChild(badge);}
-              return el("tr",{cls:rowCls},
-                el("td",{cls:"oc-sticky-date"},dateCellContent),
-                el("td",{cls:"oc-sticky-day"},el("span",{cls:"oc-day-pill "+(isToday?"today":isWe?"we":"wd")},day)),
-                el("td",null,oncallCell(sl.er_medical,date,"er_medical")),
-                el("td",null,oncallCell(sl.bldg1,date,"bldg1")),
-                el("td",null,oncallCell(sl.bldg2,date,"bldg2")),
-                el("td",null,oncallCell(sl.consult,date,"consult")),
-                el("td",null,isWe?oncallCell(sl.ctu1,date,"ctu1"):el("span",{st:{color:"#d1d5db",fontSize:".78rem"}},"—")),
-                el("td",null,isWe?oncallCell(sl.ctu2,date,"ctu2"):el("span",{st:{color:"#d1d5db",fontSize:".78rem"}},"—")),
-                canEdit?el("td",null,
-                  el("button",{cls:"sbtn",st:{fontSize:".74rem",padding:"3px 9px"},onClick:()=>set({oncallEditDate:date})},"Edit")
-                ):null
-              );
-            })
+          el("div",{cls:"oc-dock-panel"},
+            el("div",{id:"oc-dock-body"},el("div",{cls:"oc-dock-empty"},"Hover a resident's name to see conflict & leave details"))
           )
         )
       )
