@@ -127,11 +127,11 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .oc-name{border-radius:5px;padding:2px 4px;}
 .oc-name.oc-spotlight{background:rgba(164,122,40,.18)!important;box-shadow:0 0 0 2px #A47A28 inset;}
 .oc-name.oc-spotlight.oc-conflict{background:rgba(201,74,74,.16)!important;box-shadow:0 0 0 2px #c94a4a inset;}
-.oc-drop-preview{position:sticky;bottom:0;background:#1F1A12;color:#FEFBF3;padding:9px 12px;font-size:.72rem;line-height:1.5;border-top:1px solid rgba(254,251,243,.12);}
-.oc-drop-preview .oc-dp-name{font-weight:700;font-size:.74rem;color:#fff;margin-bottom:3px;}
-.oc-drop-preview .oc-dp-line{display:flex;gap:5px;margin-top:2px;}
-.oc-drop-preview .oc-dp-warn{color:#f2b8a0;}
-.oc-drop-preview .oc-dp-leave{color:#f2c98a;}
+.oc-hover-tip{position:fixed;background:#1F1A12;color:#FEFBF3;padding:9px 12px;font-size:.72rem;line-height:1.5;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.28);max-width:240px;pointer-events:none;z-index:99999;}
+.oc-hover-tip .oc-dp-name{font-weight:700;font-size:.74rem;color:#fff;margin-bottom:3px;}
+.oc-hover-tip .oc-dp-line{display:flex;gap:5px;margin-top:2px;}
+.oc-hover-tip .oc-dp-warn{color:#f2b8a0;}
+.oc-hover-tip .oc-dp-leave{color:#f2c98a;}
 /* ── Inputs ── */
 .input-sm{padding:5px 9px;border:1px solid rgba(31,26,18,.14);border-radius:6px;font-size:.82rem;width:100%;background:#FEFBF3;}
 input,select,textarea{padding:9px 12px;border:1px solid rgba(31,26,18,.15);border-radius:8px;font-size:.87rem;width:100%;outline:none;transition:border .14s;background:#FEFBF3;color:#1F1A12;}
@@ -1595,6 +1595,42 @@ function oncallConflictPreview(blk,targetDate,rid,rname,blockStart,blockEnd){
     }
   }
   return{dates,lines,conflictDates};
+}
+// Shared highlight+tooltip used both by the inline cell picker dropdown and
+// by hovering a resident's name directly in the on-call table.
+function oncallClearSpotlight(){
+  document.querySelectorAll("#oncall-sched-tbl .oc-spotlight").forEach(el=>el.classList.remove("oc-spotlight","oc-conflict"));
+  const tip=document.getElementById("oc-hover-tip");
+  if(tip)tip.remove();
+}
+function oncallSpotlight(blk,targetDate,rid,rname,blockStart,blockEnd,anchorEl){
+  oncallClearSpotlight();
+  const{dates,lines,conflictDates}=oncallConflictPreview(blk,targetDate,rid,rname,blockStart,blockEnd);
+  dates.forEach(ds=>{
+    const sel=rid?'[data-oc-rid="'+rid+'"][data-oc-date="'+ds+'"]':'[data-oc-rname="'+rname+'"][data-oc-date="'+ds+'"]';
+    document.querySelectorAll("#oncall-sched-tbl "+sel).forEach(el=>{
+      el.classList.add("oc-spotlight");
+      if(conflictDates.has(ds))el.classList.add("oc-conflict");
+    });
+  });
+  if(!anchorEl)return;
+  const label=rid?dname(anyResById(rid)?.name||""):rname;
+  const tip=document.createElement("div");
+  tip.id="oc-hover-tip";
+  tip.className="oc-hover-tip";
+  let html="<div class='oc-dp-name'>"+label+" \u2014 "+dates.length+" on-call day"+(dates.length===1?"":"s")+" this block</div>";
+  lines.forEach(l=>{html+="<div class='oc-dp-line "+(l.type==="leave"?"oc-dp-leave":"oc-dp-warn")+"'>"+(l.type==="leave"?"\uD83C\uDF34 ":"\u26A0 ")+l.text+"</div>";});
+  if(!lines.length)html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.55);'>No conflicts detected</div>";
+  tip.innerHTML=html;
+  document.body.appendChild(tip);
+  const r=anchorEl.getBoundingClientRect();
+  const tipW=240;
+  let left=r.right+10;
+  if(left+tipW+8>window.innerWidth)left=Math.max(8,r.left-tipW-10);
+  tip.style.left=left+"px";
+  const tipH=tip.offsetHeight||140;
+  let top=Math.max(8,Math.min(r.top,window.innerHeight-tipH-8));
+  tip.style.top=top+"px";
 }
 async function loadOncallData(){
   const{data,error}=await sb.from("oncall_schedule").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("schedule_date");
@@ -8614,27 +8650,6 @@ function renderOncall(){
       if(entry){const r=anyResById(entry.resident_id);inp.value=r?dname(r.name):(entry.resident_name||"");}
       const drop=document.createElement("ul");
       drop.style.cssText="position:absolute;top:100%;left:0;right:0;z-index:9999;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.15);max-height:220px;overflow-y:auto;list-style:none;padding:0;margin:2px 0 0;";
-      function clearSpotlight(){
-        document.querySelectorAll("#oncall-sched-tbl .oc-spotlight").forEach(el=>el.classList.remove("oc-spotlight","oc-conflict"));
-      }
-      function spotlight(rid,rname){
-        clearSpotlight();
-        const{dates,lines,conflictDates:conflictSet}=oncallConflictPreview(blk,date,rid,rname,blkDateStart,blkDateEnd);
-        dates.forEach(ds=>{
-          const sel=rid?'[data-oc-rid="'+rid+'"][data-oc-date="'+ds+'"]':'[data-oc-rname="'+rname+'"][data-oc-date="'+ds+'"]';
-          document.querySelectorAll("#oncall-sched-tbl "+sel).forEach(el=>{
-            el.classList.add("oc-spotlight");
-            if(conflictSet.has(ds))el.classList.add("oc-conflict");
-          });
-        });
-        let bar=drop.querySelector(".oc-drop-preview");
-        if(!bar){bar=document.createElement("li");bar.className="oc-drop-preview";drop.appendChild(bar);}
-        else drop.appendChild(bar);
-        const label=rid?dname(anyResById(rid)?.name||""):rname;
-        let html="<div class='oc-dp-name'>"+label+" — "+dates.length+" on-call day"+(dates.length===1?"":"s")+" this block</div>";
-        lines.forEach(l=>{html+="<div class='oc-dp-line "+(l.type==="leave"?"oc-dp-leave":"oc-dp-warn")+"'>"+(l.type==="leave"?"\uD83C\uDF34 ":"\u26A0 ")+l.text+"</div>";});
-        bar.innerHTML=html;
-      }
       function buildDrop(q){
         drop.innerHTML="";
         const clearLi=document.createElement("li");
@@ -8650,8 +8665,8 @@ function renderOncall(){
           li.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;border-bottom:1px solid #f9fafb;";
           li.onmouseover=()=>{li.style.background="#f0f9ff";};
           li.onmouseout=()=>{li.style.background="";};
-          li.onmouseenter=()=>spotlight(r.id,null);
-          li.onmouseleave=()=>clearSpotlight();
+          li.onmouseenter=()=>oncallSpotlight(blk,date,r.id,null,blkDateStart,blkDateEnd,li);
+          li.onmouseleave=()=>oncallClearSpotlight();
           li.onmousedown=ev=>{ev.preventDefault();commitOncallCell(r.id,null);};
           drop.appendChild(li);
         });
@@ -8661,8 +8676,8 @@ function renderOncall(){
           ft.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;font-style:italic;color:#374151;border-top:1px solid #f3f4f6;";
           const rname=q.trim().toLowerCase();
           if(ONCALL_DATA.some(e=>e.block_number===blk&&(e.resident_name||"").trim().toLowerCase()===rname)){
-            ft.onmouseenter=()=>spotlight(null,rname);
-            ft.onmouseleave=()=>clearSpotlight();
+            ft.onmouseenter=()=>oncallSpotlight(blk,date,null,rname,blkDateStart,blkDateEnd,ft);
+            ft.onmouseleave=()=>oncallClearSpotlight();
           }
           ft.onmousedown=ev=>{ev.preventDefault();commitOncallCell(null,q);};
           drop.appendChild(ft);
@@ -8672,15 +8687,15 @@ function renderOncall(){
           ft.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;font-style:italic;color:#6b7280;border-top:1px solid #f3f4f6;";
           const rname=q.trim().toLowerCase();
           if(ONCALL_DATA.some(e=>e.block_number===blk&&(e.resident_name||"").trim().toLowerCase()===rname)){
-            ft.onmouseenter=()=>spotlight(null,rname);
-            ft.onmouseleave=()=>clearSpotlight();
+            ft.onmouseenter=()=>oncallSpotlight(blk,date,null,rname,blkDateStart,blkDateEnd,ft);
+            ft.onmouseleave=()=>oncallClearSpotlight();
           }
           ft.onmousedown=ev=>{ev.preventDefault();commitOncallCell(null,q);};
           drop.appendChild(ft);
         }
       }
       async function commitOncallCell(residentId,residentName){
-        clearSpotlight();
+        oncallClearSpotlight();
         set({oncallInlineEdit:null});
         if(blockIsPublished){
           showConfirm("Block "+blk+" is already published and visible to residents. Save this on-call change to the live schedule?",async()=>{await saveOncallCell(blk,date,slotKey,residentId,residentName);},"Save Change","warn");
@@ -8690,8 +8705,8 @@ function renderOncall(){
       }
       buildDrop("");
       inp.oninput=ev=>buildDrop(ev.target.value);
-      inp.onkeydown=ev=>{if(ev.key==="Escape"){clearSpotlight();set({oncallInlineEdit:null});}};
-      inp.onblur=()=>setTimeout(()=>{clearSpotlight();set({oncallInlineEdit:null});},200);
+      inp.onkeydown=ev=>{if(ev.key==="Escape"){oncallClearSpotlight();set({oncallInlineEdit:null});}};
+      inp.onblur=()=>setTimeout(()=>{oncallClearSpotlight();set({oncallInlineEdit:null});},200);
       wrap.appendChild(inp);wrap.appendChild(drop);
       setTimeout(()=>inp.focus(),0);
       return wrap;
@@ -8713,8 +8728,17 @@ function renderOncall(){
       nm.style.cssText="font-weight:700;font-size:.83rem;display:inline-block;"+(isSelfCell?"color:#b45309;background:#fde68a;padding:2px 10px;border-radius:20px;":"");
       nm.textContent=res?dname(res.name):(entry.resident_name||"?");
       nm.dataset.ocDate=date;
-      if(res)nm.dataset.ocRid=res.id;
-      else if(entry.resident_name)nm.dataset.ocRname=entry.resident_name.trim().toLowerCase();
+      nm.style.cursor="default";
+      if(res){
+        nm.dataset.ocRid=res.id;
+        nm.onmouseenter=()=>oncallSpotlight(blk,date,res.id,null,blkDateStart,blkDateEnd,nm);
+        nm.onmouseleave=()=>oncallClearSpotlight();
+      }else if(entry.resident_name){
+        const rname=entry.resident_name.trim().toLowerCase();
+        nm.dataset.ocRname=rname;
+        nm.onmouseenter=()=>oncallSpotlight(blk,date,null,rname,blkDateStart,blkDateEnd,nm);
+        nm.onmouseleave=()=>oncallClearSpotlight();
+      }
       cell.appendChild(nm);
       if(entry.is_extra){
         const badge=document.createElement("span");
