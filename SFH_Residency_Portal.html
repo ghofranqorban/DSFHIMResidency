@@ -124,6 +124,14 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .oc-day-pill.wd{background:rgba(31,26,18,.08);color:rgba(31,26,18,.55);}
 .oc-day-pill.we{background:#7FB89C;color:#fff;}
 .oc-day-pill.today{background:#c96a4a;color:#fff;}
+.oc-name{border-radius:5px;padding:2px 4px;}
+.oc-name.oc-spotlight{background:rgba(164,122,40,.18)!important;box-shadow:0 0 0 2px #A47A28 inset;}
+.oc-name.oc-spotlight.oc-conflict{background:rgba(201,74,74,.16)!important;box-shadow:0 0 0 2px #c94a4a inset;}
+.oc-drop-preview{position:sticky;bottom:0;background:#1F1A12;color:#FEFBF3;padding:9px 12px;font-size:.72rem;line-height:1.5;border-top:1px solid rgba(254,251,243,.12);}
+.oc-drop-preview .oc-dp-name{font-weight:700;font-size:.74rem;color:#fff;margin-bottom:3px;}
+.oc-drop-preview .oc-dp-line{display:flex;gap:5px;margin-top:2px;}
+.oc-drop-preview .oc-dp-warn{color:#f2b8a0;}
+.oc-drop-preview .oc-dp-leave{color:#f2c98a;}
 /* ── Inputs ── */
 .input-sm{padding:5px 9px;border:1px solid rgba(31,26,18,.14);border-radius:6px;font-size:.82rem;width:100%;background:#FEFBF3;}
 input,select,textarea{padding:9px 12px;border:1px solid rgba(31,26,18,.15);border-radius:8px;font-size:.87rem;width:100%;outline:none;transition:border .14s;background:#FEFBF3;color:#1F1A12;}
@@ -1203,7 +1211,7 @@ async function loadLeaveRecords(){
 }
 function leaveOverlaps(residentId,from,to){
   const existing=(LEAVE_DATA[residentId]?.manual||[]).filter(l=>l.approved);
-  return existing.some(l=>from<=l.to_date&&l.from_date<=to);
+  return existing.some(l=>from<=l.to&&l.from<=to);
 }
 async function addManualLeave(residentId,from,to,days,comment){
   if(leaveOverlaps(residentId,from,to)){showToast("Warning: this period overlaps with existing approved leave for this resident","warning");}
@@ -1556,6 +1564,38 @@ const ONCALL_SLOTS=[
 function isWeekendDate(ds){const[y,m,d]=ds.split("-").map(Number);const dw=new Date(y,m-1,d).getDay();return dw===5||dw===6;}
 function oncallHoursLabel(slotKey,ds){if(slotKey==="ctu1"||slotKey==="ctu2")return"08:00 - 16:00";return isWeekendDate(ds)?"08:00 - 22:00":"16:00 - 22:00";}
 function canEditOncall(){const u=STATE.user;if(!u)return false;if(isPdRole(u.role)||u.role==="chief")return true;return hasPriv(u.profileId,"edit_oncall");}
+function oncallDateObj(ds){const[y,m,d]=ds.split("-").map(Number);return new Date(y,m-1,d);}
+function oncallAddDays(ds,n){const dt=oncallDateObj(ds);dt.setDate(dt.getDate()+n);return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");}
+function oncallResidentDatesInBlock(blk,rid,rname){
+  const key=rname?rname.trim().toLowerCase():null;
+  return ONCALL_DATA.filter(e=>e.block_number===blk&&(rid?e.resident_id===rid:(e.resident_name||"").trim().toLowerCase()===key)).map(e=>e.schedule_date).filter((d,i,a)=>a.indexOf(d)===i).sort();
+}
+// Preview shown while hovering a candidate name in the on-call cell picker:
+// their other on-call days this block (for highlighting), plus any
+// back-to-back / consecutive-weekend / approved-leave conflicts with the
+// specific cell being edited.
+function oncallConflictPreview(blk,targetDate,rid,rname,blockStart,blockEnd){
+  const dates=oncallResidentDatesInBlock(blk,rid,rname);
+  const lines=[];
+  const conflictDates=new Set();
+  const dayBefore=oncallAddDays(targetDate,-1),dayAfter=oncallAddDays(targetDate,1);
+  if(dates.includes(dayBefore)){lines.push({type:"warn",text:"Also on-call "+fmtDate(dayBefore)+" (day before)"});conflictDates.add(dayBefore);}
+  if(dates.includes(dayAfter)){lines.push({type:"warn",text:"Also on-call "+fmtDate(dayAfter)+" (day after)"});conflictDates.add(dayAfter);}
+  const weekendDates=dates.filter(isWeekendDate);
+  for(let i=0;i<weekendDates.length;i++)for(let j=i+1;j<weekendDates.length;j++){
+    const gap=Math.round((oncallDateObj(weekendDates[j])-oncallDateObj(weekendDates[i]))/86400000);
+    if(gap>=6&&gap<=8){lines.push({type:"warn",text:"Consecutive weekends: "+fmtDate(weekendDates[i])+" & "+fmtDate(weekendDates[j])});conflictDates.add(weekendDates[i]);conflictDates.add(weekendDates[j]);}
+  }
+  if(rid){
+    const approved=(LEAVE_DATA[rid]?.manual||[]).filter(l=>l.approved);
+    const overlap=approved.find(l=>blockStart<=l.to&&l.from<=blockEnd);
+    if(overlap){
+      const coversTarget=targetDate<=overlap.to&&overlap.from<=targetDate;
+      lines.push({type:"leave",text:(coversTarget?"On approved leave: ":"Approved leave this block: ")+fmtDate(overlap.from)+" \u2013 "+fmtDate(overlap.to)});
+    }
+  }
+  return{dates,lines,conflictDates};
+}
 async function loadOncallData(){
   const{data,error}=await sb.from("oncall_schedule").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("schedule_date");
   if(!error&&data)ONCALL_DATA=data;
@@ -8453,6 +8493,12 @@ function renderOncallEditModal(){
   const existing={};
   ONCALL_DATA.filter(e=>e.schedule_date===date).forEach(e=>{existing[e.slot_key]={resId:e.resident_id,resName:e.resident_name||"",isExtra:e.is_extra};});
   function close(){set({oncallEditDate:null});}
+  async function doSave(entries){
+    const btn=document.getElementById("oc_save_btn");
+    if(btn){btn.disabled=true;btn.textContent="Saving...";}
+    await saveOncallDay(blk,date,entries);
+    set({oncallEditDate:null});
+  }
   async function save(){
     const entries=slots.map(s=>({
       slot_key:s.key,
@@ -8460,10 +8506,12 @@ function renderOncallEditModal(){
       resident_id:document.getElementById("oc_name_"+s.key)?.value.trim()?null:(document.getElementById("oc_"+s.key)?.value||null),
       is_extra:document.getElementById("oc_extra_"+s.key)?.checked||false
     }));
-    const btn=document.getElementById("oc_save_btn");
-    if(btn){btn.disabled=true;btn.textContent="Saving...";}
-    await saveOncallDay(blk,date,entries);
-    set({oncallEditDate:null});
+    const dayPublished=ONCALL_DATA.some(e=>e.schedule_date===date&&e.published);
+    if(dayPublished){
+      showConfirm("This day is already published and visible to residents. Save these changes to the live schedule?",()=>doSave(entries),"Save Changes","warn");
+    }else{
+      await doSave(entries);
+    }
   }
   const[y,m,d]=date.split("-").map(Number);
   const DAY_NM=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -8536,10 +8584,14 @@ function renderOncall(){
   }
   // Index block data by date+slot
   const byDate={};
-  ONCALL_DATA.filter(e=>e.block_number===blk).forEach(e=>{
+  const blkEntriesAll=ONCALL_DATA.filter(e=>e.block_number===blk);
+  blkEntriesAll.forEach(e=>{
     if(!byDate[e.schedule_date])byDate[e.schedule_date]={};
     byDate[e.schedule_date][e.slot_key]=e;
   });
+  const blockIsPublished=schedulePublishState(blkEntriesAll)==="published";
+  const blkDateStart=allDates[0]?.date;
+  const blkDateEnd=allDates[allDates.length-1]?.date;
   const todayStr=toLocalYMD(new Date());
   // Resident's own oncall across all blocks in current year
   const myEntries=u.rid?ONCALL_DATA.filter(e=>e.resident_id===u.rid).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date)):[];
@@ -8547,7 +8599,14 @@ function renderOncall(){
     const ie=STATE.oncallInlineEdit;
     if(canEdit&&ie&&ie.date===date&&ie.slotKey===slotKey){
       const wrap=document.createElement("div");
-      wrap.style.cssText="position:relative;min-width:130px;";
+      wrap.style.cssText="position:relative;min-width:150px;";
+      if(entry){
+        const cur=document.createElement("div");
+        cur.style.cssText="font-size:.68rem;color:rgba(31,26,18,.45);margin-bottom:2px;white-space:nowrap;";
+        const curRes=anyResById(entry.resident_id);
+        cur.textContent="Currently: "+(curRes?dname(curRes.name):(entry.resident_name||"?"));
+        wrap.appendChild(cur);
+      }
       const inp=document.createElement("input");
       inp.type="text";inp.className="input";
       inp.style.cssText="padding:4px 8px;font-size:.82rem;width:100%;box-sizing:border-box;";
@@ -8555,12 +8614,33 @@ function renderOncall(){
       if(entry){const r=anyResById(entry.resident_id);inp.value=r?dname(r.name):(entry.resident_name||"");}
       const drop=document.createElement("ul");
       drop.style.cssText="position:absolute;top:100%;left:0;right:0;z-index:9999;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.15);max-height:220px;overflow-y:auto;list-style:none;padding:0;margin:2px 0 0;";
+      function clearSpotlight(){
+        document.querySelectorAll("#oncall-sched-tbl .oc-spotlight").forEach(el=>el.classList.remove("oc-spotlight","oc-conflict"));
+      }
+      function spotlight(rid,rname){
+        clearSpotlight();
+        const{dates,lines,conflictDates:conflictSet}=oncallConflictPreview(blk,date,rid,rname,blkDateStart,blkDateEnd);
+        dates.forEach(ds=>{
+          const sel=rid?'[data-oc-rid="'+rid+'"][data-oc-date="'+ds+'"]':'[data-oc-rname="'+rname+'"][data-oc-date="'+ds+'"]';
+          document.querySelectorAll("#oncall-sched-tbl "+sel).forEach(el=>{
+            el.classList.add("oc-spotlight");
+            if(conflictSet.has(ds))el.classList.add("oc-conflict");
+          });
+        });
+        let bar=drop.querySelector(".oc-drop-preview");
+        if(!bar){bar=document.createElement("li");bar.className="oc-drop-preview";drop.appendChild(bar);}
+        else drop.appendChild(bar);
+        const label=rid?dname(anyResById(rid)?.name||""):rname;
+        let html="<div class='oc-dp-name'>"+label+" — "+dates.length+" on-call day"+(dates.length===1?"":"s")+" this block</div>";
+        lines.forEach(l=>{html+="<div class='oc-dp-line "+(l.type==="leave"?"oc-dp-leave":"oc-dp-warn")+"'>"+(l.type==="leave"?"\uD83C\uDF34 ":"\u26A0 ")+l.text+"</div>";});
+        bar.innerHTML=html;
+      }
       function buildDrop(q){
         drop.innerHTML="";
         const clearLi=document.createElement("li");
         clearLi.textContent="— Clear assignment —";
         clearLi.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;color:#9ca3af;border-bottom:1px solid #f3f4f6;";
-        clearLi.onmousedown=async ev=>{ev.preventDefault();set({oncallInlineEdit:null});await saveOncallCell(blk,date,slotKey,null,null);};
+        clearLi.onmousedown=ev=>{ev.preventDefault();commitOncallCell(null,null);};
         drop.appendChild(clearLi);
         const sorted=sortByLevel(RESIDENTS);
         const matches=q?sorted.filter(r=>dname(r.name).toLowerCase().includes(q.toLowerCase())):sorted;
@@ -8570,27 +8650,48 @@ function renderOncall(){
           li.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;border-bottom:1px solid #f9fafb;";
           li.onmouseover=()=>{li.style.background="#f0f9ff";};
           li.onmouseout=()=>{li.style.background="";};
-          li.onmousedown=async ev=>{ev.preventDefault();set({oncallInlineEdit:null});await saveOncallCell(blk,date,slotKey,r.id,null);};
+          li.onmouseenter=()=>spotlight(r.id,null);
+          li.onmouseleave=()=>clearSpotlight();
+          li.onmousedown=ev=>{ev.preventDefault();commitOncallCell(r.id,null);};
           drop.appendChild(li);
         });
         if(q&&!matches.length){
           const ft=document.createElement("li");
           ft.textContent="Save as outside rotator: \""+q+"\"";
           ft.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;font-style:italic;color:#374151;border-top:1px solid #f3f4f6;";
-          ft.onmousedown=async ev=>{ev.preventDefault();set({oncallInlineEdit:null});await saveOncallCell(blk,date,slotKey,null,q);};
+          const rname=q.trim().toLowerCase();
+          if(ONCALL_DATA.some(e=>e.block_number===blk&&(e.resident_name||"").trim().toLowerCase()===rname)){
+            ft.onmouseenter=()=>spotlight(null,rname);
+            ft.onmouseleave=()=>clearSpotlight();
+          }
+          ft.onmousedown=ev=>{ev.preventDefault();commitOncallCell(null,q);};
           drop.appendChild(ft);
         } else if(q){
           const ft=document.createElement("li");
           ft.textContent="Use as free text: \""+q+"\"";
           ft.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;font-style:italic;color:#6b7280;border-top:1px solid #f3f4f6;";
-          ft.onmousedown=async ev=>{ev.preventDefault();set({oncallInlineEdit:null});await saveOncallCell(blk,date,slotKey,null,q);};
+          const rname=q.trim().toLowerCase();
+          if(ONCALL_DATA.some(e=>e.block_number===blk&&(e.resident_name||"").trim().toLowerCase()===rname)){
+            ft.onmouseenter=()=>spotlight(null,rname);
+            ft.onmouseleave=()=>clearSpotlight();
+          }
+          ft.onmousedown=ev=>{ev.preventDefault();commitOncallCell(null,q);};
           drop.appendChild(ft);
+        }
+      }
+      async function commitOncallCell(residentId,residentName){
+        clearSpotlight();
+        set({oncallInlineEdit:null});
+        if(blockIsPublished){
+          showConfirm("Block "+blk+" is already published and visible to residents. Save this on-call change to the live schedule?",async()=>{await saveOncallCell(blk,date,slotKey,residentId,residentName);},"Save Change","warn");
+        }else{
+          await saveOncallCell(blk,date,slotKey,residentId,residentName);
         }
       }
       buildDrop("");
       inp.oninput=ev=>buildDrop(ev.target.value);
-      inp.onkeydown=ev=>{if(ev.key==="Escape")set({oncallInlineEdit:null});};
-      inp.onblur=()=>setTimeout(()=>set({oncallInlineEdit:null}),200);
+      inp.onkeydown=ev=>{if(ev.key==="Escape"){clearSpotlight();set({oncallInlineEdit:null});}};
+      inp.onblur=()=>setTimeout(()=>{clearSpotlight();set({oncallInlineEdit:null});},200);
       wrap.appendChild(inp);wrap.appendChild(drop);
       setTimeout(()=>inp.focus(),0);
       return wrap;
@@ -8608,8 +8709,12 @@ function renderOncall(){
       const res=anyResById(entry.resident_id);
       const isSelfCell=!!(res&&u.rid&&res.id===u.rid);
       const nm=document.createElement("span");
+      nm.className="oc-name";
       nm.style.cssText="font-weight:700;font-size:.83rem;display:inline-block;"+(isSelfCell?"color:#b45309;background:#fde68a;padding:2px 10px;border-radius:20px;":"");
       nm.textContent=res?dname(res.name):(entry.resident_name||"?");
+      nm.dataset.ocDate=date;
+      if(res)nm.dataset.ocRid=res.id;
+      else if(entry.resident_name)nm.dataset.ocRname=entry.resident_name.trim().toLowerCase();
       cell.appendChild(nm);
       if(entry.is_extra){
         const badge=document.createElement("span");
@@ -8624,7 +8729,6 @@ function renderOncall(){
   function renderScheduleTab(){
     if(!blockStart)return el("p",{cls:"sh"},"Block data not available.");
     const hasData=allDates.some(({date})=>byDate[date]&&Object.keys(byDate[date]).length>0);
-    const blkEntriesAll=ONCALL_DATA.filter(e=>e.block_number===blk);
     return el("div",null,
       renderPublishControls(blkEntriesAll,"oncall_schedule",blk,canEdit,loadOncallData),
       canEdit?el("div",{st:{marginBottom:"16px"}},
@@ -8632,7 +8736,7 @@ function renderOncall(){
       ):null,
       !hasData?el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},"No on-call data entered for Block "+blk+" yet."+(canEdit?" Use 'Edit' on any row to add assignments.":"")):null,
       el("div",{st:{overflowX:"auto",borderRadius:"12px",boxShadow:"0 2px 12px rgba(0,0,0,.08)",border:"1px solid #ddd6cc"}},
-        el("table",{cls:"oncall-tbl",st:{minWidth:"820px"}},
+        el("table",{cls:"oncall-tbl",id:"oncall-sched-tbl",st:{minWidth:"820px"}},
           el("thead",null,
             el("tr",null,
               el("th",{cls:"oc-sticky-date"},"Date"),
