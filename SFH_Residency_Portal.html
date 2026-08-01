@@ -140,8 +140,9 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .oc-fs-close{background:rgba(254,251,243,.12);color:#FEFBF3;border:none;border-radius:8px;padding:8px 16px;font-size:.82rem;font-weight:600;cursor:pointer;}
 .oc-fs-close:hover{background:rgba(254,251,243,.2);}
 .oc-fs-body{flex:1 1 auto;overflow:hidden;padding:16px 24px 20px;display:flex;gap:18px;}
-.oc-fs-tbl-wrap{flex:1 1 auto;min-width:0;overflow:hidden;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);border:1px solid #ddd6cc;}
-.oc-fs-tbl-wrap .oncall-tbl{height:100%;table-layout:fixed;}
+.oc-fs-tbl-wrap{flex:1 1 auto;min-width:0;overflow-y:auto;overflow-x:hidden;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);border:1px solid #ddd6cc;}
+.oc-fs-tbl-wrap .oncall-tbl{width:100%;table-layout:fixed;}
+.oc-fs-tbl-wrap thead th{position:sticky;top:0;background:#1F1A12;z-index:2;}
 .oc-dock-panel{flex:0 0 280px;background:#1F1A12;color:#FEFBF3;border-radius:12px;padding:18px;font-size:.8rem;line-height:1.6;overflow-y:auto;}
 .oc-dock-empty{color:rgba(254,251,243,.4);font-style:italic;}
 .oc-dock-panel .oc-dp-name{font-weight:700;font-size:.88rem;color:#fff;margin-bottom:8px;}
@@ -8677,9 +8678,15 @@ function renderOncall(){
   const todayStr=toLocalYMD(new Date());
   // Resident's own oncall across all blocks in current year
   const myEntries=u.rid?ONCALL_DATA.filter(e=>e.resident_id===u.rid).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date)):[];
-  function oncallCell(entry,date,slotKey){
+  function oncallCell(entry,date,slotKey,interactive){
     const ie=STATE.oncallInlineEdit;
     if(canEdit&&ie&&ie.date===date&&ie.slotKey===slotKey){
+      if(!interactive){
+        const ph=document.createElement("div");
+        ph.style.cssText="min-width:150px;font-size:.78rem;font-style:italic;color:rgba(31,26,18,.4);";
+        ph.textContent="Editing\u2026";
+        return ph;
+      }
       const wrap=document.createElement("div");
       wrap.style.cssText="position:relative;min-width:150px;";
       if(entry){
@@ -8799,7 +8806,7 @@ function renderOncall(){
   function renderScheduleTab(){
     if(!blockStart)return el("p",{cls:"sh"},"Block data not available.");
     const hasData=allDates.some(({date})=>byDate[date]&&Object.keys(byDate[date]).length>0);
-    function buildRows(){
+    function buildRows(interactive){
       return allDates.map(({date,day,isWe})=>{
         const sl=byDate[date]||{};
         const isToday=date===todayStr;
@@ -8814,12 +8821,12 @@ function renderOncall(){
         return el("tr",{cls:rowCls},
           el("td",{cls:"oc-sticky-date"},dateCellContent),
           el("td",{cls:"oc-sticky-day"},el("span",{cls:"oc-day-pill "+(isToday?"today":isWe?"we":"wd")},day)),
-          el("td",null,oncallCell(sl.er_medical,date,"er_medical")),
-          el("td",null,oncallCell(sl.bldg1,date,"bldg1")),
-          el("td",null,oncallCell(sl.bldg2,date,"bldg2")),
-          el("td",null,oncallCell(sl.consult,date,"consult")),
-          el("td",null,isWe?oncallCell(sl.ctu1,date,"ctu1"):el("span",{st:{color:"#d1d5db",fontSize:".78rem"}},"—")),
-          el("td",null,isWe?oncallCell(sl.ctu2,date,"ctu2"):el("span",{st:{color:"#d1d5db",fontSize:".78rem"}},"—")),
+          el("td",null,oncallCell(sl.er_medical,date,"er_medical",interactive)),
+          el("td",null,oncallCell(sl.bldg1,date,"bldg1",interactive)),
+          el("td",null,oncallCell(sl.bldg2,date,"bldg2",interactive)),
+          el("td",null,oncallCell(sl.consult,date,"consult",interactive)),
+          el("td",null,isWe?oncallCell(sl.ctu1,date,"ctu1",interactive):el("span",{st:{color:"#d1d5db",fontSize:".78rem"}},"—")),
+          el("td",null,isWe?oncallCell(sl.ctu2,date,"ctu2",interactive):el("span",{st:{color:"#d1d5db",fontSize:".78rem"}},"—")),
           canEdit?el("td",null,
             el("button",{cls:"sbtn",st:{fontSize:".74rem",padding:"3px 9px"},onClick:()=>set({oncallEditDate:date})},"Edit")
           ):null
@@ -8851,7 +8858,7 @@ function renderOncall(){
       el("div",{st:{overflowX:"auto",borderRadius:"12px",boxShadow:"0 2px 12px rgba(0,0,0,.08)",border:"1px solid #ddd6cc"}},
         el("table",{cls:"oncall-tbl",id:"oncall-sched-tbl",st:{minWidth:"820px"}},
           el("thead",null,headRow()),
-          el("tbody",null,...buildRows())
+          el("tbody",null,...buildRows(!fsOpen))
         )
       ),
       el("div",{id:"oc-fullscreen",cls:fsOpen?"open":""},
@@ -8863,7 +8870,7 @@ function renderOncall(){
           el("div",{cls:"oc-fs-tbl-wrap"},
             el("table",{cls:"oncall-tbl"},
               el("thead",null,headRow()),
-              el("tbody",null,...buildRows())
+              el("tbody",null,...buildRows(fsOpen))
             )
           ),
           el("div",{cls:"oc-dock-panel"},
