@@ -413,9 +413,9 @@ let ROTA_LEAVE_META={};
 let CHIEF_RES_ID=null;
 let CO_CHIEF_RES_ID=null;
 const MANDATORY=["GIM/CTU","Cardiology","Pulmonology","Nephrology","Gastroenterology","Endocrinology","Hematology","Rheumatology","Neurology","Infectious Disease","ICU","Emergency Medicine","Oncology"];
-// Ongoing 50%: Quiz 15 | MM 15 | Teaching 15 | Presentations 5
+// Ongoing 50%: Quiz 15 | MM 15 | Academic Day 15 | Presentations 5
 // Yearly 50%: Committee 10 | QI 10 | Publication 10 | Oral-or-Poster 10 | Awards 5 | Volunteering 5
-// MM/Teaching attendance is scoped to the current academic year (see loadSchedules()).
+// MM/Academic Day attendance is scoped to the current academic year (see loadSchedules()).
 // Oral and Poster remain separate submittable achievement types, but score as ONE
 // combined bucket worth KPI_W.oral (10%) — achieving either grants the full 10%,
 // achieving both does not grant 20% (see calcKPI()'s oralPosterPct).
@@ -548,7 +548,7 @@ function matchResidentByName(excelName,pool){
   if(best&&bestScore>=0.5)return{match:best,confidence:bestScore};
   return{match:null,confidence:0};
 }
-// Morning Meeting + Teaching schedules and attendance are DB-backed (mm_sessions,
+// Morning Meeting + Academic Day schedules and attendance are DB-backed (mm_sessions,
 // teaching_sessions, mm_attendance, teaching_attendance — see migration_003_schedules.sql).
 // MM_ATT / TEACH_ATT keep the same shape the older in-memory code used
 // (block -> date -> resident_id -> "P"/"L"/"A"/"O") so the attendance-table
@@ -1562,18 +1562,22 @@ async function loadOncallData(){
   render();
 }
 async function saveOncallDay(blockNum,date,entries){
+  const priorForDate={};
+  ONCALL_DATA.filter(e=>e.schedule_date===date).forEach(e=>{priorForDate[e.slot_key]=e;});
+  const blockPublished=schedulePublishState(ONCALL_DATA.filter(e=>e.block_number===blockNum))==="published";
   const{error:de}=await sb.from("oncall_schedule").delete().eq("schedule_date",date).eq("academic_year",CURRENT_ACADEMIC_YEAR);
   if(de){showToast("Error clearing old entries: "+de.message);return;}
-  const rows=entries.filter(e=>e.resident_id||e.resident_name).map(e=>({block_number:blockNum,schedule_date:date,slot_key:e.slot_key,resident_id:e.resident_id?parseInt(e.resident_id,10):null,resident_name:e.resident_name||null,is_extra:!!e.is_extra,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null}));
+  const rows=entries.filter(e=>e.resident_id||e.resident_name).map(e=>({block_number:blockNum,schedule_date:date,slot_key:e.slot_key,resident_id:e.resident_id?parseInt(e.resident_id,10):null,resident_name:e.resident_name||null,is_extra:!!e.is_extra,published:priorForDate[e.slot_key]?!!priorForDate[e.slot_key].published:blockPublished,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null}));
   if(rows.length){const{error:ie}=await sb.from("oncall_schedule").insert(rows);if(ie){showToast("Error saving: "+ie.message);return;}}
   await loadOncallData();
 }
 async function saveOncallCell(blk,date,slotKey,residentId,residentName){
+  const existing=ONCALL_DATA.find(e=>e.schedule_date===date&&e.slot_key===slotKey);
+  const blockPublished=schedulePublishState(ONCALL_DATA.filter(e=>e.block_number===blk))==="published";
   const{error:de}=await sb.from("oncall_schedule").delete().eq("schedule_date",date).eq("slot_key",slotKey).eq("academic_year",CURRENT_ACADEMIC_YEAR);
   if(de){showToast("Error: "+de.message);return;}
   if(residentId||residentName){
-    const existing=ONCALL_DATA.find(e=>e.schedule_date===date&&e.slot_key===slotKey);
-    const{error:ie}=await sb.from("oncall_schedule").insert({block_number:blk,schedule_date:date,slot_key:slotKey,resident_id:residentId?parseInt(residentId,10):null,resident_name:residentName||null,is_extra:existing?.is_extra||false,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null});
+    const{error:ie}=await sb.from("oncall_schedule").insert({block_number:blk,schedule_date:date,slot_key:slotKey,resident_id:residentId?parseInt(residentId,10):null,resident_name:residentName||null,is_extra:existing?.is_extra||false,published:existing?!!existing.published:blockPublished,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null});
     if(ie){showToast("Error saving: "+ie.message);return;}
   }
   await loadOncallData();
@@ -1917,7 +1921,7 @@ const MODS=[
   {id:"oncall",label:"On-Call Schedule",icon:"",desc:"Duty assignments, personal schedule & on-call statistics",color:"#1a4a7a",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"rottrack",label:"Rotation Tracker",icon:"",desc:"Track where every resident is rotating",color:"#c96a4a",roles:["pd","chief","consultant"]},
   {id:"morning",label:"Morning Meetings",icon:"",desc:"Attendance, schedules & topics",color:"#c97a2a",roles:["pd","chief","consultant","resident"]},
-  {id:"teaching",label:"Teaching Att.",icon:"",desc:"Teaching session attendance records",color:"#A47A28",roles:["pd","chief","consultant","resident"]},
+  {id:"teaching",label:"Academic Day Schedule",icon:"",desc:"Academic Day session schedule and attendance records",color:"#A47A28",roles:["pd","chief","consultant","resident"]},
   {id:"kpi_exec",label:"Performance Report",icon:"",desc:"Executive KPI — program health, top performers & resident drill-down",color:"#1a2a4a",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"kpi",label:"KPI Dashboard",icon:"",desc:"Performance indicators & scores",color:"#2a7a4a",roles:["pd","chief","consultant","resident"]},
   {id:"quiz",label:"Quiz Marks",icon:"",desc:"Assessment marks & grading",color:"#c96a4a",roles:["pd","chief","consultant","resident"]},
@@ -1944,7 +1948,7 @@ function renderSearchOverlay(){
     results.push({label:s.topic,sub:"Morning Meeting · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"",action:()=>set({mod:"morning",mmTab:"attendance",mmBlock:s.block_number,searchQ:""})});
   });
   TEACH_SESSIONS.filter(s=>(s.topic||"").toLowerCase().includes(q)).slice(0,5).forEach(s=>{
-    results.push({label:s.topic,sub:"Teaching · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"",action:()=>set({mod:"teaching",teachTab:"attendance",teachBlock:s.block_number,searchQ:""})});
+    results.push({label:s.topic,sub:"Academic Day · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"",action:()=>set({mod:"teaching",teachTab:"attendance",teachBlock:s.block_number,searchQ:""})});
   });
   if(!results.length)results.push({label:'No results for "'+STATE.searchQ+'"',sub:"",icon:"",action:null});
   return el("div",{st:{position:"fixed",top:"0",left:"0",right:"0",bottom:"0",zIndex:"999",display:"flex",alignItems:"flex-start",justifyContent:"flex-start"},
@@ -3131,7 +3135,7 @@ function renderMMScheduleForm(blk,editingSession){
         };
         let error;
         if(editingSession){({error}=await sb.from("mm_sessions").update(payload).eq("id",editingSession.id));}
-        else{payload.created_by=STATE.user.profileId;({error}=await sb.from("mm_sessions").insert(payload));}
+        else{payload.created_by=STATE.user.profileId;payload.published=schedulePublishState(MM_SESSIONS.filter(s=>s.block_number===blk))==="published";({error}=await sb.from("mm_sessions").insert(payload));}
         if(error){showToast("Could not save: "+error.message);return;}
         set({mmShowEntry:false,mmEntrySession:null});
         await loadSchedules();
@@ -3172,9 +3176,10 @@ async function generateMMSessions(blk){
     const existingDates=new Set(MM_SESSIONS.filter(s=>s.block_number===blk).map(s=>s.session_date));
     const toInsert=dates.filter(d=>!existingDates.has(d.date));
     if(!toInsert.length){showToast("All session slots for Block "+blk+" already exist.","warning");return;}
+    const blockPublished=schedulePublishState(MM_SESSIONS.filter(s=>s.block_number===blk))==="published";
     const rows=toInsert.map(d=>({
       academic_year:CURRENT_ACADEMIC_YEAR,block_number:blk,week_number:4*(blk-1)+d.week-1,
-      session_date:d.date,day_label:d.day,topic:"",created_by:STATE.user?.profileId||null
+      session_date:d.date,day_label:d.day,topic:"",published:blockPublished,created_by:STATE.user?.profileId||null
     }));
     const{error}=await sb.from("mm_sessions").insert(rows);
     if(error){showToast("Could not generate sessions: "+error.message);return;}
@@ -3290,7 +3295,7 @@ function schedulePublishState(sessions){
   if(pubCount===sessions.length)return"published";
   return"partial";
 }
-function renderPublishControls(sessions,tbl,blk,canEditSched){
+function renderPublishControls(sessions,tbl,blk,canEditSched,reloadFn){
   if(!canEditSched)return null;
   const state=schedulePublishState(sessions);
   const badges={
@@ -3303,10 +3308,10 @@ function renderPublishControls(sessions,tbl,blk,canEditSched){
   const badge=el("span",{st:{fontSize:".72rem",fontWeight:"600",padding:"4px 12px",borderRadius:"999px",background:b.bg,color:b.fg}},b.txt);
   const btn=state==="published"?el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.12)",color:"rgba(31,26,18,.55)",padding:"5px 14px",borderRadius:"999px",cursor:"pointer",fontSize:".78rem"},onClick:async()=>{
     await sb.from(tbl).update({published:false}).eq("block_number",blk).eq("academic_year",CURRENT_ACADEMIC_YEAR);
-    await loadSchedules();
+    await reloadFn();
   }},"Unpublish Block"):el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",padding:"5px 16px",borderRadius:"999px",cursor:sessions.length?"pointer":"not-allowed",fontSize:".78rem",fontWeight:"600",opacity:sessions.length?"1":".5"},onClick:sessions.length?async()=>{
     await sb.from(tbl).update({published:true}).eq("block_number",blk).eq("academic_year",CURRENT_ACADEMIC_YEAR);
-    await loadSchedules();
+    await reloadFn();
   }:null},"Publish Block");
   return el("div",{st:{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px",flexWrap:"wrap"}},badge,btn);
 }
@@ -3352,7 +3357,7 @@ function renderMMSchedule(){
   );
   return el("div",null,
     blkRow,
-    renderPublishControls(sessions,"mm_sessions",blk,canEditSched),
+    renderPublishControls(sessions,"mm_sessions",blk,canEditSched,loadSchedules),
     canEditSched?el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
       el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.12)",color:"rgba(31,26,18,.55)",padding:"5px 14px",borderRadius:"999px",cursor:"pointer",fontSize:".78rem"},onClick:()=>generateMMSessions(blk)},"Auto-fill dates")
     ):null,
@@ -3588,14 +3593,14 @@ function renderAttOverview(cfg){
 function renderMMOverview(){
   return renderAttOverview({sessionsAll:MM_SESSIONS,attStore:MM_ATT,blockKey:"mmBlock",modeKey:"mmOvMode",sortKey:"mmOvSort",title:"Attendance Overview"});
 }
-// ─── TEACHING ATTENDANCE ─────────────────────────────────────────────────────
+// ─── ACADEMIC DAY SCHEDULE ────────────────────────────────────────────────────
 function renderTeaching(){
   const blkT=STATE.teachBlock;const periodT=ROTA_PERIODS[blkT-1]||"";
   return el("div",{cls:"content"},
     el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
       el("div",null,
         el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Academic Program"),
-        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Teaching Sessions"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Academic Day Sessions"),
         el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+" · Block "+blkT+(periodT?" · "+periodT:""))
       ),
       canEditTeachSchedule()?el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"999px",padding:"9px 22px",fontSize:".84rem",fontWeight:"600",cursor:"pointer",flexShrink:"0"},onClick:()=>set({teachShowEntry:true,teachEntrySession:"new_teach",teachTab:"schedule"})},"+ Add Session"):null
@@ -3661,7 +3666,7 @@ function renderTeachScheduleForm(blk,editingSession){
         };
         let error;
         if(editingSession){({error}=await sb.from("teaching_sessions").update(payload).eq("id",editingSession.id));}
-        else{payload.created_by=STATE.user.profileId;({error}=await sb.from("teaching_sessions").insert(payload));}
+        else{payload.created_by=STATE.user.profileId;payload.published=schedulePublishState(TEACH_SESSIONS.filter(s=>s.block_number===blk))==="published";({error}=await sb.from("teaching_sessions").insert(payload));}
         if(error){showToast("Could not save: "+error.message);return;}
         set({teachShowEntry:false,teachEntrySession:null});
         await loadSchedules();
@@ -3689,7 +3694,7 @@ function renderTeachSchedule(){
     const editBtn=el("button",{cls:"sbtn ghost",st:{fontSize:".72rem",padding:"3px 8px"}},"Edit");
     editBtn.onclick=()=>set({teachShowEntry:true,teachEntrySession:s.id});
     const delBtn=el("button",{cls:"sbtn danger",st:{fontSize:".72rem",padding:"3px 8px"}},"Delete");
-    delBtn.onclick=async()=>{showConfirm("Delete this Teaching session?",async()=>{
+    delBtn.onclick=async()=>{showConfirm("Delete this Academic Day session?",async()=>{
       await sb.from("teaching_sessions").delete().eq("id",s.id);
       await loadSchedules();
     },"Delete","danger");};
@@ -3702,9 +3707,9 @@ function renderTeachSchedule(){
       renderBlockPills(blk,n=>set({teachBlock:n}))
     ),
     el("div",{cls:"card"},
-      renderPublishControls(sessions,"teaching_sessions",blk,canEditSched),
+      renderPublishControls(sessions,"teaching_sessions",blk,canEditSched,loadSchedules),
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
-        el("span",{cls:"card-title",st:{margin:"0"}},"Block "+blk+" Teaching Sessions"),
+        el("span",{cls:"card-title",st:{margin:"0"}},"Block "+blk+" Academic Day Sessions"),
         canEditSched?el("button",{cls:"sbtn primary",onClick:()=>set({teachShowEntry:true,teachEntrySession:"new_teach"})},"+ Add Session"):null
       ),
       formOpen?renderTeachScheduleForm(blk,editingSession):null,
@@ -3846,7 +3851,7 @@ function renderTeachEntryForm(blk,sessions){
   return wrap;
 }
 function renderTeachOverview(){
-  return renderAttOverview({sessionsAll:TEACH_SESSIONS,attStore:TEACH_ATT,blockKey:"teachBlock",modeKey:"teachOvMode",sortKey:"teachOvSort",title:"Teaching Attendance Overview"});
+  return renderAttOverview({sessionsAll:TEACH_SESSIONS,attStore:TEACH_ATT,blockKey:"teachBlock",modeKey:"teachOvMode",sortKey:"teachOvSort",title:"Academic Day Attendance Overview"});
 }
 // ─── OCTOBER PROMOTION ───────────────────────────────────────────────────────
 let PROMOTION_NEEDED=false;
@@ -3949,7 +3954,7 @@ function exportAttendance(type, blk){
   ws["!cols"] = [{wch:24},{wch:6},...sessions.map(()=>({wch:14})),{wch:7}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Attendance");
-  XLSX.writeFile(wb, (isMM?"MM":"Teaching")+"_Attendance_Block"+blk+".xlsx");
+  XLSX.writeFile(wb, (isMM?"MM":"AcademicDay")+"_Attendance_Block"+blk+".xlsx");
 }
 
 // ─── QUIZ MARKS ──────────────────────────────────────────────────────────────
@@ -4259,7 +4264,7 @@ function renderQuarterlyKPICard(resId){
     el("div",{st:{fontSize:".7rem",color:"rgba(31,26,18,.35)",marginBottom:"14px"}},"Blocks "+qBlocks.join(", ")+" · "+QUARTER_LABELS[q]),
     el("div",{st:{display:"flex",gap:"0",background:"#F6EFE2",borderRadius:"12px",overflow:"hidden"}},
       el("div",{st:{flex:"1",padding:"14px 16px",borderRight:"1px solid rgba(31,26,18,.07)"}},miniStat("Morning Meeting",kq.mmPct!=null?kq.mmPct:null,kq.mmPct!=null?(kq.mmAtt+"/"+kq.mmTotal+" sessions"):null)),
-      el("div",{st:{flex:"1",padding:"14px 16px",borderRight:"1px solid rgba(31,26,18,.07)"}},miniStat("Teaching",kq.tPct!=null?kq.tPct:null,kq.tPct!=null?(kq.tAtt+"/"+kq.tTotal+" sessions"):null)),
+      el("div",{st:{flex:"1",padding:"14px 16px",borderRight:"1px solid rgba(31,26,18,.07)"}},miniStat("Academic Day",kq.tPct!=null?kq.tPct:null,kq.tPct!=null?(kq.tAtt+"/"+kq.tTotal+" sessions"):null)),
       el("div",{st:{flex:"1",padding:"14px 16px"}},miniStat("Quiz Avg",kq.qAvg!=null?kq.qAvg:null,kq.qAvg!=null?(kq.quizCount+" quiz"+(kq.quizCount!==1?"zes":"")):null))
     )
   );
@@ -4316,7 +4321,7 @@ function renderMentorHome(){
                 kq.mmPct!=null?el("div",{st:{fontWeight:"700",color:kpiColor(kq.mmPct)}},kq.mmPct+"% ("+kq.mmAtt+"/"+kq.mmTotal+")"):el("div",{cls:"sh"},"No data")
               ),
               el("div",{st:{background:"#F6EFE2",borderRadius:"8px",padding:"6px 10px"}},
-                el("div",{cls:"sh",st:{fontSize:".72rem"}},"Teaching Att."),
+                el("div",{cls:"sh",st:{fontSize:".72rem"}},"Academic Day"),
                 kq.tPct!=null?el("div",{st:{fontWeight:"700",color:kpiColor(kq.tPct)}},kq.tPct+"% ("+kq.tAtt+"/"+kq.tTotal+")"):el("div",{cls:"sh"},"No data")
               ),
               el("div",{st:{background:"#F6EFE2",borderRadius:"8px",padding:"6px 10px"}},
@@ -4370,7 +4375,7 @@ function exportKpiPDF(res,k){
   <table><thead><tr><th>Component</th><th style="text-align:center">Score</th><th style="text-align:center">Weight</th><th>Detail</th></tr></thead><tbody>
   ${row("Quiz Average",k.qAvg,KPI_W.quiz,QUIZZES.filter(q=>q.published&&q.sc[res.id]!=null).length+" quizzes")}
   ${row("Morning Meeting Attendance",k.mmPct,KPI_W.mm,k.mmAtt+"/"+k.mmTotal+" sessions")}
-  ${row("Teaching Attendance",k.tPct,KPI_W.teach,k.tAtt+"/"+k.tTotal+" sessions")}
+  ${row("Academic Day Attendance",k.tPct,KPI_W.teach,k.tAtt+"/"+k.tTotal+" sessions")}
   ${row("Presenter / Moderator",k.pres?100:0,KPI_W.pres,k.presCount+" session"+(k.presCount!==1?"s":""))}
   </tbody></table>
   <h2> Yearly Achievements (50%)</h2>
@@ -4698,7 +4703,7 @@ function renderKPI(){
       el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.38)",marginBottom:"16px"}},"Blocks "+qBlocks.join(", ")+" · Quarterly stats are informational — not included in overall KPI score"),
       el("div",{st:{display:"flex",gap:"10px",marginBottom:"28px"}},
         statBox("Morning Meeting",'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',kq.mmPct!=null?kq.mmPct:null,kq.mmPct!=null?(kq.mmAtt+"/"+kq.mmTotal+" sessions · "+kq.presCount+" pres/mod"):null),
-        statBox("Teaching",'<path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>',kq.tPct!=null?kq.tPct:null,kq.tPct!=null?(kq.tAtt+"/"+kq.tTotal+" sessions"):null),
+        statBox("Academic Day",'<path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>',kq.tPct!=null?kq.tPct:null,kq.tPct!=null?(kq.tAtt+"/"+kq.tTotal+" sessions"):null),
         statBox("Quiz Average",'<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>',kq.qAvg!=null?kq.qAvg:null,kq.qAvg!=null?(kq.quizCount+" quiz"+(kq.quizCount!==1?"zes":"")):null)
       ),
       milestoneCard("research",'<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>',"research_milestone","research_achieved","e.g. Complete literature review and submit protocol to IRB by end of quarter"),
@@ -4887,7 +4892,7 @@ function renderKPI(){
       el("div",{st:{display:"grid",gridTemplateColumns:"1fr 1fr",marginBottom:"32px"}},
         kpiMetricRow("Quiz Average",'<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>',k.qAvg,null,KPI_W.quiz,kpiColor(k.qAvg),QUIZZES.filter(q=>q.published&&q.sc[res.id]!=null).length+" quizzes",false,false),
         kpiMetricRow("Morning Meeting",'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',k.mmPct,null,KPI_W.mm,kpiColor(k.mmPct),k.mmAtt+"/"+k.mmTotal+" sessions",false,true),
-        kpiMetricRow("Teaching Sessions",'<path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>',k.tPct,null,KPI_W.teach,kpiColor(k.tPct),k.tAtt+"/"+k.tTotal+" sessions",true,false),
+        kpiMetricRow("Academic Day Sessions",'<path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>',k.tPct,null,KPI_W.teach,kpiColor(k.tPct),k.tAtt+"/"+k.tTotal+" sessions",true,false),
         kpiMetricRow("Presenter / Moderator",'<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',k.pres?100:0,k.pres?el("div",null,svgIcon('<polyline points="20 6 9 17 4 12"/>',28,28)):el("span",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"2.1rem",fontWeight:"700",color:"#DC2626"}},"—"),KPI_W.pres,k.pres?"#059669":"#DC2626",k.presCount+" session"+(k.presCount!==1?"s":""),true,true)
       ),
       // ── Attendance trend by block ──────────────────────────────────────────
@@ -4908,14 +4913,14 @@ function renderKPI(){
               ...trendData.map(d=>el("div",{st:{display:"flex",flexDirection:"column",alignItems:"center",gap:"4px",minWidth:"36px"}},
                 el("div",{st:{display:"flex",flexDirection:"column-reverse",gap:"2px",height:"56px",justifyContent:"flex-start"}},
                   d.mmPct!==null?el("div",{title:"MM "+d.mmPct+"%",st:{width:"14px",height:Math.max(3,Math.round(d.mmPct*0.56))+"px",background:bc(d.mmPct),borderRadius:"3px 3px 0 0",alignSelf:"flex-end",margin:"0 1px"}}):null,
-                  d.tPct!==null?el("div",{title:"Teaching "+d.tPct+"%",st:{width:"14px",height:Math.max(3,Math.round(d.tPct*0.56))+"px",background:bc(d.tPct),borderRadius:"3px 3px 0 0",opacity:".65",margin:"0 1px"}}):null
+                  d.tPct!==null?el("div",{title:"Academic Day "+d.tPct+"%",st:{width:"14px",height:Math.max(3,Math.round(d.tPct*0.56))+"px",background:bc(d.tPct),borderRadius:"3px 3px 0 0",opacity:".65",margin:"0 1px"}}):null
                 ),
                 el("div",{st:{fontSize:".6rem",color:"rgba(31,26,18,.4)",fontWeight:"600"}},"B"+d.blk)
               ))
             )
           ),
           el("div",{st:{display:"flex",gap:"14px",marginTop:"8px",flexWrap:"wrap"}},
-            el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.45)"}},el("div",{st:{width:"10px",height:"10px",background:"rgba(31,26,18,.15)",borderRadius:"2px"}}), "Solid = MM, Faded = Teaching"),
+            el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.45)"}},el("div",{st:{width:"10px",height:"10px",background:"rgba(31,26,18,.15)",borderRadius:"2px"}}), "Solid = MM, Faded = Academic Day"),
             el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.45)"}},el("div",{st:{width:"10px",height:"10px",background:"#26523A",borderRadius:"2px"}}),"≥80%"),
             el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.45)"}},el("div",{st:{width:"10px",height:"10px",background:"#A47A28",borderRadius:"2px"}}),"60–79%"),
             el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.45)"}},el("div",{st:{width:"10px",height:"10px",background:"#dc2626",borderRadius:"2px"}}),"<60%")
@@ -5964,7 +5969,7 @@ function renderPDOverview(){
   const thead=el("thead",null,
     el("tr",{st:{borderBottom:"2px solid #e2e8f0"}},
       colH("Resident","name"),colH("Level","level"),colH("KPI","kpi"),
-      colH("MM Att.","mm"),colH("Teaching","teach"),colH("Quiz","quiz"),
+      colH("MM Att.","mm"),colH("Academic Day","teach"),colH("Quiz","quiz"),
       el("th",{st:{padding:"10px 12px",fontWeight:"700",fontSize:".74rem",textTransform:"uppercase",color:"rgba(31,26,18,.42)",background:"#F6EFE2"}},"Counsel"),
       el("th",{st:{padding:"10px 12px",background:"#F6EFE2"}})
     )
@@ -6022,7 +6027,7 @@ function renderPDOverview(){
       const flags=[];
       if(r.k.overall<60)flags.push("KPI "+r.k.overall+"%");
       if(r.k.mmPct!=null&&r.k.mmPct<60)flags.push("MM "+r.k.mmPct+"%");
-      if(r.k.tPct!=null&&r.k.tPct<60)flags.push("Teaching "+r.k.tPct+"%");
+      if(r.k.tPct!=null&&r.k.tPct<60)flags.push("Academic Day "+r.k.tPct+"%");
       return el("div",{st:{fontSize:".82rem",marginTop:"3px",cursor:"pointer"},onClick:()=>set({mod:"admin",adminProfile:r.id,adminResTab:"kpi"})}, "– "+r.name+" ("+r.level+") — "+flags.join(", ")+" → Click to view" );
     })
   ):null;
@@ -6442,9 +6447,9 @@ function renderAdminMentors(){
 // Privileges available to residents vs mentors (different capability sets)
 const PRIV_LABELS_RESIDENT={
   edit_mm_attendance:"Update Morning Meeting attendance",
-  edit_teach_attendance:"Update Teaching attendance",
+  edit_teach_attendance:"Update Academic Day attendance",
   edit_mm_schedule:"Enter/edit Morning Meeting schedule (Teaching Committee)",
-  edit_teach_schedule:"Enter/edit Teaching schedule (Teaching Committee)",
+  edit_teach_schedule:"Enter/edit Academic Day schedule (Teaching Committee)",
   edit_kpi_notes:"Edit KPI notes",
   edit_oncall:"Enter/edit On-Call schedule (Oncall Committee)",
   plan_rota:"View all residents leave plan & manage AY rota planning"
@@ -6452,7 +6457,7 @@ const PRIV_LABELS_RESIDENT={
 const PRIV_LABELS_CONSULTANT={
   edit_quiz_marks:"Enter/edit quiz marks (all quizzes)",
   edit_mm_attendance:"Update Morning Meeting attendance",
-  edit_teach_attendance:"Update Teaching attendance",
+  edit_teach_attendance:"Update Academic Day attendance",
   edit_kpi_notes:"Edit KPI notes"
 };
 async function togglePriv(profileId,key,grant){
@@ -6823,7 +6828,7 @@ function renderAdminProfile(rid){
   const res=resById(rid);
   if(!res)return el("div",null,"Not found");
   const tabs=["info","kpi","rota","scores","mm","teaching","leave","counseling"];
-  const tabLabels={info:"Info",kpi:"KPI",rota:"Rota",scores:"Scores",mm:"MM Att.",teaching:"Teaching Att.",leave:"Leave",counseling:"Counseling"};
+  const tabLabels={info:"Info",kpi:"KPI",rota:"Rota",scores:"Scores",mm:"MM Att.",teaching:"Academic Day",leave:"Leave",counseling:"Counseling"};
   return el("div",{cls:"content"},
     el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
       el("button",{cls:"back-btn",onClick:()=>set({adminProfile:null,adminResTab:"info"})},"← Back to Residents"),
@@ -6879,7 +6884,7 @@ function renderProfileKPI(res){
         ),
         el("div",{cls:"card",st:{background:"#fefce8",border:"1px solid #fef08a",padding:"10px",textAlign:"center"}},
           el("div",{st:{fontWeight:"800",color:k.tPct==null?"#9ca3af":kpiColor(k.tPct)}},k.tPct==null?"N/A":k.tPct+"%"),
-          el("div",{cls:"sh",st:{fontSize:".72rem"}}," Teaching")
+          el("div",{cls:"sh",st:{fontSize:".72rem"}}," Academic Day")
         )
       ),
       el("div",{cls:"grid-2",st:{gap:"8px"}},
@@ -7992,7 +7997,7 @@ function renderBrDetailModal(){
   const rows=[
     {label:"Quiz Average",val:k.qAvg,w:KPI_W.quiz,sub:QUIZZES.filter(q=>q.published&&q.sc[res.id]!=null).length+" quizzes"},
     {label:"MM Attendance",val:k.mmPct,w:KPI_W.mm,sub:k.mmAtt+"/"+k.mmTotal+" sessions"},
-    {label:"Teaching Attendance",val:k.tPct,w:KPI_W.teach,sub:k.tAtt+"/"+k.tTotal+" sessions"},
+    {label:"Academic Day Attendance",val:k.tPct,w:KPI_W.teach,sub:k.tAtt+"/"+k.tTotal+" sessions"},
     {label:"Presenter / Moderator",val:k.pres?100:0,w:KPI_W.pres,sub:k.presCount+" session"+(k.presCount!==1?"s":"")},
   ];
   return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
@@ -8099,7 +8104,7 @@ function renderKPIExecutive(){
     el("div",{st:{display:"flex",alignItems:"center",borderTop:"1px solid rgba(254,251,243,.15)",marginTop:"auto",position:"relative",zIndex:"2"}},
       ...[
         {label:"MM Attendance",val:avgMM+"%",sub:"Cohort average"},
-        {label:"Teaching Attendance",val:avgTeach+"%",sub:"Cohort average"},
+        {label:"Academic Day Attendance",val:avgTeach+"%",sub:"Cohort average"},
         {label:"Quiz Average",val:avgQuiz+"%",sub:"Cohort average"},
         {label:"Committee Score",val:avgComm+"/10",sub:"Program average"},
       ].map((st,i,arr)=>el("div",{st:{
@@ -8230,13 +8235,13 @@ function renderKPIExecutive(){
       el("div",null,
         el("div",{st:{fontSize:".6rem",fontWeight:"700",letterSpacing:".14em",textTransform:"uppercase",color:"rgba(31,26,18,.3)",marginBottom:"20px",paddingBottom:"12px",borderBottom:"1px solid rgba(31,26,18,.07)"}},"Continuous KPI \u00B7 Cohort Averages"),
         mrow('<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>','MM Attendance',avgMM+"%",avgMM,"#7FB89C"),
-        mrow('<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/>','Teaching Attendance',avgTeach+"%",avgTeach,"#7FB89C"),
+        mrow('<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/>','Academic Day Attendance',avgTeach+"%",avgTeach,"#7FB89C"),
         mrow('<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>','Quiz Average',avgQuiz+"%",avgQuiz,"#CBA155"),
         el("div",{st:{height:"1px",background:"rgba(31,26,18,.06)",margin:"20px 0"}}),
         el("div",{st:{fontSize:".6rem",fontWeight:"700",letterSpacing:".14em",textTransform:"uppercase",color:"rgba(31,26,18,.3)",marginBottom:"14px"}},"Session Count"),
         ...[
           {label:"MM Sessions held",val:String(mmTotalSessions)},
-          {label:"Teaching Sessions held",val:String(teachTotalSessions)},
+          {label:"Academic Day Sessions held",val:String(teachTotalSessions)},
           {label:"MM Presenters (unique)",val:String(MM_SESSIONS.filter(m=>m.presenter_resident_id).length),clr:"#c96a4a"},
         ].map(x=>el("div",{st:{display:"flex",alignItems:"center",padding:"13px 0",borderBottom:"1px solid rgba(31,26,18,.06)"}},
           el("div",{st:{fontSize:".82rem",color:"#1F1A12",flex:"1"}},x.label),
@@ -8327,7 +8332,7 @@ function renderKPIExecutive(){
       function parseNote(note){if(!note)return{};try{return JSON.parse(note);}catch(e){return{raw:note};}}
       const kRowDefs=[
         {label:"MM Attendance",val:k.mmPct,sub:k.mmAtt+"/"+k.mmTotal+" sessions",w:KPI_W.mm,icon:'<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>'},
-        {label:"Teaching Attendance",val:k.tPct,sub:k.tAtt+"/"+k.tTotal+" sessions",w:KPI_W.teach,icon:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/>'},
+        {label:"Academic Day Attendance",val:k.tPct,sub:k.tAtt+"/"+k.tTotal+" sessions",w:KPI_W.teach,icon:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/>'},
         {label:"Quiz Average",val:k.qAvg,sub:QUIZZES.filter(q=>q.published&&q.sc[selResId]!=null).length+" quizzes",w:KPI_W.quiz,icon:'<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>'},
         {label:"Presenter / Moderator",val:k.pres?100:0,sub:k.presCount+" MM sessions",w:KPI_W.pres,icon:'<circle cx="12" cy="12" r="10"/><polyline points="10 15 12 17 16 13"/>'},
         {label:"Committee Score",val:k.commPct,sub:"Score "+(ks.commScore||0)+"/10",w:KPI_W.comm,icon:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'},
@@ -8619,7 +8624,9 @@ function renderOncall(){
   function renderScheduleTab(){
     if(!blockStart)return el("p",{cls:"sh"},"Block data not available.");
     const hasData=allDates.some(({date})=>byDate[date]&&Object.keys(byDate[date]).length>0);
+    const blkEntriesAll=ONCALL_DATA.filter(e=>e.block_number===blk);
     return el("div",null,
+      renderPublishControls(blkEntriesAll,"oncall_schedule",blk,canEdit,loadOncallData),
       canEdit?el("div",{st:{marginBottom:"16px"}},
         el("button",{cls:"sbtn primary",onClick:()=>set({oncallEditDate:allDates[0]?.date||""})}, " Add / Edit Day")
       ):null,
@@ -8913,7 +8920,7 @@ async function loadActivityLog(){
   ACTIVITY_LOG_DATA=data||[];render();
 }
 function renderActivityLog(){
-  const ACTION_LBL={att_mm:"MM Attendance",att_teach:"Teaching Att.",leave_approved:"Leave Approved",leave_rejected:"Leave Rejected",leave_request:"Leave Request",kpi_approved:"KPI Verified",kpi_rejected:"KPI Rejected",kpi_score:"KPI Score",oncall_save:"On-Call Saved",counsel_add:"Counseling Added",counsel_del:"Counseling Deleted"};
+  const ACTION_LBL={att_mm:"MM Attendance",att_teach:"Academic Day",leave_approved:"Leave Approved",leave_rejected:"Leave Rejected",leave_request:"Leave Request",kpi_approved:"KPI Verified",kpi_rejected:"KPI Rejected",kpi_score:"KPI Score",oncall_save:"On-Call Saved",counsel_add:"Counseling Added",counsel_del:"Counseling Deleted"};
   const filterRes=STATE.actLogRes||"";
   const filterAction=STATE.actLogAction||"";
   let rows=ACTIVITY_LOG_DATA;
@@ -9057,7 +9064,7 @@ function renderProfileTeach(res){
       renderBlockPills(blk,n=>set({teachBlock:n}))
     ),
     el("div",{cls:"card"},
-      el("div",{cls:"card-title"},"Teaching Att. — "+res.name+" — Block "+blk),
+      el("div",{cls:"card-title"},"Academic Day — "+res.name+" — Block "+blk),
       sessions.length===0?el("p",{cls:"sh"},"No sessions for this block"):
       (()=>{
         const wrap=el("div",null);
@@ -9123,8 +9130,8 @@ function renderCalModal(){
     {key:"oncall",label:"On-Call Duties",sub:"My assigned shifts only"},
     {key:"mm_mine",label:"Morning Meetings — my duties only",sub:"Sessions where I am presenter or moderator"},
     {key:"mm_all",label:"Morning Meetings — full schedule",sub:"All MM sessions (every resident)"},
-    {key:"teach_mine",label:"Teaching — my presentations only",sub:"Sessions where I am the listed presenter"},
-    {key:"teach_all",label:"Teaching — full schedule",sub:"All teaching sessions"},
+    {key:"teach_mine",label:"Academic Day — my presentations only",sub:"Sessions where I am the listed presenter"},
+    {key:"teach_all",label:"Academic Day — full schedule",sub:"All Academic Day sessions"},
     {key:"deadlines",label:"Deadlines & Announcements",sub:"Public announcements + those targeted to me or my level"},
   ];
   function mkChkRow(opt){
