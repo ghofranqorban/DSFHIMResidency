@@ -2,3 +2,4 @@
 *.jsx
 supabase/new_passwords.csv
 supabase/*.csv
+design/
