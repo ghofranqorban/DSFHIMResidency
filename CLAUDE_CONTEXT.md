@@ -1,6 +1,6 @@
 # DSFH IM Residency Portal — Claude Session Context
 
-> Read this file at the start of every new session before touching any code.
+> Read this file AND the memory files (`~/.claude/projects/.../memory/*.md`) at the start of every new session, before touching any code.
 
 ---
 
@@ -271,15 +271,16 @@ Still shows "Under Progress" on Performance Report. Phase 2 data-entry work, no 
 
 ## Workflow for New Sessions
 
-1. Read this file first
+1. Read this file (`CLAUDE_CONTEXT.md`) and the memory files first — before anything else
 2. Run JS syntax check (above) to confirm current state is valid
 3. Read `SFH_Residency_Portal.html` around the relevant function before editing
 4. Make changes to `SFH_Residency_Portal.html`
-5. Run JS syntax check again
-6. `cp SFH_Residency_Portal.html index.html`
-7. `git add SFH_Residency_Portal.html index.html && git commit -m "..." && git push origin main`
-8. GitHub Pages auto-deploys in ~1 min
-9. **Update this file** if new features are added, SQL migrations run, or status changes
+5. **After every code change:** run the JS syntax check → `cp SFH_Residency_Portal.html index.html` → commit and push both files:
+   - Run JS syntax check again (above)
+   - `cp SFH_Residency_Portal.html index.html`
+   - `git add SFH_Residency_Portal.html index.html && git commit -m "..." && git push origin main`
+6. GitHub Pages auto-deploys in ~1 min
+7. **Update this file** if new features are added, SQL migrations run, or status changes
 
 ---
 
