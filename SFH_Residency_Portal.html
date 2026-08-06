@@ -2808,6 +2808,7 @@ function renderRotaTable(resOverride){
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap"},
         el("span",{cls:"card-title",st:{margin:"0"}},"Full Rota Table"),
+        el("button",{cls:"sbtn ghost",st:{fontSize:".78rem",marginLeft:"auto"},onClick:exportRota},"Export Excel"),
         canEdit()?el("button",{cls:"sbtn "+(STATE.rotaEdit?"warn":"ghost"),onClick:()=>set({rotaEdit:!STATE.rotaEdit})},STATE.rotaEdit?"Cancel":"Edit Mode"):null,
         STATE.rotaEdit?el("button",{cls:"sbtn success",onClick:saveTableEdit},"Save Changes"):null
       )
@@ -3481,9 +3482,10 @@ function renderMMSchedule(){
   return el("div",null,
     blkRow,
     renderPublishControls(sessions,"mm_sessions",blk,canEditSched,loadSchedules),
-    canEditSched?el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
-      el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.12)",color:"rgba(31,26,18,.55)",padding:"5px 14px",borderRadius:"999px",cursor:"pointer",fontSize:".78rem"},onClick:()=>generateMMSessions(blk)},"Auto-fill dates")
-    ):null,
+    el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
+      canEditSched?el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.12)",color:"rgba(31,26,18,.55)",padding:"5px 14px",borderRadius:"999px",cursor:"pointer",fontSize:".78rem"},onClick:()=>generateMMSessions(blk)},"Auto-fill dates"):null,
+      sessions.length?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem",marginLeft:canEditSched?"0":"auto"},onClick:()=>exportSchedule("mm",blk)},"Export Excel"):null
+    ),
     formOpen?renderMMScheduleForm(blk,editingSession):null,
     el("div",{st:{border:"1px solid rgba(31,26,18,.08)",borderRadius:"12px",overflow:"hidden"}},
       renderScheduleTable(sessions,blk,cols)
@@ -3833,6 +3835,7 @@ function renderTeachSchedule(){
       renderPublishControls(sessions,"teaching_sessions",blk,canEditSched,loadSchedules),
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
         el("span",{cls:"card-title",st:{margin:"0"}},"Block "+blk+" Academic Day Sessions"),
+        sessions.length?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem",marginLeft:"auto"},onClick:()=>exportSchedule("teach",blk)},"Export Excel"):null,
         canEditSched?el("button",{cls:"sbtn primary",onClick:()=>set({teachShowEntry:true,teachEntrySession:"new_teach"})},"+ Add Session"):null
       ),
       formOpen?renderTeachScheduleForm(blk,editingSession):null,
@@ -4079,6 +4082,111 @@ function exportAttendance(type, blk){
   XLSX.utils.book_append_sheet(wb, ws, "Attendance");
   XLSX.writeFile(wb, (isMM?"MM":"AcademicDay")+"_Attendance_Block"+blk+".xlsx");
 }
+function exportRota(){
+  const levels=["R4","R3","R2","R1"];
+  const headers=["Resident","Level",...ROTA_PERIODS.map((_,i)=>"B"+(i+1))];
+  const rows=[];
+  levels.forEach(lv=>{
+    RESIDENTS.filter(r=>r.level===lv).forEach(r=>{
+      const cols=ROTA_PERIODS.map((_,i)=>{
+        const rot=(FULL_ROTA[r.id]||{})[String(i+1)]||"";
+        const meta=(ROTA_LEAVE_META[r.id]||{})[String(i+1)];
+        return rot+(meta&&meta.weeks>0?" (½ AL)":"");
+      });
+      rows.push([r.name,r.level,...cols]);
+    });
+  });
+  const ws=XLSX.utils.aoa_to_sheet([headers,...rows]);
+  ws["!cols"]=[{wch:24},{wch:6},...ROTA_PERIODS.map(()=>({wch:14}))];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Rota");
+  XLSX.writeFile(wb,"Rota_AY"+CURRENT_ACADEMIC_YEAR+"_"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+".xlsx");
+}
+function exportSchedule(type,blk){
+  const isMM=type==="mm";
+  const sessions=(isMM?MM_SESSIONS:TEACH_SESSIONS).filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
+  if(!sessions.length)return;
+  const headers=isMM?["Day","Date","Topic","Presenter","Moderator","Consultant"]:["Day","Date","Specialty","Topic","Presenter"];
+  const rows=sessions.map(s=>{
+    const presName=s.presenter_resident_id?resById(s.presenter_resident_id)?.name||s.presenter_label||"":s.presenter_label||"";
+    if(isMM){
+      const modName=s.moderator_resident_id?resById(s.moderator_resident_id)?.name||s.moderator_label||"":s.moderator_label||"";
+      return[s.day_label||"",s.session_date,s.topic||"",presName,modName,s.consultant_label||""];
+    }
+    return[s.day_label||"",s.session_date,s.specialty_label||"",s.topic||"",presName+(s.role_label?" ("+s.role_label+")":"")];
+  });
+  const ws=XLSX.utils.aoa_to_sheet([headers,...rows]);
+  ws["!cols"]=headers.map(()=>({wch:20}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Schedule");
+  XLSX.writeFile(wb,(isMM?"MM":"AcademicDay")+"_Schedule_Block"+blk+".xlsx");
+}
+function exportOncall(blk){
+  const blockStart=blockStartDate(blk,CURRENT_ACADEMIC_YEAR);
+  if(!blockStart)return;
+  const headers=["Date","Day","ER Medical","Floor 1","Floor 2","Floor 3","CTU A","CTU B"];
+  const byDate={};
+  ONCALL_DATA.filter(e=>e.block_number===blk).forEach(e=>{
+    if(!byDate[e.schedule_date])byDate[e.schedule_date]={};
+    byDate[e.schedule_date][e.slot_key]=e;
+  });
+  const rows=[];
+  const DN=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  for(let i=0;i<28;i++){
+    const d=new Date(blockStart.getTime()+i*86400000);
+    const ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    const day=DN[d.getDay()];
+    const isWe=d.getDay()===5||d.getDay()===6;
+    const sl=byDate[ds]||{};
+    const nm=e=>e?(e.resident_id?resById(e.resident_id)?.name||"":e.resident_name||"")+(e.is_extra?" [EXTRA]":""):"";
+    rows.push([ds,day,nm(sl.er_medical),nm(sl.bldg1),nm(sl.bldg2),nm(sl.consult),isWe?nm(sl.ctu1):"—",isWe?nm(sl.ctu2):"—"]);
+  }
+  const ws=XLSX.utils.aoa_to_sheet([headers,...rows]);
+  ws["!cols"]=[{wch:12},{wch:12},{wch:20},{wch:20},{wch:20},{wch:20},{wch:20},{wch:20}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"On-Call");
+  XLSX.writeFile(wb,"OnCall_Block"+blk+".xlsx");
+}
+function exportQuizAll(){
+  const vr=visRes();
+  const pubQ=QUIZZES.filter(q=>q.published);
+  if(!pubQ.length)return;
+  const headers=["Resident","Level",...pubQ.map(q=>q.title+" (/"+q.max+")"),"Average %"];
+  const rows=vr.map(r=>{
+    let total=0,count=0;
+    const scores=pubQ.map(q=>{
+      const sc=q.sc[r.id];
+      if(sc!=null){total+=sc/q.max*100;count++;return sc;}
+      return"";
+    });
+    const avg=count?Math.round(total/count)+"%":"—";
+    return[r.name,r.level,...scores,avg];
+  });
+  const ws=XLSX.utils.aoa_to_sheet([headers,...rows]);
+  ws["!cols"]=[{wch:24},{wch:6},...pubQ.map(()=>({wch:16})),{wch:10}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Quiz Marks");
+  XLSX.writeFile(wb,"Quiz_Marks_AY"+CURRENT_ACADEMIC_YEAR+"_"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+".xlsx");
+}
+function exportLeave(){
+  const vr=visRes();
+  const headers=["Resident","Level","Rota Blocks","Annual Used (days)","Edu Used (days)","Absences (days)","Remaining (of 28d)"];
+  const rows=vr.map(r=>{
+    const ld=LEAVE_DATA[r.id]||{rota:[],manual:[],absences:[]};
+    const approvedBlocks=new Set(ld.manual.map(m=>{const mt=m.comment?.match(/Rota leave B(\d+)/);return mt?parseInt(mt[1]):null;}).filter(Boolean));
+    const rotaDays=ld.rota.reduce((a,l)=>a+(approvedBlocks.has(l.period)?0:(l.partial?l.weeks*7:28)),0);
+    const annualApproved=ld.manual.filter(x=>x.approved&&!x.comment?.startsWith("[EDU]")).reduce((a,x)=>a+(x.days||0),0);
+    const eduApproved=ld.manual.filter(x=>x.approved&&x.comment?.startsWith("[EDU]")).reduce((a,x)=>a+(x.days||0),0);
+    const absenceDays=ld.absences.reduce((a,x)=>a+(x.days||0),0);
+    const remaining=28-(annualApproved+rotaDays);
+    return[r.name,r.level,ld.rota.length,annualApproved+rotaDays,eduApproved,absenceDays,remaining];
+  });
+  const ws=XLSX.utils.aoa_to_sheet([headers,...rows]);
+  ws["!cols"]=[{wch:24},{wch:6},{wch:14},{wch:18},{wch:16},{wch:16},{wch:18}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Leave Summary");
+  XLSX.writeFile(wb,"Leave_Summary_AY"+CURRENT_ACADEMIC_YEAR+"_"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+".xlsx");
+}
 
 // ─── QUIZ MARKS ──────────────────────────────────────────────────────────────
 function renderQuiz(){
@@ -4229,6 +4337,7 @@ function renderQuiz(){
         el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Quiz Marks"),
         el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+" · "+QUIZZES.length+" quizzes")
       ),
+      QUIZZES.some(q=>q.published)?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem",flexShrink:"0"},onClick:exportQuizAll},"Export All Excel"):null,
       isPD()?el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"999px",padding:"9px 22px",fontSize:".84rem",fontWeight:"600",cursor:"pointer",flexShrink:"0"},onClick:()=>set({quizShowAdd:!STATE.quizShowAdd})},STATE.quizShowAdd?"Cancel":"+ New Quiz"):null
     ),
     STATE.quizShowAdd&&isPD()?el("div",{cls:"card"},
@@ -5184,7 +5293,10 @@ function renderLeave(){
 }
 function renderLeaveList(vr){
   return el("div",{cls:"card"},
-    el("div",{cls:"card-title"},"Resident Leave Summary"),
+    el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
+      el("span",{cls:"card-title",st:{margin:"0"}},"Resident Leave Summary"),
+      el("button",{cls:"sbtn ghost",st:{fontSize:".78rem",marginLeft:"auto"},onClick:exportLeave},"Export Excel")
+    ),
     el("div",{cls:"tbl-wrap"},
       el("table",null,
         el("thead",null,
@@ -8852,7 +8964,8 @@ function renderOncall(){
       renderPublishControls(blkEntriesAll,"oncall_schedule",blk,canEdit,loadOncallData),
       el("div",{st:{marginBottom:"16px",display:"flex",gap:"10px",flexWrap:"wrap"}},
         canEdit?el("button",{cls:"sbtn primary",onClick:()=>set({oncallEditDate:allDates[0]?.date||""})}, " Add / Edit Day"):null,
-        el("button",{cls:"sbtn",onClick:()=>set({oncallFullscreen:true})},"⛶ Full Screen")
+        el("button",{cls:"sbtn",onClick:()=>set({oncallFullscreen:true})},"⛶ Full Screen"),
+        hasData?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem"},onClick:()=>exportOncall(blk)},"Export Excel"):null
       ),
       !hasData?el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},"No on-call data entered for Block "+blk+" yet."+(canEdit?" Use 'Edit' on any row to add assignments.":"")):null,
       el("div",{st:{overflowX:"auto",borderRadius:"12px",boxShadow:"0 2px 12px rgba(0,0,0,.08)",border:"1px solid #ddd6cc"}},
