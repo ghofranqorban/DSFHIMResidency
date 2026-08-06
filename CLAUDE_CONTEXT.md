@@ -68,6 +68,11 @@ ANNOUNCEMENTS    // [{id, title, description, deadline_date, category, target_al
 ACCOUNT_PRIVS    // {profile_id: Set(privilege_key)}
 PROMOTION_NEEDED // bool
 QUIZZES_LOAD_ERR // string|null — set if quizzes table missing in Supabase
+CHIEF_ELECTION   // {academic_year, nomination_start, nomination_end, voting_start, voting_end} | null
+CHIEF_NOMINEES   // [{id, resident_id, academic_year, nominated_at}]
+CHIEF_VOTES      // [{id, voter_profile_id, candidate_resident_id}] — PD sees all, resident sees own only (RLS)
+R4_PREFS         // {resident_id: {elective1_block, elective1_subspecialty, elective1_location, elective2_*, clinic1_block, clinic2_block, status}}
+R4_PREFS_STATUS  // {academic_year, is_open, opened_at, deadline} | null
 ```
 
 ---
@@ -178,6 +183,14 @@ QUIZZES_LOAD_ERR // string|null — set if quizzes table missing in Supabase
 - Triggers Oct–Dec on PD login · Modal with level changes · Per-resident skip
 - ⚠️ Requires `supabase/add_promotion_log.sql`
 
+### AY Plan 26-27 Module (`leave_plan`)
+- **Landing cards:** 4 cards — Suggested Leave, Suggested GIM Rotations, Chief Resident Election, R4 Rotation Preferences
+- **Suggested Leave:** 2× 2-week leave periods, deadline countdown, over-cap backup ("Second Preference"), PD decision modal (approve/decline/assign), DB-backed deadline (`leave_plan_status`)
+- **GIM Rotation Prefs:** block picker, open/close window (`gim_rota_status`), PD matrix overlay
+- **Chief Resident Election (6 Aug 2026):** PD sets 4 datetime fields (nomination start/end, voting start/end) → auto-transitions phases. R2/R3 self-nominate during nomination window. All residents vote (single vote, confirmation dialog). Vote counts hidden until voting closes — PD sees results (count + %), residents see "PD will announce." Tables: `chief_election`, `chief_nominations`, `chief_votes`. State: `CHIEF_ELECTION`, `CHIEF_NOMINEES`, `CHIEF_VOTES`. Functions: `chiefPhase()`, `chiefPhaseLabel()`, `loadChiefElection()`, `saveChiefElection()`, `chiefNominate()`, `chiefWithdraw()`, `chiefVote()`. UI: `chiefSection()` inside `renderLeavePlan()`.
+- **R4 Rotation Preferences (6 Aug 2026):** Current R3s (upcoming R4s) pick 2 Elective blocks (with subspecialty + location text fields) + 2 Clinic blocks (just block pick). All 4 must be different blocks. PD/chief/plan_rota open/close window (`r4_prefs_status`), see submission matrix. Save Draft / Submit flow. Tables: `r4_rota_prefs`, `r4_prefs_status`. State: `R4_PREFS`, `R4_PREFS_STATUS`, `STATE.r4e1Block/r4e1Sub/r4e1Loc/r4e2Block/r4e2Sub/r4e2Loc/r4c1Block/r4c2Block`. Functions: `r4PrefsIsOpen()`, `loadR4Prefs()`, `loadR4PrefsStatus()`, `r4PrefsOpenWindow()`, `r4PrefsCloseWindow()`, `saveR4Prefs()`. UI: `r4PrefsSection()` inside `renderLeavePlan()`.
+- **"All Residents" tab:** PD matrix with leave dots + GIM tint + control panels for GIM/leave deadline/R4 prefs
+
 ### Admin Panel
 - Residents: add/edit/archive/login · Mentors: add/edit/assign/login
 - Accounts + privilege grid · Deadlines · Import Rota (Excel wizard)
@@ -214,6 +227,9 @@ QUIZZES_LOAD_ERR // string|null — set if quizzes table missing in Supabase
 | `fix_kpi_evidence_storage_rls.sql` | ✅ Run (confirmed 18 Jul 2026 — logged in as a real resident account and successfully uploaded/cleaned up a test file via the exact storage path the app uses) | Fixes KPI achievement evidence file uploads failing with "new row violates row-level security policy" for every resident/mentor/chief/PD (reported by Dr. Lamar, 18 Jul 2026). Root cause: the `kpi-evidence` Storage bucket was created private (10 Jul 2026) but no RLS policies were ever added on `storage.objects` — only the service_role key could read/write it. Adds INSERT/SELECT/UPDATE policies scoped to `bucket_id = 'kpi-evidence'` for any authenticated user. |
 | `fix_kpi_scores_read_rls.sql` | ✅ Run (confirmed 18 Jul 2026 — see below) | Fixes Performance Report leaderboard showing different rankings/percentages depending on who's logged in (reported 18 Jul 2026 — Deema saw a completely different top-5 than the PD view). Root cause: `kpi_scores` SELECT RLS (`add_kpi_scores.sql`) restricted reads to PD/chief/own-mentee/own-row only, but `calcKPI()` reads the globally-cached `KPI_SCORES` for every resident to build the cohort-wide leaderboard — so a resident's session only ever saw their own Committee Score + yearly bonus flags, and everyone else's silently defaulted to 0/false in that session's score math. Widens SELECT to all authenticated (write policy unchanged), same pattern as `rotations`/`mm_attendance`/`teaching_attendance`/`quiz_scores`.
 | `add_ceo_role.sql` | ✅ Run (confirmed 27 Jul 2026 — profile insert with role='ceo' succeeded) | Adds `'ceo'` to the `profiles.role` check constraint, same pattern as `'dio'`. Backs Dr. Sohail Bajammal's (CEO) account — full PD-level access via `effectiveRole()`/`isPdRole()`, displayed as "CEO" badge. Run manually in the Supabase SQL Editor (no raw-SQL RPC exists for Claude to execute DDL directly). |
+| `add_oncall_draft_publish.sql` | ✅ Run (confirmed 1 Aug 2026) | Adds `oncall_schedule.published` column + RLS select policy; existing rows backfilled to `published=true`. |
+| `add_chief_election.sql` | ✅ Run (6 Aug 2026) | `chief_election` (PD configures nomination/voting windows), `chief_nominations` (R2/R3 self-nominate), `chief_votes` (one per voter, PD/chief read all, residents read own only). |
+| `add_r4_rota_prefs.sql` | ✅ Run (6 Aug 2026) | `r4_rota_prefs` (2 elective blocks with subspecialty/location + 2 clinic blocks, per R3 resident) + `r4_prefs_status` (open/close window, same pattern as `gim_rota_status`). |
 
 ---
 
@@ -228,7 +244,7 @@ QUIZZES_LOAD_ERR // string|null — set if quizzes table missing in Supabase
 - **New Supabase Storage buckets need RLS policies added manually:** creating a private bucket does NOT grant authenticated users any access — only the service_role key can read/write until explicit `storage.objects` INSERT/SELECT/UPDATE policies are added (same category of bug as the `profiles_write` RLS gap that broke calendar tokens). Caused KPI evidence file uploads to fail for every user from 10 Jul until fixed 18 Jul (`fix_kpi_evidence_storage_rls.sql`). If a new feature adds a Storage bucket, write the RLS policies in the same migration that creates it.
 - **`KPI_W` has multiple independent consumers — grep all of them before changing weights:** `calcKPI()`/`calcKPIQ()` read it directly, but `renderKPI()` also has its own duplicate `yearlyRaw` calc, and `kpiOngoingScore()` (Best Resident module) is a fully separate function that used to hardcode its own weights instead of deriving from `KPI_W`. During the Jul 2026 weight overhaul (15/15/15/5/10/10/10/10/5/5), `kpiOngoingScore()` was missed in the first pass and kept using stale pre-overhaul weights — silently mis-scored every resident's Best Resident ranking (producing suspicious tied scores) until the user noticed and flagged it. `kpiOngoingScore()` now derives everything from `KPI_W` dynamically — do not re-hardcode it.
 - **init() has try-catch:** So render() always runs even if data loading fails.
-- **GitHub Actions:** Custom deploy at `.github/workflows/deploy.yml` retries 3× — don't remove.
+- **GitHub Actions:** Custom deploy at `.github/workflows/deploy.yml` retries 3×, `cancel-in-progress: true` (changed 6 Aug 2026 — was `false`, which caused new deploys to queue behind stuck runs indefinitely). Don't remove the workflow. The `workflow` scope was added to `gh auth` this session to allow pushing workflow file changes.
 - **After every change:** `cp SFH_Residency_Portal.html index.html` then commit+push both.
 
 ---
@@ -262,6 +278,12 @@ Hero band, floating tiles, underline tabs, no-box metric rows, achievement list 
 
 ### 8. Historical KPI data (2024-25, 2023-24, 2022-23)
 Still shows "Under Progress" on Performance Report. Phase 2 data-entry work, no ETA.
+
+### 9. Master Rota Builder (planned, starting next week — ~11 Aug 2026)
+PD builds the full 13-block rota inside the AY Plan module, with R4 prefs / GIM prefs / leave plan visible as constraints. Finalize in the planner, then "Push Live" when new AY starts → becomes the real `rotations` + `leave_records`.
+
+### 10. October Auto-Promotion Enhancement
+Add auto-archiving of graduating R4s (`active=false`) + creation of 15 placeholder R1 accounts (NR1-01 to NR1-15). The existing promotion modal already handles R1→R2, R2→R3, R3→R4 with per-resident skip.
 
 ### 4. ~~Quiz Persistence~~ ✅ Done (error banner added)
 ### 5. ~~KPI PDF Export~~ ✅ Done

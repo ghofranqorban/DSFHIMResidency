@@ -955,3 +955,21 @@ DB side: confirmed Claude has no raw-SQL execution path (no `exec_sql` RPC exist
 No portal code was changed this session (pure data entry) — no `node --check`/`index.html` copy/commit needed for the data itself; this file was updated afterward to record it.
 
 **Still TODO:** not browser-verified — check the tablet-width sidebar (601–900px) shows the two icons, and confirm Inter is actually rendering after deploy. Also unfixed and unrelated: the font link requests Playfair italic **700 only**, but the Performance Report hero's italic second line and `.home-subtitle` both ask for italic **400**, so the browser substitutes the bold italic. One token (`1,400`) would fix it — flagged to the user, not applied.
+
+### Session — 6 Aug 2026
+
+**Playfair Display italic 400 fix** — the Google Fonts link only loaded italic 700 but the Performance Report hero subtitle and `.home-subtitle` use italic 400. Added `1,400` to the font link. Committed `9edd5dc`.
+
+**Excel export on all modules** — committed earlier this session (`f7a61a3`). "Export Excel" button on Rota (full table), MM Schedule (per block), Academic Day Schedule (per block), On-Call (per block), Quiz Marks (all published, with averages), and Leave Summary. All use SheetJS `XLSX.writeFile()`.
+
+**Chief Resident Election + R4 Rotation Preferences** — two new features built inside the AY Plan module (`renderLeavePlan()`). Both SQL migrations (`add_chief_election.sql`, `add_r4_rota_prefs.sql`) written and confirmed run by user. Committed `e09f3fc`.
+
+Chief Election: `chief_election` (PD sets 4 datetime fields), `chief_nominations` (R2/R3 self-nominate), `chief_votes` (single vote per resident, PD/chief read all, residents read own only via RLS). Auto-phase transitions: none → scheduled → nominating → gap → voting → closed. UI: `chiefSection()` with PD setup panel (datetime-local inputs), nominee list with avatar/level, vote buttons with confirmation dialog, "YOUR VOTE" badge, PD results view with vote counts/percentages. Timeline set by user: nomination Sunday 9 Aug for 24h, voting Monday 10 Aug for 24h.
+
+R4 Prefs: `r4_rota_prefs` (2 elective blocks with subspecialty/location text + 2 clinic blocks, all 4 must be different), `r4_prefs_status` (open/close window same as GIM pattern). UI: `r4PrefsSection()` with block picker grids, text inputs for subspecialty/location, PD submission matrix showing all R3s' status and details. User wants window opened ASAP.
+
+**Deploy workflow stuck — root cause found and fixed.** `deploy.yml` had `cancel-in-progress: false`, causing new deploys to queue behind stuck runs indefinitely. Run #219 (Excel export commit) got stuck "Waiting" for 15+ minutes, blocking all subsequent deploys. Changed to `cancel-in-progress: true` (commit `886fa04`). Also added `workflow` scope to `gh auth` via `gh auth refresh -h github.com -s workflow` (required user browser approval) — without it, pushing changes to `.github/workflows/` files was rejected with "refusing to allow an OAuth App to create or update workflow without workflow scope."
+
+**On-Call Statistics tab visibility** — user confirmed to keep PD-only for now.
+
+**Still TODO:** Open R4 prefs submission window from portal. Configure chief election dates for Sunday. Browser-verify tablet sidebar icons, Inter font, Excel exports. Master rota builder (next week). Historical KPI data. Performance Report cinematic redesign (awaiting sign-off).
