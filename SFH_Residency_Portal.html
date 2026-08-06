@@ -980,6 +980,157 @@ async function saveGimPrefs(status){
   showToast(status==="submitted"?"GIM preferences submitted successfully":"Draft saved","success");
   render();
 }
+// ─── CHIEF RESIDENT ELECTION ─────────────────────────────────────────────────
+let CHIEF_ELECTION=null;
+let CHIEF_NOMINEES=[];
+let CHIEF_VOTES=[];
+function chiefPhase(){
+  if(!CHIEF_ELECTION)return"none";
+  const now=new Date();
+  const ve=CHIEF_ELECTION.voting_end?new Date(CHIEF_ELECTION.voting_end):null;
+  const vs=CHIEF_ELECTION.voting_start?new Date(CHIEF_ELECTION.voting_start):null;
+  const ne=CHIEF_ELECTION.nomination_end?new Date(CHIEF_ELECTION.nomination_end):null;
+  const ns=CHIEF_ELECTION.nomination_start?new Date(CHIEF_ELECTION.nomination_start):null;
+  if(ve&&now>=ve)return"closed";
+  if(vs&&now>=vs)return"voting";
+  if(ne&&now>=ne)return"gap";
+  if(ns&&now>=ns)return"nominating";
+  if(ns)return"scheduled";
+  return"none";
+}
+function chiefCountdown(iso){
+  if(!iso)return null;
+  const diff=new Date(iso)-new Date();
+  if(diff<=0)return null;
+  const d=Math.floor(diff/86400000),h=Math.floor((diff%86400000)/3600000),m=Math.floor((diff%3600000)/60000);
+  if(d>0)return d+"d "+h+"h left";
+  if(h>0)return h+"h "+m+"m left";
+  return m+"m left";
+}
+function chiefPhaseLabel(){
+  const p=chiefPhase();
+  if(p==="none")return{label:"NOT CONFIGURED",colors:{bg:"rgba(31,26,18,.06)",c:"rgba(31,26,18,.4)"}};
+  if(p==="scheduled"){const cd=chiefCountdown(CHIEF_ELECTION.nomination_start);return{label:"STARTS"+(cd?" IN "+cd.toUpperCase():"SOON"),colors:{bg:"#fef3d6",c:"#92680a"}};}
+  if(p==="nominating"){const cd=chiefCountdown(CHIEF_ELECTION.nomination_end);return{label:"NOMINATIONS OPEN"+(cd?" \u00b7 "+cd:""),colors:{bg:"#e6f4ea",c:"#1e7a43"}};}
+  if(p==="gap")return{label:"NOMINATIONS CLOSED",colors:{bg:"#fef3d6",c:"#92680a"}};
+  if(p==="voting"){const cd=chiefCountdown(CHIEF_ELECTION.voting_end);return{label:"VOTING OPEN"+(cd?" \u00b7 "+cd:""),colors:{bg:"#e8f0fe",c:"#1a56db"}};}
+  return{label:"VOTING CLOSED",colors:{bg:"rgba(31,26,18,.06)",c:"rgba(31,26,18,.4)"}};
+}
+async function loadChiefElection(){
+  const{data:el_,error:e1}=await sb.from("chief_election").select("*").eq("academic_year",LP_AY).maybeSingle();
+  if(e1){console.warn("chief_election load",e1.message);return;}
+  CHIEF_ELECTION=el_||null;
+  const{data:noms,error:e2}=await sb.from("chief_nominations").select("*").eq("academic_year",LP_AY);
+  if(e2){console.warn("chief_nominations load",e2.message);return;}
+  CHIEF_NOMINEES=noms||[];
+  const{data:votes,error:e3}=await sb.from("chief_votes").select("*").eq("academic_year",LP_AY);
+  if(e3){console.warn("chief_votes load",e3.message);return;}
+  CHIEF_VOTES=votes||[];
+}
+async function saveChiefElection(ns,ne,vs,ve){
+  const row={academic_year:LP_AY,nomination_start:ns,nomination_end:ne,voting_start:vs,voting_end:ve};
+  const{error}=await sb.from("chief_election").upsert(row,{onConflict:"academic_year"});
+  if(error){showToast("Error: "+error.message,"error");return;}
+  await loadChiefElection();
+  showToast("Chief Resident Election configured","success");
+  render();
+}
+async function chiefNominate(){
+  const u=STATE.user;if(!u?.rid)return;
+  const{error}=await sb.from("chief_nominations").insert({resident_id:Number(u.rid),academic_year:LP_AY});
+  if(error){showToast("Nomination failed: "+error.message,"error");return;}
+  await loadChiefElection();
+  showToast("You have been nominated!","success");
+  render();
+}
+async function chiefWithdraw(){
+  const u=STATE.user;if(!u?.rid)return;
+  const{error}=await sb.from("chief_nominations").delete().eq("resident_id",Number(u.rid)).eq("academic_year",LP_AY);
+  if(error){showToast("Withdrawal failed: "+error.message,"error");return;}
+  await loadChiefElection();
+  showToast("Nomination withdrawn","success");
+  render();
+}
+async function chiefVote(candidateId){
+  const u=STATE.user;if(!u?.profileId)return;
+  const{error}=await sb.from("chief_votes").insert({voter_profile_id:u.profileId,candidate_resident_id:Number(candidateId),academic_year:LP_AY});
+  if(error){
+    if(error.message.includes("duplicate")||error.message.includes("unique")){showToast("You have already voted","error");}
+    else showToast("Vote failed: "+error.message,"error");
+    return;
+  }
+  await loadChiefElection();
+  showToast("Vote submitted!","success");
+  render();
+}
+
+// ─── R4 ROTATION PREFERENCES ─────────────────────────────────────────────────
+let R4_PREFS={};
+let R4_PREFS_STATUS=null;
+function r4PrefsIsOpen(){
+  if(!R4_PREFS_STATUS||!R4_PREFS_STATUS.is_open)return false;
+  if(R4_PREFS_STATUS.deadline){const dl=new Date(R4_PREFS_STATUS.deadline);if(dl<new Date())return false;}
+  return true;
+}
+function r4PrefsCountdown(){
+  if(!R4_PREFS_STATUS?.deadline)return null;
+  const diff=new Date(R4_PREFS_STATUS.deadline)-new Date();
+  if(diff<=0)return"Window closed";
+  const d=Math.floor(diff/86400000),h=Math.floor((diff%86400000)/3600000),mn=Math.floor((diff%3600000)/60000);
+  if(d>0)return d+"d "+h+"h left";
+  if(h>0)return h+"h "+mn+"m left";
+  return mn+"m left";
+}
+async function loadR4Prefs(){
+  const{data,error}=await sb.from("r4_rota_prefs").select("*").eq("academic_year",LP_AY);
+  if(error){console.warn("r4_rota_prefs load",error.message);return;}
+  R4_PREFS={};
+  (data||[]).forEach(r=>{R4_PREFS[r.resident_id]=r;});
+}
+async function loadR4PrefsStatus(){
+  const{data,error}=await sb.from("r4_prefs_status").select("*").eq("academic_year",LP_AY).maybeSingle();
+  if(error){console.warn("r4_prefs_status load",error.message);return;}
+  R4_PREFS_STATUS=data||null;
+}
+async function r4PrefsOpenWindow(deadline){
+  const row={academic_year:LP_AY,is_open:true,opened_at:new Date().toISOString(),deadline:deadline||null};
+  const{error}=await sb.from("r4_prefs_status").upsert(row,{onConflict:"academic_year"});
+  if(error){showToast("Error: "+error.message,"error");return;}
+  await loadR4PrefsStatus();
+  showToast("R4 Rotation Preferences window opened","success");
+  render();
+}
+async function r4PrefsCloseWindow(){
+  const{error}=await sb.from("r4_prefs_status").upsert({academic_year:LP_AY,is_open:false},{onConflict:"academic_year"});
+  if(error){showToast("Error: "+error.message,"error");return;}
+  await loadR4PrefsStatus();
+  showToast("R4 Rotation Preferences window closed","success");
+  render();
+}
+async function saveR4Prefs(status){
+  const u=STATE.user;if(!u?.rid)return;
+  const row={
+    resident_id:Number(u.rid),academic_year:LP_AY,
+    elective1_block:STATE.r4e1Block||null,elective1_subspecialty:STATE.r4e1Sub||null,elective1_location:STATE.r4e1Loc||null,
+    elective2_block:STATE.r4e2Block||null,elective2_subspecialty:STATE.r4e2Sub||null,elective2_location:STATE.r4e2Loc||null,
+    clinic1_block:STATE.r4c1Block||null,clinic2_block:STATE.r4c2Block||null,
+    status,updated_at:new Date().toISOString()
+  };
+  if(status==="submitted"){
+    if(!row.elective1_block||!row.elective1_subspecialty){showToast("Please select Block and Subspecialty for Elective 1","error");return;}
+    if(!row.elective2_block||!row.elective2_subspecialty){showToast("Please select Block and Subspecialty for Elective 2","error");return;}
+    if(!row.clinic1_block){showToast("Please select a block for Clinic 1","error");return;}
+    if(!row.clinic2_block){showToast("Please select a block for Clinic 2","error");return;}
+    const blocks=[row.elective1_block,row.elective2_block,row.clinic1_block,row.clinic2_block].filter(Boolean);
+    if(new Set(blocks).size!==4){showToast("Each rotation must be in a different block","error");return;}
+  }
+  const{error}=await sb.from("r4_rota_prefs").upsert(row,{onConflict:"resident_id,academic_year"});
+  if(error){showToast("Save failed: "+error.message,"error");return;}
+  R4_PREFS[u.rid]=row;
+  showToast(status==="submitted"?"R4 preferences submitted":"Draft saved","success");
+  render();
+}
+
 async function loadKpiQuarterly(){
   const{data,error}=await sb.from("kpi_quarterly").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR);
   if(error){console.warn("kpi_quarterly load error",error.message);return;}
@@ -7872,14 +8023,42 @@ function renderLeavePlan(){
       );
     }
 
-    return el("div",{st:{display:"flex",gap:"18px",marginTop:"24px",flexWrap:"wrap"}},
-      card({icon:ayIcon('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',"#c96a4a"),
-        iconBg:"rgba(201,106,74,.12)",title:"Suggested Leave",status:leaveStatusLabel,statusColors:leaveStatusColors,desc:leaveDesc,
-        onClick:()=>set({ayCard:"leave"})}),
-      card({icon:ayIcon('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',"#26523A"),
-        iconBg:"rgba(38,90,72,.12)",title:"Suggested GIM Rotations",status:gimStatusLabel,statusColors:gimStatusColors,desc:gimDesc,locked:gimLocked,
-        onClick:()=>{if(gimLocked){showToast(gimNotApplicable?"Not applicable — you're graduating this academic year":"GIM preferences open soon — date to be announced","info");return;}set({ayCard:"gim"});}})
-    );
+    const cards=el("div",{st:{display:"flex",gap:"18px",marginTop:"24px",flexWrap:"wrap"}});
+    cards.appendChild(card({icon:ayIcon('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',"#c96a4a"),
+      iconBg:"rgba(201,106,74,.12)",title:"Suggested Leave",status:leaveStatusLabel,statusColors:leaveStatusColors,desc:leaveDesc,
+      onClick:()=>set({ayCard:"leave"})}));
+    cards.appendChild(card({icon:ayIcon('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',"#26523A"),
+      iconBg:"rgba(38,90,72,.12)",title:"Suggested GIM Rotations",status:gimStatusLabel,statusColors:gimStatusColors,desc:gimDesc,locked:gimLocked,
+      onClick:()=>{if(gimLocked){showToast(gimNotApplicable?"Not applicable — you're graduating this academic year":"GIM preferences open soon — date to be announced","info");return;}set({ayCard:"gim"});}}));
+    const chiefPL=chiefPhaseLabel();
+    const chiefDesc=chiefPL.label==="NOT CONFIGURED"
+      ?(canManage?"Set up the Chief Resident election — configure nomination and voting windows.":"Chief Resident election has not been set up yet.")
+      :chiefPhase()==="nominating"?"Nominations are open — R2 and R3 residents can put themselves forward for Chief Resident."
+      :chiefPhase()==="voting"?"Vote for the next Chief Resident. Every resident gets one vote."
+      :chiefPhase()==="closed"?(canManage?"Voting has ended — view the results.":"Voting has ended. The Program Director will announce the result.")
+      :chiefPhase()==="gap"?"Nominations are closed. Voting opens soon."
+      :"The Chief Resident election is scheduled to begin soon.";
+    cards.appendChild(card({icon:ayIcon('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/>',"#1a56db"),
+      iconBg:"rgba(26,86,219,.1)",title:"Chief Resident Election",status:chiefPL.label,statusColors:chiefPL.colors,desc:chiefDesc,
+      onClick:()=>set({ayCard:"chief"})}));
+    const isR3ForR4=myLevel==="R3";
+    const showR4Card=isR3ForR4||canManage;
+    if(showR4Card){
+      const r4Open=r4PrefsIsOpen();
+      const r4Plan=R4_PREFS[u.rid]||null;
+      const r4Submitted=r4Plan?.status==="submitted";
+      const r4StatusLabel=!isR3ForR4?"MANAGE":!r4Open?"OPENS SOON":r4Submitted?"SUBMITTED":"NOT STARTED";
+      const r4StatusColors=r4Submitted?{bg:"#e6f4ea",c:"#1e7a43"}:r4Open?{bg:"#fef3d6",c:"#92680a"}:{bg:"rgba(31,26,18,.06)",c:"rgba(31,26,18,.4)"};
+      const r4cd=r4Open&&R4_PREFS_STATUS?.deadline?" ("+r4PrefsCountdown()+")":"";
+      const r4Desc=isR3ForR4
+        ?(r4Open?"Select your 2 Elective and 2 Clinic rotation blocks for your R4 year."+r4cd:"R4 rotation preferences will open soon — date to be announced.")
+        :"View and manage upcoming R4 residents' rotation preferences.";
+      const r4Locked=isR3ForR4&&!r4Open;
+      cards.appendChild(card({icon:ayIcon('<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>',"#A47A28"),
+        iconBg:"rgba(164,122,40,.1)",title:"R4 Rotation Preferences",status:r4StatusLabel,statusColors:r4StatusColors,desc:r4Desc,locked:r4Locked,
+        onClick:()=>{if(r4Locked){showToast("R4 preferences will open soon","info");return;}set({ayCard:"r4prefs"});}}));
+    }
+    return cards;
   }
 
   function gimSection(){
@@ -7929,13 +8108,243 @@ function renderLeavePlan(){
     );
   }
 
+  function chiefSection(){
+    const phase=chiefPhase();
+    const canSetup=isPdRole(u.role)||u.role==="chief";
+    const myRes=resById(u.rid);
+    const canNominate=myRes&&(myRes.level==="R2"||myRes.level==="R3");
+    const isNominated=CHIEF_NOMINEES.some(n=>n.resident_id==u.rid);
+    const myVote=CHIEF_VOTES.find(v=>v.voter_profile_id===u.profileId);
+    const back=el("span",{st:{fontSize:".78rem",color:"#c96a4a",fontWeight:"600",cursor:"pointer",marginBottom:"14px",display:"inline-block"},onClick:()=>set({ayCard:undefined})},"← Back to Academic Year Plan");
+    const title=el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.4rem",fontWeight:"600",color:"#1F1A12",margin:"0 0 14px"}},"Chief Resident Election");
+    const sec=el("div",null,back,title);
+    if(canSetup){
+      if(STATE.ceNomStart===undefined){
+        STATE.ceNomStart=CHIEF_ELECTION?.nomination_start?new Date(CHIEF_ELECTION.nomination_start).toISOString().slice(0,16):"";
+        STATE.ceNomEnd=CHIEF_ELECTION?.nomination_end?new Date(CHIEF_ELECTION.nomination_end).toISOString().slice(0,16):"";
+        STATE.ceVoteStart=CHIEF_ELECTION?.voting_start?new Date(CHIEF_ELECTION.voting_start).toISOString().slice(0,16):"";
+        STATE.ceVoteEnd=CHIEF_ELECTION?.voting_end?new Date(CHIEF_ELECTION.voting_end).toISOString().slice(0,16):"";
+      }
+      function dtField(label,stateKey){
+        return el("div",{st:{flex:"1",minWidth:"200px"}},
+          el("label",{st:{fontSize:".72rem",fontWeight:"600",color:"rgba(31,26,18,.55)",display:"block",marginBottom:"4px"}},label),
+          el("input",{type:"datetime-local",value:STATE[stateKey],onInput:e=>{STATE[stateKey]=e.target.value;},
+            st:{width:"100%",padding:"8px 10px",border:"1px solid rgba(31,26,18,.15)",borderRadius:"8px",fontSize:".82rem",fontFamily:"Inter,sans-serif"}}));
+      }
+      const setupPanel=el("div",{st:{background:"#fff8e6",border:"1.5px solid #f0d98a",borderRadius:"14px",padding:"20px",marginBottom:"24px"}},
+        el("div",{st:{fontWeight:"700",fontSize:".88rem",color:"#92680a",marginBottom:"14px"}},"Election Configuration"),
+        el("div",{st:{display:"flex",gap:"12px",flexWrap:"wrap",marginBottom:"10px"}},
+          dtField("Nomination Opens","ceNomStart"),dtField("Nomination Closes","ceNomEnd")),
+        el("div",{st:{display:"flex",gap:"12px",flexWrap:"wrap",marginBottom:"14px"}},
+          dtField("Voting Opens","ceVoteStart"),dtField("Voting Closes","ceVoteEnd")),
+        el("div",{st:{display:"flex",justifyContent:"flex-end"}},
+          el("button",{st:{background:"#92680a",color:"#FEFBF3",border:"none",borderRadius:"9999px",padding:"10px 24px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".82rem",cursor:"pointer"},
+            async onClick(){
+              const ns=STATE.ceNomStart,ne=STATE.ceNomEnd,vs=STATE.ceVoteStart,ve=STATE.ceVoteEnd;
+              if(!ns||!ne||!vs||!ve){showToast("Please set all four dates","error");return;}
+              if(new Date(ne)<=new Date(ns)){showToast("Nomination end must be after start","error");return;}
+              if(new Date(vs)<new Date(ne)){showToast("Voting cannot start before nominations close","error");return;}
+              if(new Date(ve)<=new Date(vs)){showToast("Voting end must be after start","error");return;}
+              await saveChiefElection(new Date(ns).toISOString(),new Date(ne).toISOString(),new Date(vs).toISOString(),new Date(ve).toISOString());
+            }},CHIEF_ELECTION?"Update Election":"Create Election"))
+      );
+      sec.appendChild(setupPanel);
+    }
+    const pl=chiefPhaseLabel();
+    sec.appendChild(el("div",{st:{display:"inline-block",fontSize:".65rem",fontWeight:"700",padding:"4px 12px",borderRadius:"9999px",marginBottom:"18px",background:pl.colors.bg,color:pl.colors.c}},pl.label));
+    if(phase==="nominating"){
+      sec.appendChild(el("div",{st:{background:"#fef9ec",border:"1px solid #f0d98a",borderRadius:"10px",padding:"12px 16px",fontSize:".8rem",color:"#92680a",lineHeight:"1.5",marginBottom:"18px"}},
+        "Nominations are open. R2 and R3 residents can nominate themselves for Chief Resident of AY 2026-27."));
+      if(canNominate&&!isNominated){
+        sec.appendChild(el("button",{st:{background:"#1a56db",color:"#FEFBF3",border:"none",borderRadius:"9999px",padding:"11px 28px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".85rem",cursor:"pointer",marginBottom:"20px"},
+          async onClick(){await chiefNominate();}},"Nominate Yourself"));
+      }else if(canNominate&&isNominated){
+        sec.appendChild(el("div",{st:{display:"flex",alignItems:"center",gap:"12px",marginBottom:"20px"}},
+          el("span",{st:{fontSize:".82rem",fontWeight:"600",color:"#1e7a43"}},"You are nominated"),
+          el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.2)",borderRadius:"9999px",padding:"7px 18px",fontFamily:"Inter,sans-serif",fontWeight:"500",fontSize:".78rem",cursor:"pointer",color:"rgba(31,26,18,.5)"},
+            async onClick(){await chiefWithdraw();}},"Withdraw")));
+      }
+    }
+    if(phase==="voting"){
+      sec.appendChild(el("div",{st:{background:"#e8f0fe",border:"1px solid #93b4f5",borderRadius:"10px",padding:"12px 16px",fontSize:".8rem",color:"#1a56db",lineHeight:"1.5",marginBottom:"18px"}},
+        "Voting is open. Every resident gets one vote."+(myVote?" You have already voted.":"")));
+    }
+    if(CHIEF_NOMINEES.length>0&&(phase==="nominating"||phase==="voting"||phase==="gap"||phase==="closed")){
+      const nomList=el("div",{st:{marginBottom:"24px"}});
+      nomList.appendChild(el("div",{st:{fontSize:".72rem",fontWeight:"700",letterSpacing:".07em",textTransform:"uppercase",color:"rgba(31,26,18,.4)",marginBottom:"10px"}},phase==="voting"||phase==="closed"?"Candidates":"Nominees"));
+      CHIEF_NOMINEES.forEach(nom=>{
+        const res=resById(nom.resident_id)||anyResById(nom.resident_id);
+        if(!res)return;
+        const name=dname(res.name);
+        const initials=ini(res.name);
+        const row=el("div",{st:{display:"flex",alignItems:"center",gap:"12px",padding:"12px 16px",borderBottom:"1px solid rgba(31,26,18,.06)"}},
+          el("div",{st:{width:"38px",height:"38px",borderRadius:"50%",background:"linear-gradient(135deg,#c96a4a,#e8956d)",display:"flex",alignItems:"center",justifyContent:"center",color:"#FEFBF3",fontWeight:"700",fontSize:".72rem",flexShrink:"0"}},initials),
+          el("div",{st:{flex:"1"}},
+            el("div",{st:{fontWeight:"600",fontSize:".88rem",color:"#1F1A12"}},name),
+            el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.4)"}},res.level))
+        );
+        if(phase==="voting"&&!myVote){
+          row.appendChild(el("button",{st:{background:"#1a56db",color:"#FEFBF3",border:"none",borderRadius:"9999px",padding:"8px 20px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".78rem",cursor:"pointer",flexShrink:"0"},
+            async onClick(){showConfirm("Vote for "+name+" as Chief Resident? This cannot be changed.",async()=>{await chiefVote(nom.resident_id);},"Confirm Vote","info");}},
+            "Vote"));
+        }
+        if(phase==="voting"&&myVote&&myVote.candidate_resident_id==nom.resident_id){
+          row.appendChild(el("span",{st:{fontSize:".65rem",fontWeight:"700",padding:"4px 12px",borderRadius:"9999px",background:"#e6f4ea",color:"#1e7a43",flexShrink:"0"}},"YOUR VOTE"));
+        }
+        if(phase==="closed"&&canSetup){
+          const voteCount=CHIEF_VOTES.filter(v=>v.candidate_resident_id==nom.resident_id).length;
+          const totalVotes=CHIEF_VOTES.length;
+          const pct=totalVotes>0?Math.round(voteCount/totalVotes*100):0;
+          row.appendChild(el("div",{st:{textAlign:"right",flexShrink:"0"}},
+            el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.1rem",fontWeight:"700",color:"#1F1A12"}},String(voteCount)),
+            el("div",{st:{fontSize:".62rem",color:"rgba(31,26,18,.4)"}},pct+"% of "+totalVotes+" votes")));
+        }
+        nomList.appendChild(row);
+      });
+      sec.appendChild(nomList);
+    }
+    if(phase==="closed"&&!canSetup){
+      sec.appendChild(el("div",{st:{background:"rgba(31,26,18,.04)",borderRadius:"10px",padding:"16px 20px",fontSize:".82rem",color:"rgba(31,26,18,.5)",fontStyle:"italic"}},"Voting has ended. The Program Director will announce the result."));
+    }
+    if(phase==="none"&&!canSetup){
+      sec.appendChild(el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)",fontStyle:"italic"}},"The Chief Resident election has not been set up yet."));
+    }
+    return sec;
+  }
+
+  function r4PrefsSection(){
+    const myRes=resById(u.rid);
+    const isR3=myRes?.level==="R3";
+    const canSetup=isPdRole(u.role)||u.role==="chief"||(u.role==="resident"&&hasPriv(u.profileId,"plan_rota"));
+    const r4Open=r4PrefsIsOpen();
+    const back=el("span",{st:{fontSize:".78rem",color:"#c96a4a",fontWeight:"600",cursor:"pointer",marginBottom:"14px",display:"inline-block"},onClick:()=>set({ayCard:undefined,r4e1Block:undefined,r4e1Sub:undefined,r4e1Loc:undefined,r4e2Block:undefined,r4e2Sub:undefined,r4e2Loc:undefined,r4c1Block:undefined,r4c2Block:undefined})},"← Back to Academic Year Plan");
+    const title=el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.4rem",fontWeight:"600",color:"#1F1A12",margin:"0 0 14px"}},"R4 Rotation Preferences");
+    const sec=el("div",null,back,title);
+    if(canSetup){
+      if(!r4Open){
+        let _dl=STATE.r4DeadlineInput||"";
+        sec.appendChild(el("div",{st:{background:"#fff8e6",border:"1.5px solid #f0d98a",borderRadius:"14px",padding:"20px",marginBottom:"24px"}},
+          el("div",{st:{fontWeight:"700",fontSize:".88rem",color:"#92680a",marginBottom:"10px"}},"R4 Rotation Preferences — Submission Window Closed"),
+          el("div",{st:{display:"flex",gap:"12px",alignItems:"flex-end",flexWrap:"wrap"}},
+            el("div",null,
+              el("label",{st:{fontSize:".72rem",fontWeight:"600",color:"rgba(31,26,18,.55)",display:"block",marginBottom:"4px"}},"Auto-close deadline (optional)"),
+              el("input",{type:"datetime-local",value:_dl,onInput:e=>{STATE.r4DeadlineInput=e.target.value;},
+                st:{padding:"8px 10px",border:"1px solid rgba(31,26,18,.15)",borderRadius:"8px",fontSize:".82rem",fontFamily:"Inter,sans-serif",maxWidth:"220px"}})),
+            el("button",{st:{background:"#A47A28",color:"#FEFBF3",border:"none",borderRadius:"9999px",padding:"10px 22px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".82rem",cursor:"pointer"},
+              async onClick(){await r4PrefsOpenWindow(STATE.r4DeadlineInput?new Date(STATE.r4DeadlineInput).toISOString():null);STATE.r4DeadlineInput="";}},"Open Submission Window")),
+          el("p",{st:{marginTop:"8px",fontSize:".78rem",color:"rgba(31,26,18,.45)"}},"Current R3 residents will be able to submit their rotation preferences once opened.")
+        ));
+      }else{
+        const cd=r4PrefsCountdown();
+        sec.appendChild(el("div",{st:{background:"#f0f9ec",border:"1.5px solid #7ab648",borderRadius:"14px",padding:"20px",marginBottom:"24px"}},
+          el("div",{st:{display:"flex",gap:"12px",alignItems:"center",flexWrap:"wrap"}},
+            el("div",{st:{flex:"1"}},
+              el("div",{st:{fontWeight:"700",fontSize:".88rem",color:"#2a6020"}},"R4 Rotation Preferences — Submission Window Open"),
+              el("div",{st:{fontSize:".78rem",color:"rgba(31,26,18,.45)"}},cd?cd+" until auto-close":"No deadline set — close manually when ready")),
+            el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.2)",borderRadius:"9999px",padding:"8px 18px",fontFamily:"Inter,sans-serif",fontWeight:"500",fontSize:".78rem",cursor:"pointer",color:"rgba(31,26,18,.5)"},
+              async onClick(){showConfirm("Close the R4 Rotation Preferences window? Residents will no longer be able to submit or edit.",async()=>{await r4PrefsCloseWindow();},"Close Window","warn");}},"Close Window"))
+        ));
+      }
+      const r3s=RESIDENTS.filter(r=>r.level==="R3");
+      if(r3s.length>0){
+        const tbl=el("div",{st:{marginBottom:"24px"}});
+        tbl.appendChild(el("div",{st:{fontSize:".72rem",fontWeight:"700",letterSpacing:".07em",textTransform:"uppercase",color:"rgba(31,26,18,.4)",marginBottom:"10px"}},"Submissions ("+r3s.filter(r=>R4_PREFS[r.id]?.status==="submitted").length+" of "+r3s.length+" submitted)"));
+        r3s.forEach(r=>{
+          const pref=R4_PREFS[r.id];
+          const status=pref?.status==="submitted"?"SUBMITTED":pref?"DRAFT":"NOT STARTED";
+          const sc=status==="SUBMITTED"?{bg:"#e6f4ea",c:"#1e7a43"}:status==="DRAFT"?{bg:"#fef3d6",c:"#92680a"}:{bg:"rgba(31,26,18,.06)",c:"rgba(31,26,18,.4)"};
+          const row=el("div",{st:{display:"flex",alignItems:"center",gap:"12px",padding:"10px 16px",borderBottom:"1px solid rgba(31,26,18,.06)"}},
+            el("div",{st:{flex:"1",fontWeight:"500",fontSize:".85rem",color:"#1F1A12"}},dname(r.name)),
+            el("span",{st:{fontSize:".6rem",fontWeight:"700",padding:"3px 10px",borderRadius:"9999px",background:sc.bg,color:sc.c}},status));
+          if(pref?.status==="submitted"){
+            const detail=el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.45)",marginTop:"2px"}});
+            if(pref.elective1_block)detail.appendChild(el("span",null,"E1: Blk "+pref.elective1_block+(pref.elective1_subspecialty?" ("+pref.elective1_subspecialty+(pref.elective1_location?", "+pref.elective1_location:"")+")":"")+" "));
+            if(pref.elective2_block)detail.appendChild(el("span",null,"E2: Blk "+pref.elective2_block+(pref.elective2_subspecialty?" ("+pref.elective2_subspecialty+(pref.elective2_location?", "+pref.elective2_location:"")+")":"")+" "));
+            if(pref.clinic1_block)detail.appendChild(el("span",null,"C1: Blk "+pref.clinic1_block+" "));
+            if(pref.clinic2_block)detail.appendChild(el("span",null,"C2: Blk "+pref.clinic2_block));
+            row.querySelector("div").appendChild(detail);
+          }
+          tbl.appendChild(row);
+        });
+        sec.appendChild(tbl);
+      }
+    }
+    if(isR3&&r4Open){
+      const saved=R4_PREFS[u.rid]||null;
+      if(STATE.r4e1Block===undefined){
+        STATE.r4e1Block=saved?.elective1_block||null;
+        STATE.r4e1Sub=saved?.elective1_subspecialty||"";
+        STATE.r4e1Loc=saved?.elective1_location||"";
+        STATE.r4e2Block=saved?.elective2_block||null;
+        STATE.r4e2Sub=saved?.elective2_subspecialty||"";
+        STATE.r4e2Loc=saved?.elective2_location||"";
+        STATE.r4c1Block=saved?.clinic1_block||null;
+        STATE.r4c2Block=saved?.clinic2_block||null;
+      }
+      const r4Submitted=saved?.status==="submitted";
+      sec.appendChild(el("div",{st:{display:"inline-block",background:"rgba(164,122,40,.1)",color:"#A47A28",fontSize:".78rem",fontWeight:"600",padding:"6px 14px",borderRadius:"9999px",marginBottom:"14px"}},
+        "As next year's R4 — select 2 Elective and 2 Clinic blocks."));
+      sec.appendChild(el("div",{st:{background:"#fef9ec",border:"1px solid #f0d98a",borderRadius:"10px",padding:"12px 16px",fontSize:".8rem",color:"#92680a",lineHeight:"1.5",marginBottom:"20px"}},
+        "This is only a suggested plan to help build the master rota to your best interest — it is not guaranteed nor final."));
+      const allSelected=[STATE.r4e1Block,STATE.r4e2Block,STATE.r4c1Block,STATE.r4c2Block].filter(Boolean);
+      function blockPicker(label,stateKey,color){
+        const cur=STATE[stateKey];
+        const others=allSelected.filter(b=>b!==cur);
+        const grid=el("div",{st:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(80px,1fr))",gap:"8px",marginBottom:"8px"}});
+        for(let b=1;b<=13;b++){
+          const taken=others.includes(b);
+          const isSel=cur===b;
+          grid.appendChild(el("div",{st:{borderRadius:"8px",padding:"10px 6px",textAlign:"center",fontSize:".75rem",fontWeight:"600",border:"2px solid "+(isSel?color:"rgba(31,26,18,.1)"),background:taken?"rgba(31,26,18,.05)":isSel?color:"#FEFBF3",color:taken?"rgba(31,26,18,.3)":isSel?"#FEFBF3":"#1F1A12",cursor:taken?"not-allowed":"pointer",transition:"all .15s",opacity:taken?.5:1},
+            onClick:()=>{if(taken)return;set({[stateKey]:isSel?null:b});}},
+            "Block "+b,taken&&!isSel?el("div",{st:{fontSize:".55rem",marginTop:"2px",fontWeight:"500"}},"Used"):null));
+        }
+        return el("div",{st:{marginBottom:"20px"}},
+          el("div",{st:{fontSize:".72rem",fontWeight:"700",letterSpacing:".07em",textTransform:"uppercase",color:color,marginBottom:"8px"}},label+(cur?" — Block "+cur:"")),
+          grid);
+      }
+      function textRow(label,stateKey,placeholder){
+        return el("div",{st:{marginBottom:"12px"}},
+          el("label",{st:{fontSize:".72rem",fontWeight:"600",color:"rgba(31,26,18,.55)",display:"block",marginBottom:"4px"}},label),
+          el("input",{type:"text",value:STATE[stateKey]||"",placeholder:placeholder||"",
+            onInput:e=>{STATE[stateKey]=e.target.value;},
+            st:{width:"100%",maxWidth:"400px",padding:"8px 12px",border:"1px solid rgba(31,26,18,.15)",borderRadius:"8px",fontSize:".82rem",fontFamily:"Inter,sans-serif"}}));
+      }
+      sec.appendChild(el("div",{st:{border:"1px solid rgba(31,26,18,.08)",borderRadius:"14px",padding:"20px",marginBottom:"16px"}},
+        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",fontWeight:"600",color:"#1F1A12",marginBottom:"14px"}},"Elective 1"),
+        blockPicker("Select Block","r4e1Block","#c96a4a"),
+        textRow("Subspecialty","r4e1Sub","e.g. Cardiology, Pulmonology"),
+        textRow("Location / Where Applying","r4e1Loc","e.g. King Faisal Specialist Hospital")));
+      sec.appendChild(el("div",{st:{border:"1px solid rgba(31,26,18,.08)",borderRadius:"14px",padding:"20px",marginBottom:"16px"}},
+        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",fontWeight:"600",color:"#1F1A12",marginBottom:"14px"}},"Elective 2"),
+        blockPicker("Select Block","r4e2Block","#c96a4a"),
+        textRow("Subspecialty","r4e2Sub","e.g. Nephrology, Endocrinology"),
+        textRow("Location / Where Applying","r4e2Loc","e.g. KFSH, NGHA")));
+      sec.appendChild(el("div",{st:{border:"1px solid rgba(31,26,18,.08)",borderRadius:"14px",padding:"20px",marginBottom:"16px"}},
+        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",fontWeight:"600",color:"#1F1A12",marginBottom:"14px"}},"Clinic 1"),
+        blockPicker("Select Block","r4c1Block","#26523A")));
+      sec.appendChild(el("div",{st:{border:"1px solid rgba(31,26,18,.08)",borderRadius:"14px",padding:"20px",marginBottom:"16px"}},
+        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",fontWeight:"600",color:"#1F1A12",marginBottom:"14px"}},"Clinic 2"),
+        blockPicker("Select Block","r4c2Block","#26523A")));
+      const allFilled=STATE.r4e1Block&&STATE.r4e1Sub&&STATE.r4e2Block&&STATE.r4e2Sub&&STATE.r4c1Block&&STATE.r4c2Block;
+      sec.appendChild(el("div",{st:{display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px"}},
+        el("button",{st:{background:"#F6EFE2",color:"#1F1A12",border:"none",borderRadius:"9999px",padding:"10px 22px",fontFamily:"Inter,sans-serif",fontWeight:"500",fontSize:".85rem",cursor:"pointer"},
+          async onClick(){await saveR4Prefs("draft");}},"Save Draft"),
+        el("button",{st:{background:allFilled?"#A47A28":"rgba(31,26,18,.12)",color:allFilled?"#FEFBF3":"rgba(31,26,18,.35)",border:"none",borderRadius:"9999px",padding:"10px 28px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".85rem",cursor:allFilled?"pointer":"not-allowed"},
+          disabled:!allFilled,
+          async onClick(){if(allFilled)await saveR4Prefs("submitted");}},r4Submitted?"Update Preferences":"Submit Preferences")));
+    }else if(isR3&&!r4Open&&!canSetup){
+      sec.appendChild(el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)",fontStyle:"italic"}},"R4 rotation preferences will open soon — date to be announced."));
+    }
+    return sec;
+  }
+
   const wrap=el("div",{st:{padding:"0 40px 40px"}});
-  const showSub=tab==="mine"&&(STATE.ayCard==="leave"||STATE.ayCard==="gim");
+  const showSub=tab==="mine"&&(STATE.ayCard==="leave"||STATE.ayCard==="gim"||STATE.ayCard==="chief"||STATE.ayCard==="r4prefs");
   if(!showSub){
     wrap.appendChild(el("div",{st:{padding:"36px 0 0"}},
       el("div",{st:{fontSize:".67rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"6px"}},"Academic Year 2026 - 27"),
       el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.9rem",fontWeight:"600",lineHeight:"1.2",marginBottom:"6px",color:"#1F1A12"}},tab==="mine"?"Academic Year Plan 26-27":"Annual Leave Plan — All Residents"),
-      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},tab==="mine"?"Two things to help build next year's master rota — your suggested leave, and your GIM rotation timing preference.":"Two 2-week leave periods per resident — applied directly to the AY 2026-27 rota")
+      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},tab==="mine"?"Plan next year's rotations, leave, GIM preferences, and more.":"Two 2-week leave periods per resident — applied directly to the AY 2026-27 rota")
     ));
   }
   if(canManage){
@@ -7943,7 +8352,7 @@ function renderLeavePlan(){
     ["mine","all"].forEach(t=>{
       const active=tab===t;
       tabBar.appendChild(el("div",{st:{padding:"10px 16px",fontSize:".82rem",fontWeight:"500",color:active?"#1F1A12":"rgba(31,26,18,.4)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},
-        onClick:()=>set({lpTab:t,ayCard:undefined})},t==="mine"?"My Leave Plan":"All Residents"));
+        onClick:()=>set({lpTab:t,ayCard:undefined})},t==="mine"?"My Plan":"All Residents"));
     });
     if(!showSub)wrap.appendChild(tabBar);
   }
@@ -7958,6 +8367,10 @@ function renderLeavePlan(){
     );
   }else if(STATE.ayCard==="gim"){
     mainContent=gimSection();
+  }else if(STATE.ayCard==="chief"){
+    mainContent=chiefSection();
+  }else if(STATE.ayCard==="r4prefs"){
+    mainContent=r4PrefsSection();
   }else{
     mainContent=landingCards();
   }
@@ -9534,6 +9947,9 @@ function renderCalModal(){
         loadGimPrefs();
         loadGimStatus();
         loadLpStatus();
+        loadChiefElection();
+        loadR4Prefs();
+        loadR4PrefsStatus();
         loadNotifications();
         setInterval(()=>{if(STATE.user)loadNotifications();},60000);
         loadQuizzes().catch(e=>console.warn("Quiz load failed:",e));
