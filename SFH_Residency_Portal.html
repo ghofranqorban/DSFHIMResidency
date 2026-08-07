@@ -8023,13 +8023,6 @@ function renderLeavePlan(){
       );
     }
 
-    const cards=el("div",{st:{display:"flex",gap:"18px",marginTop:"24px",flexWrap:"wrap"}});
-    cards.appendChild(card({icon:ayIcon('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',"#c96a4a"),
-      iconBg:"rgba(201,106,74,.12)",title:"Suggested Leave",status:leaveStatusLabel,statusColors:leaveStatusColors,desc:leaveDesc,
-      onClick:()=>set({ayCard:"leave"})}));
-    cards.appendChild(card({icon:ayIcon('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',"#26523A"),
-      iconBg:"rgba(38,90,72,.12)",title:"Suggested GIM Rotations",status:gimStatusLabel,statusColors:gimStatusColors,desc:gimDesc,locked:gimLocked,
-      onClick:()=>{if(gimLocked){showToast(gimNotApplicable?"Not applicable — you're graduating this academic year":"GIM preferences open soon — date to be announced","info");return;}set({ayCard:"gim"});}}));
     const chiefPL=chiefPhaseLabel();
     const chiefDesc=chiefPL.label==="NOT CONFIGURED"
       ?(canManage?"Set up the Chief Resident election — configure nomination and voting windows.":"Chief Resident election has not been set up yet.")
@@ -8038,26 +8031,50 @@ function renderLeavePlan(){
       :chiefPhase()==="closed"?(canManage?"Voting has ended — view the results.":"Voting has ended. The Program Director will announce the result.")
       :chiefPhase()==="gap"?"Nominations are closed. Voting opens soon."
       :"The Chief Resident election is scheduled to begin soon.";
-    cards.appendChild(card({icon:ayIcon('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/>',"#1a56db"),
-      iconBg:"rgba(26,86,219,.1)",title:"Chief Resident Election",status:chiefPL.label,statusColors:chiefPL.colors,desc:chiefDesc,
-      onClick:()=>set({ayCard:"chief"})}));
+    const chiefActive=chiefPhase()==="nominating"||chiefPhase()==="voting";
+
     const isR3ForR4=myLevel==="R3";
     const showR4Card=isR3ForR4||canManage;
-    if(showR4Card){
-      const r4Open=r4PrefsIsOpen();
-      const r4Plan=R4_PREFS[u.rid]||null;
-      const r4Submitted=r4Plan?.status==="submitted";
-      const r4StatusLabel=!isR3ForR4?"MANAGE":!r4Open?"OPENS SOON":r4Submitted?"SUBMITTED":"NOT STARTED";
-      const r4StatusColors=r4Submitted?{bg:"#e6f4ea",c:"#1e7a43"}:r4Open?{bg:"#fef3d6",c:"#92680a"}:{bg:"rgba(31,26,18,.06)",c:"rgba(31,26,18,.4)"};
-      const r4cd=r4Open&&R4_PREFS_STATUS?.deadline?" ("+r4PrefsCountdown()+")":"";
-      const r4Desc=isR3ForR4
-        ?(r4Open?"Select your 2 Elective and 2 Clinic rotation blocks for your R4 year."+r4cd:"R4 rotation preferences will open soon — date to be announced.")
-        :"View and manage upcoming R4 residents' rotation preferences.";
-      const r4Locked=isR3ForR4&&!r4Open;
-      cards.appendChild(card({icon:ayIcon('<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>',"#A47A28"),
-        iconBg:"rgba(164,122,40,.1)",title:"R4 Rotation Preferences",status:r4StatusLabel,statusColors:r4StatusColors,desc:r4Desc,locked:r4Locked,
-        onClick:()=>{if(r4Locked){showToast("R4 preferences will open soon","info");return;}set({ayCard:"r4prefs"});}}));
+    const r4Open=r4PrefsIsOpen();
+    const r4Plan=showR4Card?(R4_PREFS[u.rid]||null):null;
+    const r4Submitted=r4Plan?.status==="submitted";
+    const r4StatusLabel=!isR3ForR4?"MANAGE":!r4Open?"OPENS SOON":r4Submitted?"SUBMITTED":"NOT STARTED";
+    const r4StatusColors=r4Submitted?{bg:"#e6f4ea",c:"#1e7a43"}:r4Open?{bg:"#fef3d6",c:"#92680a"}:{bg:"rgba(31,26,18,.06)",c:"rgba(31,26,18,.4)"};
+    const r4cd=r4Open&&R4_PREFS_STATUS?.deadline?" ("+r4PrefsCountdown()+")":"";
+    const r4Desc=isR3ForR4
+      ?(r4Open?"Select your 2 Elective and 2 Clinic rotation blocks for your R4 year."+r4cd:"R4 rotation preferences will open soon — date to be announced.")
+      :"View and manage upcoming R4 residents' rotation preferences.";
+    const r4Locked=isR3ForR4&&!r4Open;
+
+    function cardPriority(statusLabel,locked){
+      const s=statusLabel.toUpperCase();
+      if(s.includes("NOMINATING")||s.includes("NOMINATIONS OPEN")||s.includes("VOTING"))return 1;
+      if(s==="MANAGE")return 1;
+      if(!locked&&(s.includes("NOT STARTED")||s.includes("DRAFT")))return 2;
+      if(s.includes("SUBMITTED"))return 3;
+      if(s.includes("CLOSED")||s.includes("OPENS SOON")||s.includes("NOT CONFIGURED")||s.includes("NOT APPLICABLE"))return 5;
+      return locked?5:2;
     }
+
+    const allCards=[];
+    allCards.push({pri:cardPriority(leaveStatusLabel,false),el:card({icon:ayIcon('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',"#c96a4a"),
+      iconBg:"rgba(201,106,74,.12)",title:"Suggested Leave",status:leaveStatusLabel,statusColors:leaveStatusColors,desc:leaveDesc,
+      onClick:()=>set({ayCard:"leave"})})});
+    allCards.push({pri:cardPriority(gimStatusLabel,gimLocked),el:card({icon:ayIcon('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',"#26523A"),
+      iconBg:"rgba(38,90,72,.12)",title:"Suggested GIM Rotations",status:gimStatusLabel,statusColors:gimStatusColors,desc:gimDesc,locked:gimLocked,
+      onClick:()=>{if(gimLocked){showToast(gimNotApplicable?"Not applicable — you're graduating this academic year":"GIM preferences open soon — date to be announced","info");return;}set({ayCard:"gim"});}})});
+    allCards.push({pri:cardPriority(chiefPL.label,false),el:card({icon:ayIcon('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/>',"#1a56db"),
+      iconBg:"rgba(26,86,219,.1)",title:"Chief Resident Election",status:chiefPL.label,statusColors:chiefPL.colors,desc:chiefDesc,
+      onClick:()=>set({ayCard:"chief"})})});
+    if(showR4Card){
+      allCards.push({pri:cardPriority(r4StatusLabel,r4Locked),el:card({icon:ayIcon('<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>',"#A47A28"),
+        iconBg:"rgba(164,122,40,.1)",title:"R4 Rotation Preferences",status:r4StatusLabel,statusColors:r4StatusColors,desc:r4Desc,locked:r4Locked,
+        onClick:()=>{if(r4Locked){showToast("R4 preferences will open soon","info");return;}set({ayCard:"r4prefs"});}})});
+    }
+    allCards.sort((a,b)=>a.pri-b.pri);
+
+    const cards=el("div",{st:{display:"flex",gap:"18px",marginTop:"24px",flexWrap:"wrap"}});
+    allCards.forEach(c=>cards.appendChild(c.el));
     return cards;
   }
 
