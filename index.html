@@ -9309,6 +9309,20 @@ function renderKPIExecutive(){
     if(!scroller) scroller=wrap.parentElement;
     var useScroller=scroller||undefined;
 
+    // Register scrollerProxy — GSAP can't auto-detect scroll on a div scroller
+    if(scroller){
+      ScrollTrigger.scrollerProxy(scroller,{
+        scrollTop:function(value){
+          if(arguments.length){scroller.scrollTop=value;}
+          return scroller.scrollTop;
+        },
+        getBoundingClientRect:function(){
+          return {top:0,left:0,width:scroller.clientWidth,height:scroller.clientHeight};
+        }
+      });
+      scroller.addEventListener("scroll",function(){ScrollTrigger.update();});
+    }
+
     var prefersReducedMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     function D(sec){return prefersReducedMotion?Math.min(sec,.3):sec;}
     function E(ease){return prefersReducedMotion?"power1.out":ease;}
