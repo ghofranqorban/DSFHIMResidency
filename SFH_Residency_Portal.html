@@ -9317,10 +9317,11 @@ function renderKPIExecutive(){
           return scroller.scrollTop;
         },
         getBoundingClientRect:function(){
-          return {top:0,left:0,width:scroller.clientWidth,height:scroller.clientHeight};
+          return scroller.getBoundingClientRect();
         }
       });
       scroller.addEventListener("scroll",function(){ScrollTrigger.update();});
+      console.log("ScrollTrigger proxy registered, scroller:",scroller.className,"scrollHeight:",scroller.scrollHeight,"clientHeight:",scroller.clientHeight);
     }
 
     var prefersReducedMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -9487,6 +9488,7 @@ function renderKPIExecutive(){
             onUpdate:function(self){
               stWorking=true;
               var p=self.progress;
+              if(!window._stLogged){window._stLogged=true;console.log("ST scrub firing, progress:",p);}
               updateBurstFill(Math.min(p*3.3,1));
               if(p>=0.68){
                 var ayP=gsap.utils.clamp(0,1,(p-0.68)/0.22);
