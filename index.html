@@ -9320,8 +9320,14 @@ function renderKPIExecutive(){
           return scroller.getBoundingClientRect();
         }
       });
+      // Update ScrollTrigger on every scroll event
       scroller.addEventListener("scroll",function(){ScrollTrigger.update();});
-      console.log("ScrollTrigger proxy registered, scroller:",scroller.className,"scrollHeight:",scroller.scrollHeight,"clientHeight:",scroller.clientHeight);
+      // Belt-and-suspenders: also poll on GSAP ticker in case scroll events miss
+      var _lastST=-1;
+      gsap.ticker.add(function(){
+        var s=scroller.scrollTop;
+        if(s!==_lastST){_lastST=s;ScrollTrigger.update();}
+      });
     }
 
     var prefersReducedMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
