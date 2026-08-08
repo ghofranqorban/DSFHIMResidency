@@ -38,7 +38,7 @@ body{background:#FEFBF3;color:#1F1A12;min-height:100vh;}
 .sidebar-acct:hover{background:rgba(201,106,74,.2);color:#FEFBF3;border-color:rgba(201,106,74,.35);}
 .sidebar-logout{background:transparent;border:1px solid rgba(254,251,243,.1);color:rgba(254,251,243,.35);padding:7px 12px;border-radius:6px;cursor:pointer;font-size:.78rem;font-weight:600;width:100%;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:7px;}
 .sidebar-logout:hover{background:rgba(185,32,64,.18);color:#fca5a5;border-color:rgba(185,32,64,.3);}
-.main-area{flex:1;overflow-y:auto;background:#FEFBF3;min-width:0;}
+.main-area{flex:1;overflow-y:auto;background:#FEFBF3;min-width:0;height:100vh;}
 .nav{display:none;}
 /* ── Cards & content ── */
 .content{max-width:1040px;margin:0 auto;padding:32px 28px;}
@@ -10206,6 +10206,8 @@ function render(){
   const app=document.getElementById("app");
   const _sf=document.activeElement?.id==="search-inp";
   const _sc=_sf?document.getElementById("search-inp").selectionStart:null;
+  // Kill any leftover ScrollTrigger instances from Performance Report
+  if(typeof ScrollTrigger!=="undefined"){try{ScrollTrigger.getAll().forEach(function(st){st.kill();});}catch(e){}}
   app.innerHTML="";
   if(STATE.mod!==_lastMod){window.scrollTo(0,0);_lastMod=STATE.mod;}
   if(STATE.loading&&!STATE.user){app.appendChild(renderLoading());return;}
