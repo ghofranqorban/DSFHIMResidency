@@ -9504,33 +9504,23 @@ function renderKPIExecutive(){
       console.warn("ScrollTrigger setup failed:",e);
     }
 
-    // ── Podium ScrollTrigger ──
-    ScrollTrigger.create(Object.assign({},stConfig,{
-      trigger:"#kpix-podium",start:"top 55%",once:true,
-      onEnter:function(){
-        gsap.to(wrap.querySelector("#kpix-podium .sec-head"),{opacity:1,y:0,duration:D(.8),ease:E("power3.out")});
-        var cards=wrap.querySelectorAll(".pod-card");
-        var enterOrder=[2,1,3,0,4];
-        enterOrder.forEach(function(i,delay){
-          if(cards[i]) gsap.fromTo(cards[i],{opacity:0,y:30},{opacity:1,y:0,duration:D(.7),delay:delay*D(.12),ease:E("power3.out")});
-        });
-        wrap.querySelectorAll(".pod-riser").forEach(function(riser,i){
-          gsap.to(riser,{height:riser.dataset.h+"px",duration:D(1)+i*.08,delay:D(.3)+i*.08,ease:E("power3.out")});
-        });
-        gsap.to(wrap.querySelector(".pod-crown"),{opacity:1,scale:1,duration:D(.5),delay:D(.7),ease:E("back.out(2)")});
-        wrap.querySelectorAll(".psv").forEach(function(el){
-          var finalVal=+el.closest(".pod-score").dataset.final;
-          gsap.to({v:0},{v:finalVal,duration:D(1.2),delay:D(.4),ease:"power2.out",onUpdate:function(){el.textContent=Math.round(this.targets()[0].v);}});
-        });
-        if(!prefersReducedMotion){
-          var goldCard=wrap.querySelector(".pod-1");
-          if(goldCard) setTimeout(function(){fireConfettiAt(goldCard,170);},800);
-        }
-      }
-    }));
-    gsap.set(wrap.querySelectorAll(".pod-card"),{opacity:0});
+    // ── Podium — visible by default, animate if ScrollTrigger works ──
+    // Set podium scores immediately (no animation fallback)
+    wrap.querySelectorAll(".psv").forEach(function(el){
+      var finalVal=+el.closest(".pod-score").dataset.final;
+      el.textContent=Math.round(finalVal);
+    });
+    wrap.querySelectorAll(".pod-riser").forEach(function(riser){
+      riser.style.height=riser.dataset.h+"px";
+    });
+    var petalScoreEl=wrap.querySelector("#kpix-petalScore");
+    if(petalScoreEl) petalScoreEl.innerHTML=avgKPI+'<sup>%</sup>';
+    // Drilldown bar fills
+    wrap.querySelectorAll(".drow .fill").forEach(function(f){
+      f.style.width=(f.dataset.w||0)+"%";
+    });
 
-    // ── Research marquee ──
+    // Research marquee (works without ScrollTrigger)
     var track=wrap.querySelector("#kpix-marqueeTrack");
     var marqueeTween;
     function initMarquee(){
@@ -9547,42 +9537,41 @@ function renderKPIExecutive(){
         viewport.addEventListener("mouseleave",function(){if(marqueeTween)marqueeTween.play();});
       }
     }
+
+    // ScrollTrigger entrance animations (progressive enhancement)
+    try{
     ScrollTrigger.create(Object.assign({},stConfig,{
-      trigger:"#kpix-achievements",start:"top 70%",once:true,
+      trigger:"#kpix-podium",start:"top 55%",once:true,
       onEnter:function(){
-        gsap.to(wrap.querySelector("#kpix-achievements .sec-head"),{opacity:1,y:0,duration:D(.8),ease:E("power3.out")});
-        if(track&&track.children.length){
-          gsap.fromTo(track.children,{opacity:0,y:prefersReducedMotion?12:30},{opacity:1,y:0,duration:D(.8),stagger:D(.06),ease:E("power3.out")});
+        var cards=wrap.querySelectorAll(".pod-card");
+        var enterOrder=[2,1,3,0,4];
+        enterOrder.forEach(function(i,delay){
+          if(cards[i]) gsap.from(cards[i],{opacity:0,y:30,duration:D(.7),delay:delay*D(.12),ease:E("power3.out")});
+        });
+        gsap.to(wrap.querySelector(".pod-crown"),{opacity:1,scale:1,duration:D(.5),delay:D(.7),ease:E("back.out(2)")});
+        if(!prefersReducedMotion){
+          var goldCard=wrap.querySelector(".pod-1");
+          if(goldCard) setTimeout(function(){fireConfettiAt(goldCard,170);},800);
         }
       }
     }));
-
-    // ── Petal chart ScrollTrigger ──
+    ScrollTrigger.create(Object.assign({},stConfig,{
+      trigger:"#kpix-achievements",start:"top 70%",once:true,
+      onEnter:function(){
+        if(track&&track.children.length){
+          gsap.from(track.children,{opacity:0,y:20,duration:D(.8),stagger:D(.06),ease:E("power3.out")});
+        }
+      }
+    }));
     ScrollTrigger.create(Object.assign({},stConfig,{
       trigger:"#kpix-metrics",start:"top 60%",once:true,
       onEnter:function(){
-        gsap.to(wrap.querySelector("#kpix-metrics .sec-head"),{opacity:1,y:0,duration:D(.8),ease:E("power3.out")});
-        gsap.fromTo(wrap.querySelectorAll(".petal-path"),{opacity:0,scale:0},{opacity:.18,scale:1,duration:D(1),stagger:D(.08),ease:E("power3.out")});
-        gsap.to(wrap.querySelectorAll(".petal-dot"),{opacity:1,duration:D(.4),stagger:D(.06),delay:D(.5),ease:E("power2.out")});
-        gsap.fromTo(wrap.querySelectorAll(".petal-label"),{opacity:0},{opacity:1,duration:D(.5),stagger:D(.04),delay:D(.4),ease:E("power2.out")});
-        gsap.to({v:0},{v:avgKPI,duration:D(1.5),delay:D(.3),ease:E("power2.out"),onUpdate:function(){
-          var petalScoreEl=wrap.querySelector("#kpix-petalScore");
-          if(petalScoreEl) petalScoreEl.innerHTML=Math.round(this.targets()[0].v)+'<sup>%</sup>';
-        }});
+        gsap.from(wrap.querySelectorAll(".petal-path"),{opacity:0,scale:0,duration:D(1),stagger:D(.08),ease:E("power3.out")});
+        gsap.from(wrap.querySelectorAll(".petal-dot"),{opacity:0,duration:D(.4),stagger:D(.06),delay:D(.5),ease:E("power2.out")});
+        gsap.from(wrap.querySelectorAll(".petal-label"),{opacity:0,duration:D(.5),stagger:D(.04),delay:D(.4),ease:E("power2.out")});
       }
     }));
-
-    // ── Drilldown animations ──
-    if(selResId){
-      var drillRowsEl=wrap.querySelector("#kpix-drillRows");
-      if(drillRowsEl){
-        gsap.fromTo(wrap.querySelectorAll(".drill-top > *"),{opacity:0,y:20},{opacity:1,y:0,duration:D(.7),stagger:D(.08),ease:E("power3.out"),delay:D(.15)});
-        gsap.fromTo(drillRowsEl.children,{opacity:0,x:-16},{opacity:1,x:0,duration:D(.5),stagger:D(.05),ease:E("power2.out"),delay:D(.3)});
-        drillRowsEl.querySelectorAll(".fill").forEach(function(f,i){
-          gsap.to(f,{width:f.dataset.w+"%",duration:D(.8),ease:E("power3.out"),delay:D(.35)+i*D(.04)});
-        });
-      }
-    }
+    }catch(e){console.warn("Section ScrollTrigger failed:",e);}
 
     // ── Generic reveal ──
     wrap.querySelectorAll(".reveal").forEach(function(revEl){
