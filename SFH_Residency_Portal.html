@@ -9504,6 +9504,27 @@ function renderKPIExecutive(){
       console.warn("ScrollTrigger setup failed:",e);
     }
 
+    // Fallback: if ScrollTrigger never fires, show AY card after 2s
+    setTimeout(function(){
+      if(!stWorking){
+        var ayComp=wrap.querySelector("#kpix-ayCompare");
+        if(ayComp&&getComputedStyle(ayComp).opacity==="0"){
+          // ScrollTrigger didn't work — collapse pin-wrap and show both sections
+          var pinWrap=wrap.querySelector("#kpix-pin-wrap");
+          if(pinWrap) pinWrap.style.height="auto";
+          var stage=wrap.querySelector("#kpix-stage");
+          if(stage){stage.style.position="relative";stage.style.height="auto";stage.style.minHeight="100vh";}
+          var scene1=wrap.querySelector("#kpix-scene1");
+          if(scene1){scene1.style.position="relative";scene1.style.paddingTop="60px";scene1.style.paddingBottom="40px";}
+          ayComp.style.position="relative";
+          ayComp.style.opacity="1";
+          ayComp.style.pointerEvents="auto";
+          ayComp.style.paddingTop="40px";
+          ayComp.style.paddingBottom="60px";
+        }
+      }
+    },2000);
+
     // ── Podium — visible by default, animate if ScrollTrigger works ──
     // Set podium scores immediately (no animation fallback)
     wrap.querySelectorAll(".psv").forEach(function(el){
