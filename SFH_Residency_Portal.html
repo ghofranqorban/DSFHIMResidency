@@ -9494,7 +9494,7 @@ function renderKPIExecutive(){
             onUpdate:function(self){
               stWorking=true;
               var p=self.progress;
-              if(!window._stLogged){window._stLogged=true;console.log("ST scrub firing, progress:",p);}
+
               updateBurstFill(Math.min(p*3.3,1));
               if(p>=0.68){
                 var ayP=gsap.utils.clamp(0,1,(p-0.68)/0.22);
