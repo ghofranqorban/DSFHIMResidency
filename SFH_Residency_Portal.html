@@ -9391,9 +9391,10 @@ function renderKPIExecutive(){
 
     function spawnAmbient(){
       var w=wrap.offsetWidth||800;
+      var scrollY=scroller?scroller.scrollTop:0;
       var shape=AMBIENT_SHAPES[Math.floor(Math.random()*AMBIENT_SHAPES.length)];
       ambientConfetti.push({
-        x:Math.random()*w,y:-12,size:3+Math.random()*5,
+        x:Math.random()*w,y:scrollY-12,size:3+Math.random()*5,
         color:CONFETTI_COLORS[Math.floor(Math.random()*CONFETTI_COLORS.length)],
         rot:Math.random()*360,vrot:(Math.random()-.5)*3,
         vy:0.4+Math.random()*0.8,vx:(Math.random()-.5)*0.4,
@@ -9416,19 +9417,23 @@ function renderKPIExecutive(){
         p.y+=p.vy;p.drift+=p.driftSpeed;
         p.x+=p.vx+Math.sin(p.drift)*0.3;p.rot+=p.vrot;
         confCtx.save();confCtx.globalAlpha=p.opacity;
-        confCtx.translate(p.x,p.y-(scroller?scroller.scrollTop:0));
+        confCtx.translate(p.x,p.y);
         confCtx.rotate(p.rot*Math.PI/180);confCtx.fillStyle=p.color;
         if(p.shape==="rect"){confCtx.fillRect(-p.size/2,-p.size/4,p.size,p.size/2);}
         else if(p.shape==="circle"){confCtx.beginPath();confCtx.arc(0,0,p.size/2.5,0,Math.PI*2);confCtx.fill();}
         else{confCtx.strokeStyle=p.color;confCtx.lineWidth=1.5;confCtx.globalAlpha=p.opacity*0.8;confCtx.beginPath();confCtx.moveTo(-p.size/2,0);confCtx.lineTo(p.size/2,0);confCtx.stroke();}
         confCtx.restore();
       });
-      ambientConfetti=ambientConfetti.filter(function(p){return p.y<h+20;});
+      var scrollY=scroller?scroller.scrollTop:0;
+      var viewH=scroller?scroller.clientHeight:800;
+      ambientConfetti=ambientConfetti.filter(function(p){return p.y<scrollY+viewH+40&&p.y>scrollY-40;});
     }
     if(!prefersReducedMotion){
+      var initScrollY=scroller?scroller.scrollTop:0;
+      var initViewH=scroller?scroller.clientHeight:800;
       for(var ai=0;ai<25;ai++){
         spawnAmbient();
-        ambientConfetti[ambientConfetti.length-1].y=Math.random()*(wrap.offsetHeight||800);
+        ambientConfetti[ambientConfetti.length-1].y=initScrollY+Math.random()*initViewH;
       }
       tickAmbient();
     }
