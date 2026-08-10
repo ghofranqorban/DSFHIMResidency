@@ -8222,6 +8222,49 @@ function renderLeavePlan(){
       });
       sec.appendChild(nomList);
     }
+    if(isPdRole(u.role)&&(phase==="voting"||phase==="closed")){
+      const voterRids=new Set();
+      CHIEF_VOTES.forEach(v=>{const p=PROFILE_BY_ID[v.voter_profile_id];if(p&&p.resident_id)voterRids.add(p.resident_id);});
+      const totalVotes=CHIEF_VOTES.length;
+      const tallyPanel=el("div",{st:{background:"#fff8e6",border:"1.5px solid #f0d98a",borderRadius:"14px",padding:"20px",marginBottom:"18px"}},
+        el("div",{st:{fontWeight:"700",fontSize:".82rem",color:"#92680a",marginBottom:"14px"}},"Live Tally"));
+      const sortedNoms=[...CHIEF_NOMINEES].sort((a,b)=>{
+        return CHIEF_VOTES.filter(v=>v.candidate_resident_id==b.resident_id).length-CHIEF_VOTES.filter(v=>v.candidate_resident_id==a.resident_id).length;
+      });
+      sortedNoms.forEach(nom=>{
+        const res=resById(nom.resident_id)||anyResById(nom.resident_id);
+        if(!res)return;
+        const vc=CHIEF_VOTES.filter(v=>v.candidate_resident_id==nom.resident_id).length;
+        const pct=totalVotes>0?Math.round(vc/totalVotes*100):0;
+        tallyPanel.appendChild(el("div",{st:{display:"flex",alignItems:"center",gap:"12px",padding:"10px 0",borderBottom:"1px solid rgba(31,26,18,.06)"}},
+          el("div",{st:{flex:"1",minWidth:"0"}},
+            el("div",{st:{fontWeight:"600",fontSize:".84rem",color:"#1F1A12",marginBottom:"4px"}},dname(res.name)),
+            el("div",{st:{height:"6px",background:"rgba(31,26,18,.06)",borderRadius:"3px",overflow:"hidden"}},
+              el("div",{st:{height:"100%",width:pct+"%",background:"#c96a4a",borderRadius:"3px",transition:"width .4s ease"}}))),
+          el("div",{st:{textAlign:"right",flexShrink:"0",minWidth:"60px"}},
+            el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.1rem",fontWeight:"700",color:"#1F1A12"}},String(vc)),
+            el("div",{st:{fontSize:".62rem",color:"rgba(31,26,18,.4)"}},pct+"% of "+totalVotes))));
+      });
+      sec.appendChild(tallyPanel);
+      const voted=RESIDENTS.filter(r=>voterRids.has(r.id));
+      const notVoted=RESIDENTS.filter(r=>!voterRids.has(r.id));
+      const trackerPanel=el("div",{st:{background:"rgba(31,26,18,.03)",borderRadius:"14px",padding:"20px",marginBottom:"18px"}},
+        el("div",{st:{fontWeight:"700",fontSize:".82rem",color:"rgba(31,26,18,.6)",marginBottom:"4px"}},"Voter Tracker"),
+        el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.35)",marginBottom:"14px"}},voted.length+" of "+RESIDENTS.length+" voted"));
+      if(notVoted.length>0){
+        trackerPanel.appendChild(el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".06em",textTransform:"uppercase",color:"rgba(200,91,61,.7)",marginBottom:"8px"}},"Haven't Voted ("+notVoted.length+")"));
+        const nvG=el("div",{st:{display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"16px"}});
+        notVoted.forEach(r=>{nvG.appendChild(el("span",{st:{fontSize:".74rem",padding:"4px 10px",borderRadius:"9999px",background:"rgba(200,91,61,.08)",color:"#c85b3d",fontWeight:"500"}},dname(r.name)));});
+        trackerPanel.appendChild(nvG);
+      }
+      if(voted.length>0){
+        trackerPanel.appendChild(el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".06em",textTransform:"uppercase",color:"rgba(30,122,67,.7)",marginBottom:"8px"}},"Voted ("+voted.length+")"));
+        const vG=el("div",{st:{display:"flex",flexWrap:"wrap",gap:"6px"}});
+        voted.forEach(r=>{vG.appendChild(el("span",{st:{fontSize:".74rem",padding:"4px 10px",borderRadius:"9999px",background:"rgba(30,122,67,.08)",color:"#1e7a43",fontWeight:"500"}},dname(r.name)));});
+        trackerPanel.appendChild(vG);
+      }
+      sec.appendChild(trackerPanel);
+    }
     if(phase==="closed"&&!canSetup){
       sec.appendChild(el("div",{st:{background:"rgba(31,26,18,.04)",borderRadius:"10px",padding:"16px 20px",fontSize:".82rem",color:"rgba(31,26,18,.5)",fontStyle:"italic"}},"Voting has ended. The Program Director will announce the result."));
     }
