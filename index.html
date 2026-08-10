@@ -9547,8 +9547,9 @@ function renderKPIExecutive(){
       }
     },2000);
 
-    // ── Podium — visible by default, animate if ScrollTrigger works ──
-    // Set podium scores immediately (no animation fallback)
+    // ── Set final values for all sections (visible without animation) ──
+    // These run immediately so content is never invisible.
+    // ScrollTrigger onEnter callbacks below add the cinematic entrance.
     wrap.querySelectorAll(".psv").forEach(function(el){
       var finalVal=+el.closest(".pod-score").dataset.final;
       el.textContent=Math.round(finalVal);
@@ -9556,6 +9557,12 @@ function renderKPIExecutive(){
     wrap.querySelectorAll(".pod-riser").forEach(function(riser){
       riser.style.height=riser.dataset.h+"px";
     });
+    // Crown visible by default
+    var crownEl=wrap.querySelector(".pod-crown");
+    if(crownEl){crownEl.style.opacity="1";crownEl.style.transform="translateX(-50%) scale(1)";}
+    // Petal chart: set target opacities so chart is visible without animation
+    wrap.querySelectorAll(".petal-path").forEach(function(p){p.setAttribute("opacity","0.18");});
+    wrap.querySelectorAll(".petal-dot").forEach(function(d){d.setAttribute("opacity","1");});
     var petalScoreEl=wrap.querySelector("#kpix-petalScore");
     if(petalScoreEl) petalScoreEl.innerHTML=avgKPI+'<sup>%</sup>';
     // Drilldown bar fills
@@ -9586,12 +9593,28 @@ function renderKPIExecutive(){
     ScrollTrigger.create(Object.assign({},stConfig,{
       trigger:"#kpix-podium",start:"top 55%",once:true,
       onEnter:function(){
+        // Reset to animate from zero
+        var crown=wrap.querySelector(".pod-crown");
+        if(crown) gsap.set(crown,{opacity:0,scale:0,x:"-50%"});
+        // Cards enter in podium order
         var cards=wrap.querySelectorAll(".pod-card");
         var enterOrder=[2,1,3,0,4];
         enterOrder.forEach(function(i,delay){
           if(cards[i]) gsap.from(cards[i],{opacity:0,y:30,duration:D(.7),delay:delay*D(.12),ease:E("power3.out")});
         });
-        gsap.to(wrap.querySelector(".pod-crown"),{opacity:1,scale:1,duration:D(.5),delay:D(.7),ease:E("back.out(2)")});
+        // Risers grow from 0
+        wrap.querySelectorAll(".pod-riser").forEach(function(riser,i){
+          var h=riser.dataset.h+"px";
+          gsap.fromTo(riser,{height:0},{height:h,duration:D(1)+i*.08,delay:D(.3)+i*.08,ease:E("power3.out")});
+        });
+        // Scores count up
+        wrap.querySelectorAll(".psv").forEach(function(el){
+          var finalVal=+el.closest(".pod-score").dataset.final;
+          gsap.to({v:0},{v:finalVal,duration:D(1.2),delay:D(.4),ease:"power2.out",onUpdate:function(){el.textContent=Math.round(this.targets()[0].v);}});
+        });
+        // Crown pops in
+        gsap.to(crown,{opacity:1,scale:1,duration:D(.5),delay:D(.7),ease:E("back.out(2)")});
+        // Confetti burst
         if(!prefersReducedMotion){
           var goldCard=wrap.querySelector(".pod-1");
           if(goldCard) setTimeout(function(){fireConfettiAt(goldCard,170);},800);
@@ -9609,9 +9632,17 @@ function renderKPIExecutive(){
     ScrollTrigger.create(Object.assign({},stConfig,{
       trigger:"#kpix-metrics",start:"top 60%",once:true,
       onEnter:function(){
-        gsap.from(wrap.querySelectorAll(".petal-path"),{opacity:0,scale:0,duration:D(1),stagger:D(.08),ease:E("power3.out")});
-        gsap.from(wrap.querySelectorAll(".petal-dot"),{opacity:0,duration:D(.4),stagger:D(.06),delay:D(.5),ease:E("power2.out")});
+        // Petals bloom from center
+        gsap.fromTo(wrap.querySelectorAll(".petal-path"),{opacity:0,scale:0},{opacity:.18,scale:1,duration:D(1),stagger:D(.08),ease:E("power3.out")});
+        // Dots pop in
+        gsap.fromTo(wrap.querySelectorAll(".petal-dot"),{opacity:0},{opacity:1,duration:D(.4),stagger:D(.06),delay:D(.5),ease:E("power2.out")});
+        // Labels fade in
         gsap.from(wrap.querySelectorAll(".petal-label"),{opacity:0,duration:D(.5),stagger:D(.04),delay:D(.4),ease:E("power2.out")});
+        // Center score counts up
+        gsap.to({v:0},{v:avgKPI,duration:D(1.5),delay:D(.3),ease:E("power2.out"),onUpdate:function(){
+          var ps=wrap.querySelector("#kpix-petalScore");
+          if(ps) ps.innerHTML=Math.round(this.targets()[0].v)+'<sup>%</sup>';
+        }});
       }
     }));
     }catch(e){console.warn("Section ScrollTrigger failed:",e);}
