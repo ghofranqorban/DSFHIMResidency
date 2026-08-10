@@ -9205,7 +9205,7 @@ function renderKPIExecutive(){
   wrap.style.background="#fdf8f3";
   wrap.style.minHeight="100%";
   wrap.style.position="relative";
-  wrap.style.overflowX="hidden";
+  wrap.style.clipPath="inset(0)"; // clip overflow without breaking position:sticky on descendants
 
   wrap.innerHTML=
     '<div class="kpix-scrollbar" id="kpix-scrollbar"></div>'
