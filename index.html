@@ -1055,6 +1055,7 @@ async function chiefWithdraw(){
 }
 async function chiefVote(candidateId){
   const u=STATE.user;if(!u?.profileId)return;
+  if(u.rid&&Number(candidateId)===Number(u.rid)){showToast("You cannot vote for yourself","error");return;}
   const{error}=await sb.from("chief_votes").insert({voter_profile_id:u.profileId,candidate_resident_id:Number(candidateId),academic_year:LP_AY});
   if(error){
     if(error.message.includes("duplicate")||error.message.includes("unique")){showToast("You have already voted","error");}
@@ -8134,6 +8135,7 @@ function renderLeavePlan(){
     const canNominate=myRes&&(myRes.level==="R2"||myRes.level==="R3");
     const isNominated=CHIEF_NOMINEES.some(n=>n.resident_id==u.rid);
     const myVote=CHIEF_VOTES.find(v=>v.voter_profile_id===u.profileId);
+    const validVotes=CHIEF_VOTES.filter(v=>{const p=PROFILE_BY_ID[v.voter_profile_id];return!p||!p.resident_id||p.resident_id!=v.candidate_resident_id;});
     const back=el("span",{st:{fontSize:".78rem",color:"#c96a4a",fontWeight:"600",cursor:"pointer",marginBottom:"14px",display:"inline-block"},onClick:()=>set({ayCard:undefined})},"← Back to Academic Year Plan");
     const title=el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.4rem",fontWeight:"600",color:"#1F1A12",margin:"0 0 14px"}},"Chief Resident Election");
     const sec=el("div",null,back,title);
@@ -8202,7 +8204,7 @@ function renderLeavePlan(){
             el("div",{st:{fontWeight:"600",fontSize:".88rem",color:"#1F1A12"}},name),
             el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.4)"}},res.level))
         );
-        if(phase==="voting"&&!myVote){
+        if(phase==="voting"&&!myVote&&nom.resident_id!=u.rid){
           row.appendChild(el("button",{st:{background:"#1a56db",color:"#FEFBF3",border:"none",borderRadius:"9999px",padding:"8px 20px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".78rem",cursor:"pointer",flexShrink:"0"},
             async onClick(){showConfirm("Vote for "+name+" as Chief Resident? This cannot be changed.",async()=>{await chiefVote(nom.resident_id);},"Confirm Vote","info");}},
             "Vote"));
@@ -8211,8 +8213,8 @@ function renderLeavePlan(){
           row.appendChild(el("span",{st:{fontSize:".65rem",fontWeight:"700",padding:"4px 12px",borderRadius:"9999px",background:"#e6f4ea",color:"#1e7a43",flexShrink:"0"}},"YOUR VOTE"));
         }
         if(phase==="closed"&&canSetup){
-          const voteCount=CHIEF_VOTES.filter(v=>v.candidate_resident_id==nom.resident_id).length;
-          const totalVotes=CHIEF_VOTES.length;
+          const voteCount=validVotes.filter(v=>v.candidate_resident_id==nom.resident_id).length;
+          const totalVotes=validVotes.length;
           const pct=totalVotes>0?Math.round(voteCount/totalVotes*100):0;
           row.appendChild(el("div",{st:{textAlign:"right",flexShrink:"0"}},
             el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.1rem",fontWeight:"700",color:"#1F1A12"}},String(voteCount)),
@@ -8224,17 +8226,17 @@ function renderLeavePlan(){
     }
     if(isPdRole(u.role)&&(phase==="voting"||phase==="closed")){
       const voterRids=new Set();
-      CHIEF_VOTES.forEach(v=>{const p=PROFILE_BY_ID[v.voter_profile_id];if(p&&p.resident_id)voterRids.add(p.resident_id);});
-      const totalVotes=CHIEF_VOTES.length;
+      validVotes.forEach(v=>{const p=PROFILE_BY_ID[v.voter_profile_id];if(p&&p.resident_id)voterRids.add(p.resident_id);});
+      const totalVotes=validVotes.length;
       const tallyPanel=el("div",{st:{background:"#fff8e6",border:"1.5px solid #f0d98a",borderRadius:"14px",padding:"20px",marginBottom:"18px"}},
         el("div",{st:{fontWeight:"700",fontSize:".82rem",color:"#92680a",marginBottom:"14px"}},"Live Tally"));
       const sortedNoms=[...CHIEF_NOMINEES].sort((a,b)=>{
-        return CHIEF_VOTES.filter(v=>v.candidate_resident_id==b.resident_id).length-CHIEF_VOTES.filter(v=>v.candidate_resident_id==a.resident_id).length;
+        return validVotes.filter(v=>v.candidate_resident_id==b.resident_id).length-validVotes.filter(v=>v.candidate_resident_id==a.resident_id).length;
       });
       sortedNoms.forEach(nom=>{
         const res=resById(nom.resident_id)||anyResById(nom.resident_id);
         if(!res)return;
-        const vc=CHIEF_VOTES.filter(v=>v.candidate_resident_id==nom.resident_id).length;
+        const vc=validVotes.filter(v=>v.candidate_resident_id==nom.resident_id).length;
         const pct=totalVotes>0?Math.round(vc/totalVotes*100):0;
         tallyPanel.appendChild(el("div",{st:{display:"flex",alignItems:"center",gap:"12px",padding:"10px 0",borderBottom:"1px solid rgba(31,26,18,.06)"}},
           el("div",{st:{flex:"1",minWidth:"0"}},
@@ -8247,13 +8249,13 @@ function renderLeavePlan(){
       });
       sec.appendChild(tallyPanel);
       const votedRids=new Set();
-      CHIEF_VOTES.forEach(v=>{const p=PROFILE_BY_ID[v.voter_profile_id];if(p&&p.resident_id)votedRids.add(p.resident_id);});
+      validVotes.forEach(v=>{const p=PROFILE_BY_ID[v.voter_profile_id];if(p&&p.resident_id)votedRids.add(p.resident_id);});
       const notVoted=RESIDENTS.filter(r=>!votedRids.has(r.id));
       const trackerPanel=el("div",{st:{background:"rgba(31,26,18,.03)",borderRadius:"14px",padding:"20px",marginBottom:"18px"}},
         el("div",{st:{fontWeight:"700",fontSize:".82rem",color:"rgba(31,26,18,.6)",marginBottom:"4px"}},"Voter Tracker"),
         el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.35)",marginBottom:"14px"}},votedRids.size+" of "+RESIDENTS.length+" voted"));
       const votesByCandidate={};
-      CHIEF_VOTES.forEach(v=>{
+      validVotes.forEach(v=>{
         const p=PROFILE_BY_ID[v.voter_profile_id];if(!p||!p.resident_id)return;
         const cid=v.candidate_resident_id;
         if(!votesByCandidate[cid])votesByCandidate[cid]=[];
