@@ -8887,14 +8887,20 @@ function renderKPIExecutive(){
 #kpix-wrap .pub-dot{width:3px;height:3px;border-radius:50%;background:rgba(31,26,18,.12);}
 #kpix-wrap .pub-card::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:linear-gradient(180deg,var(--terracotta),var(--gold-light));border-radius:0 2px 2px 0;opacity:.5;}
 #kpix-wrap .kpix-metrics{padding:130px 24px;position:relative;background:transparent;}
-#kpix-wrap .petal-wrap{max-width:480px;margin:0 auto;position:relative;}
-#kpix-wrap .petal-wrap svg{width:100%;height:auto;}
-#kpix-wrap .petal-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;}
-#kpix-wrap .petal-center-score{font-family:'Playfair Display',serif;font-weight:700;font-size:2.6rem;color:var(--terracotta-deep);line-height:1;}
-#kpix-wrap .petal-center-score sup{font-size:.35em;font-weight:400;vertical-align:super;color:var(--terracotta);}
-#kpix-wrap .petal-center-label{font-size:.48rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(31,26,18,.2);margin-top:4px;}
-#kpix-wrap .petal-label{position:absolute;font-size:.58rem;font-weight:600;color:rgba(31,26,18,.4);transform:translate(-50%,-50%);white-space:nowrap;text-align:center;}
-#kpix-wrap .petal-label .pv{display:block;font-family:'Playfair Display',serif;font-weight:700;font-size:.85rem;margin-top:1px;}
+#kpix-wrap .horizon-wrap{max-width:860px;margin:0 auto;position:relative;}
+#kpix-wrap .horizon-svg-wrap{position:relative;width:100%;border-radius:16px;overflow:hidden;}
+#kpix-wrap .horizon-svg-wrap svg{display:block;width:100%;height:auto;}
+#kpix-wrap .hz-legend{position:absolute;left:24px;top:24px;display:flex;flex-direction:column;gap:6px;z-index:10;}
+#kpix-wrap .hz-item{display:flex;align-items:center;gap:7px;font-size:.72rem;color:rgba(44,26,14,.6);}
+#kpix-wrap .hz-dot{width:11px;height:11px;border-radius:3px;flex-shrink:0;}
+#kpix-wrap .hz-score{font-family:'Playfair Display',serif;font-weight:700;font-size:.82rem;margin-left:2px;}
+#kpix-wrap .hz-item.active{font-weight:600;}
+#kpix-wrap .hz-item.active .hz-score{color:var(--terracotta-deep);}
+#kpix-wrap .hz-item.dim{opacity:.45;}
+#kpix-wrap .hz-badge{position:absolute;right:24px;top:20px;text-align:center;z-index:10;background:rgba(253,248,243,.88);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:16px;padding:14px 22px;border:1px solid rgba(31,26,18,.06);}
+#kpix-wrap .hz-badge-val{font-family:'Playfair Display',serif;font-weight:700;font-size:2.2rem;color:var(--terracotta-deep);line-height:1;}
+#kpix-wrap .hz-badge-val sup{font-size:.45em;font-weight:400;vertical-align:super;color:var(--terracotta);}
+#kpix-wrap .hz-badge-lbl{font-size:.45rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(31,26,18,.3);margin-top:3px;}
 #kpix-wrap .kpix-drilldown{display:none;background:var(--cream);padding-bottom:100px;}
 #kpix-wrap .kpix-drilldown.show{display:block;}
 #kpix-wrap .drill-hero{background:linear-gradient(135deg,#5c2510,#c96a4a 55%,#e8956d);padding:64px 32px;color:var(--cream);position:relative;overflow:hidden;}
@@ -9141,50 +9147,76 @@ function renderKPIExecutive(){
     marqueeCardsHtml='<div style="padding:40px;text-align:center;color:rgba(31,26,18,.3);font-size:.85rem;">No published research yet this academic year.</div>';
   }
 
-  // ── Petal chart SVG ──
-  var petalMetrics=[
-    {key:"mm",label:"MM Attendance",score:avgMM,color:"#c96a4a"},
+  // ── Horizon Landscape (KPI Summary) ──
+  var hzMetrics=[
     {key:"teach",label:"Teaching",score:avgTeach,color:"#e8956d"},
-    {key:"quiz",label:"Quiz Average",score:avgQuiz,color:"#A47A28"},
-    {key:"comm",label:"Committee",score:avgComm,color:"#CBA155"},
-    {key:"oral",label:"Presentations",score:Math.round(achCount("oral")/total*100),color:"#6b7280"},
-    {key:"awards",label:"Awards",score:Math.round(achCount("awards")/total*100),color:"#CD7F32"},
+    {key:"mm",label:"MM Attendance",score:avgMM,color:"#c96a4a"},
     {key:"pub",label:"Research",score:Math.round(achCount("publication")/total*100),color:"#26523A"},
-    {key:"qi",label:"QI Projects",score:Math.round(achCount("qi")/total*100),color:"#7FB89C"}
+    {key:"qi",label:"QI Projects",score:Math.round(achCount("qi")/total*100),color:"#7FB89C"},
+    {key:"comm",label:"Committee",score:avgComm,color:"#CBA155"},
+    {key:"quiz",label:"Quiz Average",score:avgQuiz,color:"#A47A28"},
+    {key:"awards",label:"Awards",score:Math.round(achCount("awards")/total*100),color:"#CD7F32"},
+    {key:"oral",label:"Presentations",score:Math.round(achCount("oral")/total*100),color:"#6b7280"}
   ];
-
-  var pSize=480, pCx=pSize/2, pCy=pSize/2, maxR=180;
-  var pn=petalMetrics.length;
-  var petalSvg='<svg viewBox="0 0 '+pSize+' '+pSize+'">';
-  [0.25,0.5,0.75,1.0].forEach(function(l){
-    petalSvg+='<circle cx="'+pCx+'" cy="'+pCy+'" r="'+(maxR*l)+'" fill="none" stroke="rgba(31,26,18,.03)" stroke-width="1"/>';
+  var hzSorted=hzMetrics.slice().sort(function(a,b){return b.score-a.score;});
+  var HW=860,HH=460,hzGroundY=HH-48,hzSkyTop=30,hzPeakZone=hzGroundY-hzSkyTop;
+  var hzPeakX=[0.42,0.58,0.28,0.72,0.35,0.55,0.22,0.78];
+  function buildHzRidge(sc,li){
+    var pH=Math.max(hzPeakZone*(sc/100)*0.88,10);
+    var pX=hzPeakX[li]*HW;
+    var pts=[];
+    for(var i=0;i<=20;i++){
+      var t=i/20,x=t*HW;
+      var dist=Math.abs((x-pX)/(HW*0.5));
+      var elev=Math.exp(-dist*dist*3.5);
+      var b2X=pX+HW*0.18;
+      var d2=Math.abs((x-b2X)/(HW*0.35));
+      elev+=Math.exp(-d2*d2*5)*0.3;
+      elev+=Math.sin(t*Math.PI*3+li*2.1)*0.03;
+      elev=Math.max(0,Math.min(1,elev));
+      var y=hzGroundY-(pH*elev);
+      pts.push({x:x,y:Math.max(hzSkyTop,y)});
+    }
+    var d='M 0 '+hzGroundY;
+    for(var i=0;i<pts.length;i++){
+      if(i===0){d+=' L '+pts[i].x.toFixed(1)+' '+pts[i].y.toFixed(1);}
+      else{var p=pts[i-1],c=pts[i];var cx1=p.x+(c.x-p.x)*0.5;d+=' C '+cx1.toFixed(1)+' '+p.y.toFixed(1)+' '+cx1.toFixed(1)+' '+c.y.toFixed(1)+' '+c.x.toFixed(1)+' '+c.y.toFixed(1);}
+    }
+    d+=' L '+HW+' '+hzGroundY+' Z';
+    return d;
+  }
+  var hzSvg='<svg viewBox="0 0 '+HW+' '+HH+'">';
+  hzSvg+='<defs>';
+  hzSvg+='<linearGradient id="hzSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fdf8f3"/><stop offset="50%" stop-color="#f8ede2"/><stop offset="100%" stop-color="#f0ddd0"/></linearGradient>';
+  hzSorted.forEach(function(d,i){
+    var tOp=d.score>=50?0.75:(d.score>=10?0.5:0.18);
+    var bOp=d.score>=50?0.35:(d.score>=10?0.2:0.06);
+    hzSvg+='<linearGradient id="hzMg'+i+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="'+d.color+'" stop-opacity="'+tOp+'"/><stop offset="100%" stop-color="'+d.color+'" stop-opacity="'+bOp+'"/></linearGradient>';
   });
-  var petalWidth=Math.PI/pn*0.7;
-  petalMetrics.forEach(function(m,i){
-    var angle=(Math.PI*2*i/pn)-Math.PI/2;
-    var r=maxR*(m.score/100);
-    var aL=angle-petalWidth, aR=angle+petalWidth;
-    var tipX=pCx+Math.cos(angle)*r, tipY=pCy+Math.sin(angle)*r;
-    var cL1=pCx+Math.cos(aL)*(r*0.6), cL1y=pCy+Math.sin(aL)*(r*0.6);
-    var cR1=pCx+Math.cos(aR)*(r*0.6), cR1y=pCy+Math.sin(aR)*(r*0.6);
-    var dd='M'+pCx+','+pCy+' Q'+cL1.toFixed(1)+','+cL1y.toFixed(1)+' '+tipX.toFixed(1)+','+tipY.toFixed(1)+' Q'+cR1.toFixed(1)+','+cR1y.toFixed(1)+' '+pCx+','+pCy+' Z';
-    petalSvg+='<path class="petal-path" d="'+dd+'" fill="'+m.color+'" opacity="0" style="transform-origin:'+pCx+'px '+pCy+'px;"/>';
+  hzSvg+='<linearGradient id="hzGnd" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7a6b55"/><stop offset="50%" stop-color="#6B5B45"/><stop offset="100%" stop-color="#55493a"/></linearGradient>';
+  hzSvg+='</defs>';
+  hzSvg+='<rect width="'+HW+'" height="'+HH+'" fill="url(#hzSky)"/>';
+  hzSvg+='<rect x="0" y="'+(hzGroundY-60)+'" width="'+HW+'" height="60" fill="url(#hzSky)" opacity=".3"/>';
+  hzSorted.forEach(function(d,i){
+    var path=buildHzRidge(d.score,i);
+    hzSvg+='<path class="hz-mtn" d="'+path+'" fill="url(#hzMg'+i+')"/>';
+    var sOp=d.score>=50?0.25:(d.score>=10?0.12:0.06);
+    hzSvg+='<path d="'+path+'" fill="none" stroke="'+d.color+'" stroke-width="1.2" opacity="'+sOp+'"/>';
   });
-  petalMetrics.forEach(function(m,i){
-    var angle=(Math.PI*2*i/pn)-Math.PI/2;
-    var r=maxR*(m.score/100);
-    var dx=pCx+Math.cos(angle)*r, dy=pCy+Math.sin(angle)*r;
-    petalSvg+='<circle class="petal-dot" cx="'+dx.toFixed(1)+'" cy="'+dy.toFixed(1)+'" r="3.5" fill="'+m.color+'" opacity="0"/>';
+  hzSvg+='<rect x="0" y="'+hzGroundY+'" width="'+HW+'" height="'+(HH-hzGroundY)+'" fill="url(#hzGnd)"/>';
+  hzSvg+='<line x1="0" y1="'+hzGroundY+'" x2="'+HW+'" y2="'+hzGroundY+'" stroke="rgba(44,26,14,.12)" stroke-width="1"/>';
+  hzSvg+='</svg>';
+  var hzLegendHtml='<div class="hz-legend" id="kpix-hzLegend">';
+  hzMetrics.forEach(function(d){
+    var act=d.score>=10,dim=d.score===0;
+    hzLegendHtml+='<div class="hz-item'+(act?' active':'')+(dim?' dim':'')+'">';
+    hzLegendHtml+='<div class="hz-dot" style="background:'+d.color+';"></div>';
+    hzLegendHtml+='<span>'+d.label+'</span>';
+    hzLegendHtml+='<span class="hz-score" style="color:'+(act?d.color:'rgba(44,26,14,.3)')+';">'+d.score+'%</span>';
+    hzLegendHtml+='</div>';
   });
-  petalSvg+='</svg>';
-
-  var petalLabelsHtml='';
-  petalMetrics.forEach(function(m,i){
-    var angle=(Math.PI*2*i/pn)-Math.PI/2;
-    var lR=maxR+34;
-    var lx=pCx+Math.cos(angle)*lR, ly=pCy+Math.sin(angle)*lR;
-    petalLabelsHtml+='<div class="petal-label" style="left:'+(lx/pSize*100)+'%;top:'+(ly/pSize*100)+'%;">'+m.label+'<span class="pv" style="color:'+scoreClrL(m.score)+';">'+m.score+'%</span></div>';
-  });
+  hzLegendHtml+='</div>';
+  var hzBadgeHtml='<div class="hz-badge" id="kpix-hzBadge"><div class="hz-badge-val" id="kpix-hzScore">'+avgKPI+'<sup>%</sup></div><div class="hz-badge-lbl">Overall</div></div>';
 
   // ── Drilldown HTML ──
   var drilldownHtml='';
@@ -9309,12 +9341,11 @@ function renderKPIExecutive(){
     +'<div class="marquee-viewport"><div class="marquee-track" id="kpix-marqueeTrack">'+marqueeCardsHtml+'</div></div>'
     +'</section>'
 
-    // Petal Chart
+    // Horizon Landscape (KPI Summary)
     +'<section class="kpix-metrics" id="kpix-metrics">'
     +'<div class="wrap"><div class="sec-head reveal"><div class="lbl" style="color:var(--terracotta);">Cohort-Wide</div><h2>KPI Summary</h2></div>'
-    +'<div class="petal-wrap" id="kpix-petalWrap">'+petalSvg+petalLabelsHtml
-    +'<div class="petal-center"><div class="petal-center-score" id="kpix-petalScore">0<sup>%</sup></div><div class="petal-center-label">Overall</div></div>'
-    +'</div></div></section>'
+    +'<div class="horizon-wrap"><div class="horizon-svg-wrap" id="kpix-hzWrap">'+hzLegendHtml+hzBadgeHtml+hzSvg+'</div></div>'
+    +'</div></section>'
 
     // Drilldown
     +drilldownHtml
@@ -9622,11 +9653,9 @@ function renderKPIExecutive(){
     // Crown visible by default
     var crownEl=wrap.querySelector(".pod-crown");
     if(crownEl){crownEl.style.opacity="1";crownEl.style.transform="translateX(-50%) scale(1)";}
-    // Petal chart: set target opacities so chart is visible without animation
-    wrap.querySelectorAll(".petal-path").forEach(function(p){p.setAttribute("opacity","0.18");});
-    wrap.querySelectorAll(".petal-dot").forEach(function(d){d.setAttribute("opacity","1");});
-    var petalScoreEl=wrap.querySelector("#kpix-petalScore");
-    if(petalScoreEl) petalScoreEl.innerHTML=avgKPI+'<sup>%</sup>';
+    // Horizon landscape: mountains visible by default (no opacity 0 — content-visible pattern)
+    var hzScoreEl=wrap.querySelector("#kpix-hzScore");
+    if(hzScoreEl) hzScoreEl.innerHTML=avgKPI+'<sup>%</sup>';
     // Drilldown bar fills
     wrap.querySelectorAll(".drow .fill").forEach(function(f){
       f.style.width=(f.dataset.w||0)+"%";
@@ -9692,18 +9721,21 @@ function renderKPIExecutive(){
       }
     }));
     ScrollTrigger.create(Object.assign({},stConfig,{
-      trigger:"#kpix-metrics",start:"top 60%",once:true,
+      trigger:"#kpix-metrics",start:"top 65%",once:true,
       onEnter:function(){
-        // Petals bloom from center
-        gsap.fromTo(wrap.querySelectorAll(".petal-path"),{opacity:0,scale:0},{opacity:.18,scale:1,duration:D(1),stagger:D(.08),ease:E("power3.out")});
-        // Dots pop in
-        gsap.fromTo(wrap.querySelectorAll(".petal-dot"),{opacity:0},{opacity:1,duration:D(.4),stagger:D(.06),delay:D(.5),ease:E("power2.out")});
-        // Labels fade in
-        gsap.from(wrap.querySelectorAll(".petal-label"),{opacity:0,duration:D(.5),stagger:D(.04),delay:D(.4),ease:E("power2.out")});
-        // Center score counts up
+        // Mountains rise from the ground — cinematic entrance
+        var mtns=wrap.querySelectorAll(".hz-mtn");
+        gsap.fromTo(mtns,{y:80,opacity:0},{y:0,opacity:1,duration:D(1.2),stagger:D(.1),ease:E("power3.out")});
+        // Legend slides in from left
+        var legend=wrap.querySelector("#kpix-hzLegend");
+        if(legend) gsap.fromTo(legend,{opacity:0,x:-20},{opacity:1,x:0,duration:D(.8),delay:D(.4),ease:E("power2.out")});
+        // Badge scales in
+        var badge=wrap.querySelector("#kpix-hzBadge");
+        if(badge) gsap.fromTo(badge,{opacity:0,scale:.85},{opacity:1,scale:1,duration:D(.6),delay:D(.6),ease:E("back.out(2)")});
+        // Score counts up
         gsap.to({v:0},{v:avgKPI,duration:D(1.5),delay:D(.3),ease:E("power2.out"),onUpdate:function(){
-          var ps=wrap.querySelector("#kpix-petalScore");
-          if(ps) ps.innerHTML=Math.round(this.targets()[0].v)+'<sup>%</sup>';
+          var hs=wrap.querySelector("#kpix-hzScore");
+          if(hs) hs.innerHTML=Math.round(this.targets()[0].v)+'<sup>%</sup>';
         }});
       }
     }));
