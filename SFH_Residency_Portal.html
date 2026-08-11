@@ -9528,12 +9528,12 @@ function renderKPIExecutive(){
       var scrollY=scroller?scroller.scrollTop:0;
       var shape=AMBIENT_SHAPES[Math.floor(Math.random()*AMBIENT_SHAPES.length)];
       ambientConfetti.push({
-        x:Math.random()*w,y:scrollY-12,size:3+Math.random()*5,
+        x:Math.random()*w,y:scrollY-12,size:4+Math.random()*6,
         color:CONFETTI_COLORS[Math.floor(Math.random()*CONFETTI_COLORS.length)],
         rot:Math.random()*360,vrot:(Math.random()-.5)*3,
         vy:0.4+Math.random()*0.8,vx:(Math.random()-.5)*0.4,
         drift:Math.random()*Math.PI*2,driftSpeed:0.008+Math.random()*0.012,
-        opacity:0.12+Math.random()*0.14,shape:shape
+        opacity:0.18+Math.random()*0.18,shape:shape
       });
     }
     function tickAmbient(){
@@ -9545,7 +9545,7 @@ function renderKPIExecutive(){
       confCtx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
       if(confettiRunning) tickConfetti();
       ambientSpawnTimer++;
-      if(ambientActive&&ambientSpawnTimer%8===0) spawnAmbient();
+      if(ambientActive&&ambientSpawnTimer%3===0) spawnAmbient();
       var h=wrap.offsetHeight||2000;
       ambientConfetti.forEach(function(p){
         p.y+=p.vy;p.drift+=p.driftSpeed;
@@ -9565,7 +9565,7 @@ function renderKPIExecutive(){
     if(!prefersReducedMotion){
       var initScrollY=scroller?scroller.scrollTop:0;
       var initViewH=scroller?scroller.clientHeight:800;
-      for(var ai=0;ai<25;ai++){
+      for(var ai=0;ai<60;ai++){
         spawnAmbient();
         ambientConfetti[ambientConfetti.length-1].y=initScrollY+Math.random()*initViewH;
       }
