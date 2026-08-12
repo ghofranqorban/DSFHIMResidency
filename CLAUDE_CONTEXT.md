@@ -253,15 +253,27 @@ R4_PREFS_STATUS  // {academic_year, is_open, opened_at, deadline} | null
 
 ```bash
 cd "/Users/drghof/Documents/Claude/Projects/Residents"
-node -e "
+rm -f /tmp/_portal_blk*.js && node -e "
 const fs=require('fs');const html=fs.readFileSync('SFH_Residency_Portal.html','utf8');
-const re=/<script[^>]*>([\s\S]*?)<\/script>/g;let m,i=0;
-while((m=re.exec(html))!==null){i++;if(i===3)break;}
-fs.writeFileSync('/tmp/_portal_check.js',m[1]);
-" && node --check /tmp/_portal_check.js && echo "✅ JS syntax OK"
+const re=/<script([^>]*)>([\s\S]*?)<\/script>/g;let m,i=0,n=0;
+while((m=re.exec(html))!==null){i++;
+  if(/\bsrc=/.test(m[1])||!m[2].trim())continue;
+  n++;fs.writeFileSync('/tmp/_portal_blk'+i+'.js',m[2]);
+  console.log('inline block '+i+': '+m[2].split('\n').length+' lines');}
+if(!n){console.error('ERROR: no inline script block found');process.exit(1);}
+" && for f in /tmp/_portal_blk*.js; do node --check "$f" || exit 1; done && echo "✅ JS syntax OK"
 ```
 
 If this fails → fix before committing. Never commit a broken state to main.
+
+> **The old version of this check was silently broken (found 12 Aug 2026).** It hardcoded
+> `if(i===3)break;` to grab the 3rd `<script>` tag, which was the inline block at the time.
+> When the GSAP + ScrollTrigger CDN `<script src=...>` tags were added during the Performance
+> Report redesign, block 3 became an *external* tag with an empty body — so the check wrote a
+> **0-byte file** and `node --check` passed vacuously on every run. Verified by injecting a curly-quote
+> bug: the old check reported "syntax OK", the new one caught it. The check now selects blocks by
+> *absence of a `src` attribute* rather than by index, so adding more CDN tags can't break it again.
+> It also hard-fails if no inline block is found, instead of passing on nothing.
 
 ---
 

@@ -1066,6 +1066,43 @@ async function chiefVote(candidateId){
   showToast("Vote submitted!","success");
   render();
 }
+// Self-votes are disregarded, matching the Live Tally the PD already sees.
+function chiefValidVotes(){
+  return CHIEF_VOTES.filter(v=>{const p=PROFILE_BY_ID[v.voter_profile_id];return!p||!p.resident_id||p.resident_id!=v.candidate_resident_id;});
+}
+function chiefBuildSnapshot(){
+  const votes=chiefValidVotes();
+  const cands=CHIEF_NOMINEES.map(n=>({resident_id:Number(n.resident_id),votes:votes.filter(v=>v.candidate_resident_id==n.resident_id).length}))
+    .sort((a,b)=>b.votes-a.votes);
+  return{winner_resident_id:cands.length&&cands[0].votes>0?cands[0].resident_id:null,
+    total_votes:votes.length,eligible_voters:RESIDENTS.length,candidates:cands};
+}
+// Residents cannot read chief_votes beyond their own row, so the counts are frozen
+// here by the PD's session instead of being recomputed in each resident's browser.
+async function chiefPublishResults(){
+  const snap=chiefBuildSnapshot();
+  if(!snap.winner_resident_id){showToast("No votes recorded — nothing to publish","error");return;}
+  const tie=snap.candidates.filter(c=>c.votes===snap.candidates[0].votes).length>1;
+  if(tie){showToast("Tied result — resolve the tie before publishing","error");return;}
+  const{error}=await sb.from("chief_election").update({results_published:true,results_published_at:new Date().toISOString(),results_snapshot:snap}).eq("academic_year",LP_AY);
+  if(error){showToast("Publish failed: "+error.message,"error");return;}
+  const winner=resById(snap.winner_resident_id)||anyResById(snap.winner_resident_id);
+  const msg="Chief Resident for AY 2026-27 has been announced: "+(winner?dname(winner.name):"see results")+".";
+  await Promise.all(RESIDENTS.map(r=>{
+    const p=PROFILE_BY_RESIDENT[r.id];
+    return p?createNotification(p.id,"info",msg,"leave_plan",null):null;
+  }));
+  await loadChiefElection();
+  showToast("Results published to all residents","success");
+  set({ayCard:"chief"});
+}
+async function chiefUnpublishResults(){
+  const{error}=await sb.from("chief_election").update({results_published:false,results_published_at:null}).eq("academic_year",LP_AY);
+  if(error){showToast("Failed: "+error.message,"error");return;}
+  await loadChiefElection();
+  showToast("Results hidden from residents","info");
+  render();
+}
 
 // ─── R4 ROTATION PREFERENCES ─────────────────────────────────────────────────
 let R4_PREFS={};
@@ -8031,7 +8068,7 @@ function renderLeavePlan(){
       ?(canManage?"Set up the Chief Resident election — configure nomination and voting windows.":"Chief Resident election has not been set up yet.")
       :chiefPhase()==="nominating"?"Nominations are open — R2 and R3 residents can put themselves forward for Chief Resident."
       :chiefPhase()==="voting"?"Vote for the next Chief Resident. Every resident gets one vote."
-      :chiefPhase()==="closed"?(canManage?"Voting has ended — view the results.":"Voting has ended. The Program Director will announce the result.")
+      :chiefPhase()==="closed"?(CHIEF_ELECTION?.results_published?"The result has been announced — see who was elected Chief Resident.":canManage?"Voting has ended — view the results.":"Voting has ended. The Program Director will announce the result.")
       :chiefPhase()==="gap"?"Nominations are closed. Voting opens soon."
       :"The Chief Resident election is scheduled to begin soon.";
     const chiefActive=chiefPhase()==="nominating"||chiefPhase()==="voting";
@@ -8135,7 +8172,9 @@ function renderLeavePlan(){
     const canNominate=myRes&&(myRes.level==="R2"||myRes.level==="R3");
     const isNominated=CHIEF_NOMINEES.some(n=>n.resident_id==u.rid);
     const myVote=CHIEF_VOTES.find(v=>v.voter_profile_id===u.profileId);
-    const validVotes=CHIEF_VOTES.filter(v=>{const p=PROFILE_BY_ID[v.voter_profile_id];return!p||!p.resident_id||p.resident_id!=v.candidate_resident_id;});
+    const validVotes=chiefValidVotes();
+    const published=!!CHIEF_ELECTION?.results_published;
+    const snap=CHIEF_ELECTION?.results_snapshot||null;
     const back=el("span",{st:{fontSize:".78rem",color:"#c96a4a",fontWeight:"600",cursor:"pointer",marginBottom:"14px",display:"inline-block"},onClick:()=>set({ayCard:undefined})},"← Back to Academic Year Plan");
     const title=el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.4rem",fontWeight:"600",color:"#1F1A12",margin:"0 0 14px"}},"Chief Resident Election");
     const sec=el("div",null,back,title);
@@ -8172,7 +8211,61 @@ function renderLeavePlan(){
       sec.appendChild(setupPanel);
     }
     const pl=chiefPhaseLabel();
-    sec.appendChild(el("div",{st:{display:"inline-block",fontSize:".65rem",fontWeight:"700",padding:"4px 12px",borderRadius:"9999px",marginBottom:"18px",background:pl.colors.bg,color:pl.colors.c}},pl.label));
+    const plLabel=published?"RESULT ANNOUNCED":pl.label;
+    const plColors=published?{bg:"#e6f4ea",c:"#1e7a43"}:pl.colors;
+    sec.appendChild(el("div",{st:{display:"inline-block",fontSize:".65rem",fontWeight:"700",padding:"4px 12px",borderRadius:"9999px",marginBottom:"18px",background:plColors.bg,color:plColors.c}},plLabel));
+    if(published&&snap){
+      const win=snap.winner_resident_id?(resById(snap.winner_resident_id)||anyResById(snap.winner_resident_id)):null;
+      if(win){
+        const banner=el("div",{st:{position:"relative",overflow:"hidden",borderRadius:"18px",padding:"34px 30px 32px",textAlign:"center",color:"#FEFBF3",marginBottom:"6px",background:"linear-gradient(135deg,#7c3a20 0%,#c96a4a 55%,#e8956d 100%)"}},
+          el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".15em",textTransform:"uppercase",opacity:".8",marginBottom:"20px",lineHeight:"1.5"}},"Chief Resident for AY 2026-27 is"),
+          el("div",{st:{display:"inline-block",position:"relative",marginBottom:"16px"}},
+            el("div",{st:{width:"84px",height:"84px",borderRadius:"50%",background:"rgba(254,251,243,.16)",border:"2.5px solid rgba(254,251,243,.5)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.5rem",fontWeight:"700"}},ini(win.name)),
+            el("div",{st:{position:"absolute",bottom:"-4px",right:"-6px",width:"32px",height:"32px",borderRadius:"50%",background:"#FEFBF3",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(31,26,18,.2)"}},modIcon("trophy",17))),
+          el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"700",lineHeight:"1.15",marginBottom:"6px"}},dname(win.name)),
+          el("div",{st:{fontSize:".8rem",opacity:".78",marginBottom:"20px"}},win.level+" \u00b7 Internal Medicine"),
+          el("div",{st:{width:"44px",height:"2px",background:"rgba(254,251,243,.4)",margin:"0 auto 18px",borderRadius:"2px"}}),
+          el("div",{st:{fontSize:".74rem",fontWeight:"600",letterSpacing:".1em",textTransform:"uppercase",opacity:".9"}},"Elected Chief Resident"));
+        sec.appendChild(banner);
+      }
+      const total=snap.total_votes||0;
+      sec.appendChild(el("div",{st:{fontSize:".72rem",fontWeight:"700",letterSpacing:".07em",textTransform:"uppercase",color:"rgba(31,26,18,.4)",margin:"32px 0 8px"}},"Final tally"));
+      (snap.candidates||[]).forEach((c,idx)=>{
+        const res=resById(c.resident_id)||anyResById(c.resident_id);
+        if(!res)return;
+        const pct=total>0?Math.round(c.votes/total*100):0;
+        const isWin=c.resident_id===snap.winner_resident_id;
+        const nameRow=el("div",{st:{fontWeight:"600",fontSize:".88rem",marginBottom:"6px",display:"flex",alignItems:"center",gap:"9px",flexWrap:"wrap"}},dname(res.name));
+        if(isWin)nameRow.appendChild(el("span",{st:{fontSize:".55rem",fontWeight:"700",letterSpacing:".07em",textTransform:"uppercase",background:"#fdf3dc",color:"#8a6a1a",padding:"3px 9px",borderRadius:"9999px"}},"Elected"));
+        sec.appendChild(el("div",{st:{display:"flex",alignItems:"center",gap:"14px",padding:"14px 0",borderBottom:idx===(snap.candidates.length-1)?"none":"1px solid rgba(31,26,18,.06)"}},
+          el("div",{st:{width:"38px",height:"38px",borderRadius:"50%",background:isWin?"linear-gradient(135deg,#A47A28,#CBA155)":"linear-gradient(135deg,#c96a4a,#e8956d)",color:"#FEFBF3",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:"700",fontSize:".72rem",flexShrink:"0"}},ini(res.name)),
+          el("div",{st:{flex:"1",minWidth:"0"}},nameRow,
+            el("div",{st:{height:"6px",background:"rgba(31,26,18,.06)",borderRadius:"3px",overflow:"hidden"}},
+              el("div",{st:{height:"100%",width:pct+"%",background:isWin?"linear-gradient(90deg,#A47A28,#CBA155)":"#c96a4a",borderRadius:"3px"}}))),
+          el("div",{st:{textAlign:"right",flexShrink:"0",minWidth:"64px"}},
+            el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.15rem",fontWeight:"700"}},String(c.votes)),
+            el("div",{st:{fontSize:".62rem",color:"rgba(31,26,18,.4)"}},pct+"%"))));
+      });
+      const elig=snap.eligible_voters||0;
+      const turnout=elig>0?Math.round(total/elig*100):0;
+      sec.appendChild(el("div",{st:{display:"flex",alignItems:"center",gap:"16px",background:"#F6EFE2",borderRadius:"12px",padding:"17px 22px",marginTop:"24px"}},
+        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.6rem",fontWeight:"700",color:"#c96a4a",lineHeight:"1"}},turnout+"%"),
+        el("div",{st:{fontSize:".79rem",color:"rgba(31,26,18,.55)",lineHeight:"1.5"}},"turnout \u2014 "+total+" of "+elig+" residents voted.")));
+    }
+    if(phase==="closed"&&canSetup){
+      if(!published){
+        sec.appendChild(el("div",{st:{background:"#fff8e6",border:"1.5px solid #f0d98a",borderRadius:"14px",padding:"20px",marginBottom:"18px"}},
+          el("div",{st:{fontWeight:"700",fontSize:".82rem",color:"#92680a",marginBottom:"6px"}},"Results are not published yet"),
+          el("div",{st:{fontSize:".78rem",color:"rgba(31,26,18,.55)",lineHeight:"1.55",marginBottom:"14px"}},"Only you and the chief can see the tally. Publishing shows the winner and the full vote count to every resident, and sends them a notification."),
+          el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"9999px",padding:"11px 26px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".82rem",cursor:"pointer"},
+            onClick:()=>{showConfirm("Publish the election result to all residents? They will see the winner and every candidate's vote count.",async()=>{await chiefPublishResults();},"Publish","info");}},"Publish Results")));
+      }else{
+        sec.appendChild(el("div",{st:{display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap",background:"#e6f4ea",borderRadius:"10px",padding:"12px 16px",margin:"22px 0 18px",fontSize:".78rem",color:"#1e7a43",fontWeight:"500"}},
+          el("span",null,"Results published"+(CHIEF_ELECTION.results_published_at?" "+new Date(CHIEF_ELECTION.results_published_at).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"}):"")+" \u00b7 visible to all residents"),
+          el("button",{st:{marginLeft:"auto",background:"none",border:"1px solid rgba(31,26,18,.2)",borderRadius:"9999px",padding:"7px 16px",fontFamily:"Inter,sans-serif",fontWeight:"500",fontSize:".74rem",cursor:"pointer",color:"rgba(31,26,18,.55)"},
+            onClick:()=>{showConfirm("Hide the result from residents again?",async()=>{await chiefUnpublishResults();},"Unpublish","danger");}},"Unpublish")));
+      }
+    }
     if(phase==="nominating"){
       sec.appendChild(el("div",{st:{background:"#fef9ec",border:"1px solid #f0d98a",borderRadius:"10px",padding:"12px 16px",fontSize:".8rem",color:"#92680a",lineHeight:"1.5",marginBottom:"18px"}},
         "Nominations are open. R2 and R3 residents can nominate themselves for Chief Resident of AY 2026-27."));
@@ -8190,7 +8283,7 @@ function renderLeavePlan(){
       sec.appendChild(el("div",{st:{background:"#e8f0fe",border:"1px solid #93b4f5",borderRadius:"10px",padding:"12px 16px",fontSize:".8rem",color:"#1a56db",lineHeight:"1.5",marginBottom:"18px"}},
         "Voting is open. Every resident gets one vote."+(myVote?" You have already voted.":"")));
     }
-    if(CHIEF_NOMINEES.length>0&&(phase==="nominating"||phase==="voting"||phase==="gap"||phase==="closed")){
+    if(CHIEF_NOMINEES.length>0&&!published&&(phase==="nominating"||phase==="voting"||phase==="gap"||phase==="closed")){
       const nomList=el("div",{st:{marginBottom:"24px"}});
       nomList.appendChild(el("div",{st:{fontSize:".72rem",fontWeight:"700",letterSpacing:".07em",textTransform:"uppercase",color:"rgba(31,26,18,.4)",marginBottom:"10px"}},phase==="voting"||phase==="closed"?"Candidates":"Nominees"));
       CHIEF_NOMINEES.forEach(nom=>{
@@ -8279,7 +8372,7 @@ function renderLeavePlan(){
       }
       sec.appendChild(trackerPanel);
     }
-    if(phase==="closed"&&!canSetup){
+    if(phase==="closed"&&!canSetup&&!published){
       sec.appendChild(el("div",{st:{background:"rgba(31,26,18,.04)",borderRadius:"10px",padding:"16px 20px",fontSize:".82rem",color:"rgba(31,26,18,.5)",fontStyle:"italic"}},"Voting has ended. The Program Director will announce the result."));
     }
     if(phase==="none"&&!canSetup){
