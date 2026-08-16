@@ -449,9 +449,9 @@ const MANDATORY=["GIM/CTU","Cardiology","Pulmonology","Nephrology","Gastroentero
 // Quarterly: informational only — not scored
 const KPI_W={quiz:15,mm:15,teach:15,pres:5,comm:10,qi:10,pub:10,oral:10,poster:10,awards:5,volunteering:5};
 const LC={R1:"#4a6a8a",R2:"#5a8a6a",R3:"#c9913a",R4:"#8a4a2a"};
-const ROT_COLORS={"GIM/CTU":{bg:"#ede9fe",tx:"#5b21b6"},"Night Duty":{bg:"#fef2f2",tx:"#991b1b"},"ICU":{bg:"rgba(38,82,58,.12)",tx:"#26523A"},"Cardiology":{bg:"rgba(201,106,74,.12)",tx:"#9d174d"},"Pulmonology":{bg:"#e0f2fe",tx:"#0c4a6e"},"Nephrology":{bg:"rgba(127,184,156,.15)",tx:"#26523A"},"Gastroenterology":{bg:"rgba(164,122,40,.12)",tx:"#6a4c10"},"Endocrinology":{bg:"#f0fdf4",tx:"#166534"},"Hematology":{bg:"#ffe4e6",tx:"#9f1239"},"Rheumatology":{bg:"#f5f3ff",tx:"#4c1d95"},"Neurology":{bg:"#fdf4ff",tx:"#7e22ce"},"Infectious Disease":{bg:"#fff7ed",tx:"#c2410c"},"Emergency Medicine":{bg:"#fee2e2",tx:"#7f1d1d"},"Oncology":{bg:"#f0f9ff",tx:"#0369a1"},"Outpatient Clinic":{bg:"#F6EFE2",tx:"#475569"},"Elective":{bg:"#f0fdf4",tx:"#166534"},"Annual Leave":{bg:"#fefce8",tx:"#854d0e"},"Maternity Leave":{bg:"#fdf4ff",tx:"#701a75"},"Medical Consult":{bg:"#eff6ff",tx:"#26523A"}};
-const ROT_ABBR={"GIM/CTU":"CTU","Night Duty":"Night","ICU":"ICU","Cardiology":"Cardio","Pulmonology":"Pulmo","Nephrology":"Nephro","Gastroenterology":"Gastro","Endocrinology":"Endo","Hematology":"Hema","Rheumatology":"Rheuma","Neurology":"Neuro","Infectious Disease":"ID","Emergency Medicine":"ER","Oncology":"Onco","Outpatient Clinic":"Clinic","Elective":"Elect","Annual Leave":"Leave","Maternity Leave":"Matern","Medical Consult":"M.Cons"};
-const ALL_ROTATIONS=["GIM/CTU","Night Duty","ICU","Cardiology","Pulmonology","Nephrology","Gastroenterology","Endocrinology","Hematology","Rheumatology","Neurology","Infectious Disease","Emergency Medicine","Oncology","Outpatient Clinic","Elective","Annual Leave","Maternity Leave","Medical Consult"];
+const ROT_COLORS={"GIM/CTU":{bg:"#ede9fe",tx:"#5b21b6"},"Night Duty":{bg:"#fef2f2",tx:"#991b1b"},"ICU":{bg:"rgba(38,82,58,.12)",tx:"#26523A"},"Cardiology":{bg:"rgba(201,106,74,.12)",tx:"#9d174d"},"Pulmonology":{bg:"#e0f2fe",tx:"#0c4a6e"},"Nephrology":{bg:"rgba(127,184,156,.15)",tx:"#26523A"},"Gastroenterology":{bg:"rgba(164,122,40,.12)",tx:"#6a4c10"},"Endocrinology":{bg:"#f0fdf4",tx:"#166534"},"Hematology":{bg:"#ffe4e6",tx:"#9f1239"},"Rheumatology":{bg:"#f5f3ff",tx:"#4c1d95"},"Neurology":{bg:"#fdf4ff",tx:"#7e22ce"},"Infectious Disease":{bg:"#fff7ed",tx:"#c2410c"},"Emergency Medicine":{bg:"#fee2e2",tx:"#7f1d1d"},"Oncology":{bg:"#f0f9ff",tx:"#0369a1"},"Outpatient Clinic":{bg:"#F6EFE2",tx:"#475569"},"Elective":{bg:"#f0fdf4",tx:"#166534"},"Annual Leave":{bg:"#fefce8",tx:"#854d0e"},"Maternity Leave":{bg:"#fdf4ff",tx:"#701a75"},"Medical Consult":{bg:"#eff6ff",tx:"#26523A"},"Freeze":{bg:"#f1f5f9",tx:"#64748b",ol:"1px dashed #cbd5e1"}};
+const ROT_ABBR={"GIM/CTU":"CTU","Night Duty":"Night","ICU":"ICU","Cardiology":"Cardio","Pulmonology":"Pulmo","Nephrology":"Nephro","Gastroenterology":"Gastro","Endocrinology":"Endo","Hematology":"Hema","Rheumatology":"Rheuma","Neurology":"Neuro","Infectious Disease":"ID","Emergency Medicine":"ER","Oncology":"Onco","Outpatient Clinic":"Clinic","Elective":"Elect","Annual Leave":"Leave","Maternity Leave":"Matern","Medical Consult":"M.Cons","Freeze":"Freeze"};
+const ALL_ROTATIONS=["GIM/CTU","Night Duty","ICU","Cardiology","Pulmonology","Nephrology","Gastroenterology","Endocrinology","Hematology","Rheumatology","Neurology","Infectious Disease","Emergency Medicine","Oncology","Outpatient Clinic","Elective","Annual Leave","Maternity Leave","Medical Consult","Freeze"];
 let ROT_H={};
 // ─── ROTA EXCEL IMPORT — parsing/classification helpers ─────────────────────
 // Pure functions (no DOM, no Supabase) so they can be unit-tested directly.
@@ -647,6 +647,10 @@ async function loadRotations(){
   const{data,error}=await sb.from("rotations").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR);
   FULL_ROTA={};ROTA_LEAVE_META={};
   (error?[]:(data||[])).forEach(row=>{
+    // FULL_ROTA is one-rotation-per-block. Blocks split across two rotations store a
+    // second row (segment 2); rendering both is not built yet, so pin to segment 1
+    // rather than let row order decide which one silently wins.
+    if((row.segment||1)!==1)return;
     if(!FULL_ROTA[row.resident_id])FULL_ROTA[row.resident_id]={};
     FULL_ROTA[row.resident_id][String(row.block_number)]=row.rotation_name||"";
     if(row.leave_weeks>0){
@@ -668,9 +672,10 @@ async function saveRotaCells(entries){
   // be present in older deployments — omit them so the upsert always succeeds).
   const rows=entries.map(e=>({
     resident_id:e.residentId,academic_year:CURRENT_ACADEMIC_YEAR,block_number:parseInt(e.block),
+    segment:e.segment||1,
     rotation_name:e.rotationName||"",
     leave_weeks:e.leaveWeeks||0,leave_position:e.leavePosition||"none" }));
-  const{error}=await sb.from("rotations").upsert(rows,{onConflict:"resident_id,academic_year,block_number"});
+  const{error}=await sb.from("rotations").upsert(rows,{onConflict:"resident_id,academic_year,block_number,segment"});
   if(error){showToast("Could not save rota: "+error.message);return false;}
   await loadRotations();
   return true;
@@ -1577,13 +1582,19 @@ function el(tag,props,...kids){
 }
 function set(s){Object.assign(STATE,s);render();}
 function rotColor(rot){return ROT_COLORS[rot]||{bg:"#FEFBF3",tx:"#475569"};}
-function rotBadge(rot){
+// Outline (not border) so the dashed ring on Freeze cannot collide
+// with the amber current-block border or the rotation-tracker completion border.
+function rotStyle(rot){
   const c=rotColor(rot);
-  return el("span",{cls:"rot-badge",st:{background:c.bg,color:c.tx}},ROT_ABBR[rot]||rot);
+  const s={background:c.bg,color:c.tx};
+  if(c.ol){s.outline=c.ol;s.outlineOffset="-1px";}
+  return s;
+}
+function rotBadge(rot){
+  return el("span",{cls:"rot-badge",st:rotStyle(rot)},ROT_ABBR[rot]||rot);
 }
 function rotBadgeFull(rot){
-  const c=rotColor(rot);
-  return el("span",{cls:"rot-badge",st:{background:c.bg,color:c.tx}},rot);
+  return el("span",{cls:"rot-badge",st:rotStyle(rot)},rot);
 }
 function levelBadge(lv){return el("span",{cls:"level-badge",st:{background:LC[lv]||"#94a3b8"}},lv);}
 function chiefBadge(id){
@@ -2856,10 +2867,9 @@ function renderRotaBlock(resOverride){
       periodPills(p,n=>set({rotaPeriod:n,rotaEdit:false}))
     ),
     ...rotKeys.map(rot=>{
-      const c=rotColor(rot);
       return el("div",{cls:"card"},
         el("div",{cls:"flex-gap",st:{marginBottom:"10px"}},
-          el("div",{st:{background:c.bg,color:c.tx,borderRadius:"8px",padding:"4px 12px",fontWeight:"700",fontSize:".88rem"}},rot),
+          el("div",{st:{...rotStyle(rot),borderRadius:"8px",padding:"4px 12px",fontWeight:"700",fontSize:".88rem"}},rot),
           el("span",{cls:"sh"},groups[rot].length+" resident"+(groups[rot].length!==1?"s":""))
         ),
         el("div",{cls:"flex-wrap"},
@@ -2933,10 +2943,9 @@ function renderRotaTimeline(){
             const n=i+1;
             const info=rotCellInfo(res.id,n);
             const rot=info.rot||"—";
-            const c=rotColor(rot);
             const isCur=n===CURRENT_PERIOD;
             return el("div",{
-              st:{background:c.bg,color:c.tx,borderRadius:"8px",padding:"8px 10px",minWidth:"70px",textAlign:"center",border:isCur?"2px solid #f59e0b":"2px solid transparent",cursor:"default"},
+              st:{...rotStyle(rot),borderRadius:"8px",padding:"8px 10px",minWidth:"70px",textAlign:"center",border:isCur?"2px solid #f59e0b":"2px solid transparent",cursor:"default"},
               title:rot+(info.split?" (+ "+info.weeks+"wk AL)":"")
             },
               el("div",{st:{fontSize:".7rem",fontWeight:"700",color:"#94a3b8"}},"B"+n),
@@ -2967,10 +2976,9 @@ function renderResidentOwnRota(rid){
           const n=i+1;
           const info=rotCellInfo(res.id,n);
           const rot=info.rot||"—";
-          const c=rotColor(rot);
           const isCur=n===CURRENT_PERIOD;
           return el("div",{
-            st:{background:c.bg,color:c.tx,borderRadius:"8px",padding:"8px 10px",minWidth:"70px",textAlign:"center",
+            st:{...rotStyle(rot),borderRadius:"8px",padding:"8px 10px",minWidth:"70px",textAlign:"center",
               border:isCur?"2px solid #f59e0b":"2px solid transparent"},
             title:rot+(info.split?" (+ "+info.weeks+"wk AL)":"")
           },
@@ -3035,7 +3043,6 @@ function renderRotaTable(resOverride){
                   const p=i+1;
                   const info=rotCellInfo(r.id,p);
                   const rot=info.rot;
-                  const c=rotColor(rot);
                   if(STATE.rotaEdit){
                     const key=r.id+"_"+p;
                     const curMeta=(ROTA_LEAVE_META[r.id]||{})[String(p)];
@@ -3059,7 +3066,7 @@ function renderRotaTable(resOverride){
                   }
                   return el("td",{st:{background:p===CURRENT_PERIOD?"#fffbeb":"",textAlign:"center",verticalAlign:"middle"}},
                     rot?el("div",{st:{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}},
-                      el("span",{cls:"rot-badge",st:{background:c.bg,color:c.tx}},ROT_ABBR[rot]||rot),
+                      el("span",{cls:"rot-badge",st:rotStyle(rot)},ROT_ABBR[rot]||rot),
                       info.split?el("span",{st:{fontSize:".6rem",fontWeight:"700",color:"#c2410c",background:"#fff7ed",borderRadius:"3px",padding:"1px 5px",border:"1px solid #fed7aa"}},info.splitLabel):null
                     ):el("span",{cls:"sh"},"—")
                   );
