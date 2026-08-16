@@ -616,6 +616,22 @@ function matchResidentByName(excelName,pool){
   if(best&&bestScore>=0.5)return{match:best,confidence:bestScore};
   return{match:null,confidence:0};
 }
+// PostgREST caps one response at 1000 rows and reports no error when it truncates, so a
+// plain select on a table that has outgrown 1000 rows silently returns a prefix. This pages
+// until a short page comes back. `build` is a thunk because a query builder is single-use:
+// each page needs a fresh one. It must order by something unique, otherwise rows that tie
+// can be skipped or repeated across page boundaries. Returns the same {data,error} shape as
+// a direct select so call sites can drop it in.
+async function fetchAllRows(build){
+  const PAGE=1000,data=[];
+  for(let from=0;;from+=PAGE){
+    const{data:page,error}=await build().range(from,from+PAGE-1);
+    if(error)return{data:null,error};
+    if(page&&page.length)data.push(...page);
+    if(!page||page.length<PAGE)break;
+  }
+  return{data,error:null};
+}
 // Morning Meeting + Academic Day schedules and attendance are DB-backed (mm_sessions,
 // teaching_sessions, mm_attendance, teaching_attendance — see migration_003_schedules.sql).
 // MM_ATT / TEACH_ATT keep the same shape the older in-memory code used
@@ -632,11 +648,15 @@ let TEACH_ATT={};
 let TEACH_ATT_CMT={};
 async function loadSchedules(){
   const[{data:mm,error:mmErr},{data:mmA,error:mmAErr},{data:te,error:teErr},{data:teA,error:teAErr},{data:mmH,error:mmHErr}]=await Promise.all([
-    sb.from("mm_sessions").select("*").order("session_date"),
-    sb.from("mm_attendance").select("*"),
-    sb.from("teaching_sessions").select("*").order("session_date"),
-    sb.from("teaching_attendance").select("*"),
-    sb.from("mm_highlights").select("*").order("created_at")
+    // All five are unfiltered whole-table reads, so all five page. The attendance tables are
+    // the urgent ones: they hold one row per session per resident, so they cross 1000 within
+    // a single academic year and were already returning a truncated prefix. `id` is the
+    // primary key on each; it breaks ties where session_date/created_at repeat.
+    fetchAllRows(()=>sb.from("mm_sessions").select("*").order("session_date").order("id")),
+    fetchAllRows(()=>sb.from("mm_attendance").select("*").order("id")),
+    fetchAllRows(()=>sb.from("teaching_sessions").select("*").order("session_date").order("id")),
+    fetchAllRows(()=>sb.from("teaching_attendance").select("*").order("id")),
+    fetchAllRows(()=>sb.from("mm_highlights").select("*").order("created_at").order("id"))
   ]);
   MM_SESSIONS=mmErr?[]:(mm||[]);
   TEACH_SESSIONS=teErr?[]:(te||[]);
@@ -714,20 +734,13 @@ async function loadRotaHistory(force){
   if(HIST_ROTA_STATE==="loading")return;
   if(HIST_ROTA_STATE==="ready"&&!force)return;
   HIST_ROTA_STATE="loading";
-  // PostgREST caps one response at 1000 rows and reports no error when it truncates, so
-  // this pages until a short page comes back. Once the historical years were imported the
-  // table went past 1000 and the tail silently vanished — the residents written last simply
-  // showed their current year. Order by the unique key so paging cannot skip or repeat a row.
-  const PAGE=1000,data=[];
-  for(let from=0;;from+=PAGE){
-    const{data:page,error}=await sb.from("rotations")
-      .select("resident_id,academic_year,block_number,segment,rotation_name,weeks,leave_weeks,leave_position")
-      .order("resident_id").order("academic_year").order("block_number").order("segment")
-      .range(from,from+PAGE-1);
-    if(error){HIST_ROTA_STATE="error";HIST_ROTA=null;render();return;}
-    if(page&&page.length)data.push(...page);
-    if(!page||page.length<PAGE)break;
-  }
+  // Every year for every resident, so this is well past PostgREST's 1000-row cap and has to
+  // page. Ordered by the (resident, year, block, segment) unique key so paging cannot skip
+  // or repeat a row.
+  const{data,error}=await fetchAllRows(()=>sb.from("rotations")
+    .select("resident_id,academic_year,block_number,segment,rotation_name,weeks,leave_weeks,leave_position")
+    .order("resident_id").order("academic_year").order("block_number").order("segment"));
+  if(error){HIST_ROTA_STATE="error";HIST_ROTA=null;render();return;}
   const byRes={},years={};
   (data||[]).forEach(row=>{
     const ay=row.academic_year;years[ay]=true;
@@ -771,8 +784,8 @@ function histYearsFor(resId){
 }
 // Label a year the way the rota sheets do: academic_year 2022 is the 2022-23 cycle.
 function ayLabel(ay){return ay+"-"+String((ay+1)%100).padStart(2,"0");}
-async function saveRotaCells(entries){
 // entries: [{residentId, block, rotationName, leaveWeeks(optional,0), leavePosition(optional,'none')}]
+async function saveRotaCells(entries){
   // Only send columns that exist in the base schema (block_label / created_by may not
   // be present in older deployments — omit them so the upsert always succeeds).
   const rows=entries.map(e=>({
@@ -800,7 +813,9 @@ let QUIZZES_LOAD_ERR=null;
 async function loadQuizzes(){
   const[{data:qdata,error:qerr},{data:scdata,error:scerr}]=await Promise.all([
     sb.from("quizzes").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("date"),
-    sb.from("quiz_scores").select("*")
+    // One row per resident per quiz across every academic year, so it outgrows the 1000-row
+    // cap on its own. `id` is the primary key.
+    fetchAllRows(()=>sb.from("quiz_scores").select("*").order("id"))
   ]);
   if(qerr){console.warn("quizzes load error (table may not exist yet)",qerr.message);QUIZZES_LOAD_ERR=qerr.message;return;}
   QUIZZES_LOAD_ERR=null;
@@ -1511,7 +1526,10 @@ let ONCALL_DATA=[];
 let BEST_VOTES=[];let BEST_STATUS=null;
 let _inactiveResById={};
 async function loadLeaveRecords(){
-  const{data,error}=await sb.from("leave_records").select("*").order("created_at",{ascending:false});
+  // Unfiltered across every resident, every leave type and every academic year, so it grows
+  // without bound and has to page. created_at is not unique (a bulk rota import writes many
+  // rows in one transaction), so `id` breaks the tie and keeps paging stable.
+  const{data,error}=await fetchAllRows(()=>sb.from("leave_records").select("*").order("created_at",{ascending:false}).order("id",{ascending:false}));
   RESIDENTS.forEach(r=>{if(!LEAVE_DATA[r.id])LEAVE_DATA[r.id]={rota:[],manual:[],absences:[],requests:[]};});
   Object.values(LEAVE_DATA).forEach(ld=>{ld.manual=[];ld.absences=[];ld.requests=[];});
   (error?[]:(data||[])).forEach(row=>{
@@ -1987,7 +2005,10 @@ function fitOncallFullscreen(){
 }
 window.addEventListener("resize",()=>{if(STATE.oncallFullscreen)fitOncallFullscreen();});
 async function loadOncallData(){
-  const{data,error}=await sb.from("oncall_schedule").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("schedule_date");
+  // The academic_year filter does not bound this under 1000: a full year is ~4 slots on each
+  // weekday plus 6 on each weekend day, so roughly 1700 rows per year. Paged, ordered by the
+  // (schedule_date, slot_key) unique constraint.
+  const{data,error}=await fetchAllRows(()=>sb.from("oncall_schedule").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("schedule_date").order("slot_key"));
   if(!error&&data)ONCALL_DATA=data;
   render();
 }
