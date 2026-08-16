@@ -454,9 +454,17 @@ const SCFHS_JUNIOR={"GIM/CTU":24,"Emergency Medicine":8,"ICU":8,"Cardiology":8,"
 const SCFHS_SENIOR={"GIM/CTU":16,"Cardiology":8,"Gastroenterology":8,"Endocrinology":8,"Hematology":8,"Neurology":8,"Infectious Disease":8,"Rheumatology":8,"ICU":4,"Pulmonology":4,"Nephrology":4,"Oncology":4};
 const SCFHS_TOTAL={};
 MANDATORY.forEach(m=>{SCFHS_TOTAL[m]=(SCFHS_JUNIOR[m]||0)+(SCFHS_SENIOR[m]||0);});
-// Night Duty, Medical Consult and Outpatient Clinic are DSFH service commitments with
-// no SCFHS counterpart. They consume real weeks, which is why the programme works to a
-// floor of half the SCFHS minimum rather than the full figure.
+// Night Duty and Medical Consult are general medicine on the wards, so their weeks count
+// toward the SCFHS General Internal Medicine requirement. Outpatient Clinic does not.
+const SCFHS_CREDIT={"Night Duty":"GIM/CTU","Medical Consult":"GIM/CTU"};
+// Weeks toward one SCFHS rotation: the rotation itself plus whatever is credited to it.
+function scfhsWeeks(cum,rot){
+  let w=cum[rot]||0;
+  Object.keys(SCFHS_CREDIT).forEach(k=>{if(SCFHS_CREDIT[k]===rot)w+=cum[k]||0;});
+  return w;
+}
+// Outpatient Clinic has no SCFHS counterpart and still consumes real weeks, which is why
+// the programme works to a floor of half the SCFHS minimum rather than the full figure.
 const SCFHS_FLOOR=0.5;
 function scfhsTier(weeks,rot){
   const need=SCFHS_TOTAL[rot]||0;
@@ -691,7 +699,6 @@ async function loadRotations(){
   buildLeaveData();
   render();
 }
-// entries: [{residentId, block, rotationName, leaveWeeks(optional,0), leavePosition(optional,'none')}]
 // Loads every academic year for the Rotation Tracker. Segment-2 rows are kept here
 // (unlike FULL_ROTA, which pins to segment 1) because a split block is two genuine
 // rotations and both count toward training time.
@@ -746,6 +753,7 @@ function histYearsFor(resId){
 // Label a year the way the rota sheets do: academic_year 2022 is the 2022-23 cycle.
 function ayLabel(ay){return ay+"-"+String((ay+1)%100).padStart(2,"0");}
 async function saveRotaCells(entries){
+// entries: [{residentId, block, rotationName, leaveWeeks(optional,0), leavePosition(optional,'none')}]
   // Only send columns that exist in the base schema (block_label / created_by may not
   // be present in older deployments — omit them so the upsert always succeeds).
   const rows=entries.map(e=>({
@@ -3233,8 +3241,8 @@ function rotTrackByYear(){
 function rotTrackResident(res){
   const years=histYearsFor(res.id);
   const cum=histWeeksFor(res.id);
-  const touched=MANDATORY.filter(m=>(cum[m]||0)>0);
-  const never=MANDATORY.filter(m=>!(cum[m]||0));
+  const touched=MANDATORY.filter(m=>scfhsWeeks(cum,m)>0);
+  const never=MANDATORY.filter(m=>!scfhsWeeks(cum,m));
   const pct=Math.round(touched.length/MANDATORY.length*100);
   const totalWeeks=Object.keys(cum).reduce((s,k)=>s+cum[k],0);
   const running={};
@@ -3260,7 +3268,7 @@ function rotTrackResident(res){
       el("div",{cls:"lbl"},"Mandatory Rotations"),
       el("div",{cls:"flex-wrap",st:{marginTop:"8px"}},
         ...MANDATORY.map(m=>{
-          const w=cum[m]||0,c=rotColor(m),tier=scfhsTier(w,m);
+          const w=scfhsWeeks(cum,m),c=rotColor(m),tier=scfhsTier(w,m);
           return el("div",{st:{display:"flex",alignItems:"center",gap:"7px",
             background:w?c.bg:"#F6EFE2",border:"1px solid "+(w?c.bg:"rgba(31,26,18,.1)"),
             borderRadius:"8px",padding:"6px 10px",opacity:w?"1":".55"}},
@@ -3324,9 +3332,19 @@ function rotTrackCumulative(){
       )
     );
   };
-  const svc=["Night Duty","Medical Consult","Outpatient Clinic","Elective","Annual Leave"];
-  const svcLoad=rows.map(r=>(cum[r.id]["Night Duty"]||0)+(cum[r.id]["Medical Consult"]||0)+(cum[r.id]["Outpatient Clinic"]||0));
-  const belowFloor=MANDATORY.filter(m=>rows.every(r=>scfhsTier(cum[r.id][m]||0,m)==="under"));
+  const credited=Object.keys(SCFHS_CREDIT);
+  const svc=["Outpatient Clinic","Elective","Annual Leave"];
+  const clinicLoad=rows.map(r=>cum[r.id]["Outpatient Clinic"]||0);
+  const belowFloor=MANDATORY.filter(m=>rows.every(r=>scfhsTier(scfhsWeeks(cum[r.id],m),m)==="under"));
+  const secHead=t=>el("tr",null,el("td",{colspan:String(rows.length+3),
+    st:{background:"#FBF6ED",fontSize:".66rem",letterSpacing:".06em",textTransform:"uppercase",
+      fontWeight:"700",color:"rgba(31,26,18,.45)"}},t));
+  const plainRow=m=>el("tr",null,
+    el("td",{cls:"sticky-col"},el("span",{cls:"rot-badge",st:rotStyle(m)},m)),
+    el("td",{st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
+    el("td",{st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
+    ...rows.map(r=>el("td",{st:{textAlign:"center",fontSize:".78rem",fontWeight:"600",color:"rgba(31,26,18,.5)"}},(cum[r.id][m]||0)+" wk"))
+  );
   return el("div",null,
     el("div",{cls:"card"},
       el("div",{cls:"lbl"},"Cumulative training weeks vs SCFHS"),
@@ -3344,21 +3362,20 @@ function rotTrackCumulative(){
           )),
           el("tbody",null,
             ...MANDATORY.map(m=>el("tr",null,
-              el("td",{cls:"sticky-col"},el("span",{cls:"rot-badge",st:rotStyle(m)},m)),
+              el("td",{cls:"sticky-col"},
+                el("span",{cls:"rot-badge",st:rotStyle(m)},m),
+                credited.some(k=>SCFHS_CREDIT[k]===m)?
+                  el("div",{cls:"sub",st:{fontSize:".66rem",marginTop:"3px"}},
+                    "incl. "+credited.filter(k=>SCFHS_CREDIT[k]===m).join(" + ")):null
+              ),
               el("td",{st:{textAlign:"center",fontWeight:"700",fontSize:".78rem",color:"rgba(31,26,18,.45)"}},SCFHS_TOTAL[m]+" wk"),
               el("td",{st:{textAlign:"center",fontWeight:"700",fontSize:".78rem",color:"rgba(31,26,18,.45)"}},Math.ceil(SCFHS_TOTAL[m]*SCFHS_FLOOR)+" wk"),
-              ...rows.map(r=>cell(cum[r.id][m]||0,m))
+              ...rows.map(r=>cell(scfhsWeeks(cum[r.id],m),m))
             )),
-            el("tr",null,el("td",{colspan:String(rows.length+3),
-              st:{background:"#FBF6ED",fontSize:".66rem",letterSpacing:".06em",textTransform:"uppercase",
-                fontWeight:"700",color:"rgba(31,26,18,.45)"}},
-              "No SCFHS requirement — service and non-training weeks")),
-            ...svc.map(m=>el("tr",null,
-              el("td",{cls:"sticky-col"},el("span",{cls:"rot-badge",st:rotStyle(m)},m)),
-              el("td",{st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
-              el("td",{st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
-              ...rows.map(r=>el("td",{st:{textAlign:"center",fontSize:".78rem",fontWeight:"600",color:"rgba(31,26,18,.5)"}},(cum[r.id][m]||0)+" wk"))
-            )),
+            secHead("Counted above, toward General Internal Medicine"),
+            ...credited.map(plainRow),
+            secHead("No SCFHS requirement — service and non-training weeks"),
+            ...svc.map(plainRow),
             el("tr",null,
               el("td",{cls:"sticky-col",st:{fontWeight:"700"}},"Total on record"),
               el("td",{st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
@@ -3376,10 +3393,13 @@ function rotTrackCumulative(){
         belowFloor.length?
           ("Below the "+Math.round(SCFHS_FLOOR*100)+"% floor for every resident shown: "+belowFloor.join(", ")+". "):
           ("Every rotation clears the "+Math.round(SCFHS_FLOOR*100)+"% floor for at least one resident. "),
-        "Night Duty, Medical Consult and Outpatient Clinic take "+
-        Math.min(...svcLoad)+"–"+Math.max(...svcLoad)+" weeks per resident and count toward no SCFHS "+
-        "requirement, which is most of the reason the shortfalls exist. Weeks still unassigned in "+
-        ayLabel(CURRENT_ACADEMIC_YEAR)+" are the room available to close them."
+        "Night Duty and Medical Consult are general medicine on the wards, so they are counted "+
+        "into the GIM/CTU row rather than treated as lost weeks. "+
+        (Math.max(...clinicLoad)>0?
+          ("Outpatient Clinic still takes "+Math.min(...clinicLoad)+"–"+Math.max(...clinicLoad)+
+           " weeks per resident against no SCFHS requirement. "):""),
+        "Weeks still unassigned in "+ayLabel(CURRENT_ACADEMIC_YEAR)+
+        " are the room available to close what is left."
       )
     )
   );
