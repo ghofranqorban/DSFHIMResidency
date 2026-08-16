@@ -98,6 +98,14 @@ td{padding:10px 14px;border-bottom:1px solid rgba(31,26,18,.06);vertical-align:m
 tr:hover td{background:rgba(201,106,74,.04);}
 .sticky-col{position:sticky;left:0;background:#FEFBF3;z-index:2;border-right:1px solid rgba(31,26,18,.08);}
 tr:hover .sticky-col{background:#fdf9f5;}
+/* SCFHS table pins Rotation/SCFHS/Floor as one group. Auto table layout hands slack
+   columns extra width, so the offsets are measured by syncScfhsCols() rather than
+   assumed from the declared widths; the literals here are only a first-paint guess. */
+.scfhs-tbl .sticky-col{border-right:none;}
+.scfhs-tbl .sticky-col2{position:sticky;left:var(--c2,176px);background:#FEFBF3;z-index:2;}
+.scfhs-tbl .sticky-col3{position:sticky;left:var(--c3,252px);background:#FEFBF3;z-index:2;border-right:1px solid rgba(31,26,18,.08);}
+.scfhs-tbl tr:hover .sticky-col2,.scfhs-tbl tr:hover .sticky-col3{background:#fdf9f5;}
+.scfhs-tbl th.sticky-col,.scfhs-tbl th.sticky-col2,.scfhs-tbl th.sticky-col3{background:#F6EFE2;z-index:4;}
 .lvl-hdr-cell{position:sticky;left:0;background:#F6EFE2;z-index:2;}
 .sched-tbl td,.sched-tbl th{border-right:1px solid rgba(31,26,18,.07);}
 .sched-tbl .wk-cell{background:#F6EFE2;font-weight:700;color:#1F1A12;text-align:center;vertical-align:middle;border-right:1px solid rgba(31,26,18,.1);white-space:nowrap;}
@@ -706,9 +714,20 @@ async function loadRotaHistory(force){
   if(HIST_ROTA_STATE==="loading")return;
   if(HIST_ROTA_STATE==="ready"&&!force)return;
   HIST_ROTA_STATE="loading";
-  const{data,error}=await sb.from("rotations")
-    .select("resident_id,academic_year,block_number,segment,rotation_name,weeks,leave_weeks,leave_position");
-  if(error){HIST_ROTA_STATE="error";HIST_ROTA=null;render();return;}
+  // PostgREST caps one response at 1000 rows and reports no error when it truncates, so
+  // this pages until a short page comes back. Once the historical years were imported the
+  // table went past 1000 and the tail silently vanished — the residents written last simply
+  // showed their current year. Order by the unique key so paging cannot skip or repeat a row.
+  const PAGE=1000,data=[];
+  for(let from=0;;from+=PAGE){
+    const{data:page,error}=await sb.from("rotations")
+      .select("resident_id,academic_year,block_number,segment,rotation_name,weeks,leave_weeks,leave_position")
+      .order("resident_id").order("academic_year").order("block_number").order("segment")
+      .range(from,from+PAGE-1);
+    if(error){HIST_ROTA_STATE="error";HIST_ROTA=null;render();return;}
+    if(page&&page.length)data.push(...page);
+    if(!page||page.length<PAGE)break;
+  }
   const byRes={},years={};
   (data||[]).forEach(row=>{
     const ay=row.academic_year;years[ay]=true;
@@ -3314,9 +3333,22 @@ function rotTrackResident(res){
   );
 }
 // ── Tab 3: cumulative weeks vs the SCFHS minimums
+// The three pinned SCFHS columns need their sticky `left` to equal the rendered width
+// of the columns before them. Auto table layout hands slack columns extra width, so the
+// declared widths are a lower bound, not the answer — measure after layout instead.
+// ResizeObserver does not fire for display:table-cell, so the wrapper is what gets
+// observed (window/container resize) and a post-render tick covers first paint.
+function syncScfhsCols(wrap,a,b){
+  wrap.style.setProperty("--c2",a.getBoundingClientRect().width+"px");
+  wrap.style.setProperty("--c3",(a.getBoundingClientRect().width+b.getBoundingClientRect().width)+"px");
+}
+
 function rotTrackCumulative(){
-  const rows=visRes().filter(r=>histYearsFor(r.id).length);
-  if(!rows.length)return el("div",{cls:"card"},"No rota history to compare yet.");
+  const all=visRes().filter(r=>histYearsFor(r.id).length);
+  if(!all.length)return el("div",{cls:"card"},"No rota history to compare yet.");
+  const lvls=["R1","R2","R3","R4"].filter(l=>all.some(r=>r.level===l));
+  const lvl=lvls.includes(STATE.rotTrackLvl)?STATE.rotTrackLvl:"all";
+  const rows=lvl==="all"?all:all.filter(r=>r.level===lvl);
   const cum={};rows.forEach(r=>{cum[r.id]=histWeeksFor(r.id);});
   const cell=(w,rot)=>{
     const need=SCFHS_TOTAL[rot],tier=scfhsTier(w,rot);
@@ -3336,28 +3368,41 @@ function rotTrackCumulative(){
   const svc=["Outpatient Clinic","Elective","Annual Leave"];
   const clinicLoad=rows.map(r=>cum[r.id]["Outpatient Clinic"]||0);
   const belowFloor=MANDATORY.filter(m=>rows.every(r=>scfhsTier(scfhsWeeks(cum[r.id],m),m)==="under"));
+  // The band spans the full table, so its label is pinned separately or it scrolls out of view.
   const secHead=t=>el("tr",null,el("td",{colspan:String(rows.length+3),
     st:{background:"#FBF6ED",fontSize:".66rem",letterSpacing:".06em",textTransform:"uppercase",
-      fontWeight:"700",color:"rgba(31,26,18,.45)"}},t));
+      fontWeight:"700",color:"rgba(31,26,18,.45)"}},
+    el("span",{st:{position:"sticky",left:"14px",display:"inline-block"}},t)));
   const plainRow=m=>el("tr",null,
     el("td",{cls:"sticky-col"},el("span",{cls:"rot-badge",st:rotStyle(m)},m)),
-    el("td",{st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
-    el("td",{st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
+    el("td",{cls:"sticky-col2",st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
+    el("td",{cls:"sticky-col3",st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
     ...rows.map(r=>el("td",{st:{textAlign:"center",fontSize:".78rem",fontWeight:"600",color:"rgba(31,26,18,.5)"}},(cum[r.id][m]||0)+" wk"))
   );
-  return el("div",null,
+  const thRot=el("th",{cls:"sticky-col",st:{minWidth:"176px"}},"Rotation");
+  const thReq=el("th",{cls:"sticky-col2",st:{textAlign:"center",minWidth:"76px"}},"SCFHS");
+  let wrap;
+  const out=el("div",null,
     el("div",{cls:"card"},
       el("div",{cls:"lbl"},"Cumulative training weeks vs SCFHS"),
       el("div",{cls:"sub",st:{marginTop:"6px"}},
         "Every year on record, summed. The tick on each bar is the programme floor of "+
         Math.round(SCFHS_FLOOR*100)+"% of the SCFHS minimum. Green meets the minimum in full, "+
         "amber clears the floor, orange is below it."),
-      el("div",{cls:"tbl-wrap",st:{marginTop:"12px"}},
+      el("div",{cls:"flex-wrap",st:{marginTop:"10px"}},
+        ...["all"].concat(lvls).map(l=>el("button",{
+          cls:"sbtn "+(l===lvl?"":"ghost"),
+          st:Object.assign({fontSize:".78rem"},l===lvl?{background:"#c96a4a",color:"#fff"}:{}),
+          onClick:()=>set({rotTrackLvl:l})
+        },l==="all"?"All levels":l))
+      ),
+      el("div",{cls:"sub",st:{marginTop:"8px"}},
+        rows.length+" resident"+(rows.length===1?"":"s")+" with rota history"),
+      wrap=el("div",{cls:"tbl-wrap scfhs-tbl",st:{marginTop:"12px"}},
         el("table",null,
           el("thead",null,el("tr",null,
-            el("th",{cls:"sticky-col",st:{minWidth:"150px"}},"Rotation"),
-            el("th",{st:{textAlign:"center",minWidth:"78px"}},"SCFHS"),
-            el("th",{st:{textAlign:"center",minWidth:"78px"}},"Floor"),
+            thRot,thReq,
+            el("th",{cls:"sticky-col3",st:{textAlign:"center",minWidth:"76px"}},"Floor"),
             ...rows.map(r=>el("th",{st:{textAlign:"center",minWidth:"92px"}},dname(r.name)))
           )),
           el("tbody",null,
@@ -3368,8 +3413,8 @@ function rotTrackCumulative(){
                   el("div",{cls:"sub",st:{fontSize:".66rem",marginTop:"3px"}},
                     "incl. "+credited.filter(k=>SCFHS_CREDIT[k]===m).join(" + ")):null
               ),
-              el("td",{st:{textAlign:"center",fontWeight:"700",fontSize:".78rem",color:"rgba(31,26,18,.45)"}},SCFHS_TOTAL[m]+" wk"),
-              el("td",{st:{textAlign:"center",fontWeight:"700",fontSize:".78rem",color:"rgba(31,26,18,.45)"}},Math.ceil(SCFHS_TOTAL[m]*SCFHS_FLOOR)+" wk"),
+              el("td",{cls:"sticky-col2",st:{textAlign:"center",fontWeight:"700",fontSize:".78rem",color:"rgba(31,26,18,.45)"}},SCFHS_TOTAL[m]+" wk"),
+              el("td",{cls:"sticky-col3",st:{textAlign:"center",fontWeight:"700",fontSize:".78rem",color:"rgba(31,26,18,.45)"}},Math.ceil(SCFHS_TOTAL[m]*SCFHS_FLOOR)+" wk"),
               ...rows.map(r=>cell(scfhsWeeks(cum[r.id],m),m))
             )),
             secHead("Counted above, toward General Internal Medicine"),
@@ -3378,8 +3423,8 @@ function rotTrackCumulative(){
             ...svc.map(plainRow),
             el("tr",null,
               el("td",{cls:"sticky-col",st:{fontWeight:"700"}},"Total on record"),
-              el("td",{st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
-              el("td",{st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
+              el("td",{cls:"sticky-col2",st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
+              el("td",{cls:"sticky-col3",st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
               ...rows.map(r=>el("td",{st:{textAlign:"center",fontWeight:"700",fontSize:".78rem"}},
                 Object.keys(cum[r.id]).reduce((s,k)=>s+cum[r.id][k],0)+" wk"))
             )
@@ -3403,6 +3448,10 @@ function rotTrackCumulative(){
       )
     )
   );
+  const sync=()=>syncScfhsCols(wrap,thRot,thReq);
+  setTimeout(sync,0);
+  new ResizeObserver(sync).observe(wrap);
+  return out;
 }
 function renderRotTrack(){
   const vr=visRes();
