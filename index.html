@@ -436,10 +436,35 @@ const CURRENT_ACADEMIC_YEAR=__CUR.academicYear;
 // ROTA_LEAVE_META[residentId][block] = {weeks:2, position:'start'|'end', kind:'annual'|'maternity'}
 let FULL_ROTA={};
 let ROTA_LEAVE_META={};
+// Every academic year of the rota, not just the current one. loadRotations() is
+// deliberately year-scoped because the grid and the ical feed only ever show "now";
+// the Rotation Tracker needs the whole training history, so it loads separately and
+// on demand. Null until first requested.
+let HIST_ROTA=null;
+let HIST_ROTA_STATE="idle"; // idle | loading | ready | error
 // Chief Resident designation (one chief, one co-chief max)
 let CHIEF_RES_ID=null;
 let CO_CHIEF_RES_ID=null;
 const MANDATORY=["GIM/CTU","Cardiology","Pulmonology","Nephrology","Gastroenterology","Endocrinology","Hematology","Rheumatology","Neurology","Infectious Disease","ICU","Emergency Medicine","Oncology"];
+// Minimum weeks per rotation, SCFHS Saudi Board Internal Medicine curriculum (2015),
+// p.23 junior (R1-R2) and p.25 senior (R3-R4). Neurology is printed in BOTH the 8-week
+// and the 4-week senior lists; the rotations roadmap on p.27 gives R3 two Neurology
+// blocks, so 8 is the figure used here and the 4-week entry is treated as a misprint.
+const SCFHS_JUNIOR={"GIM/CTU":24,"Emergency Medicine":8,"ICU":8,"Cardiology":8,"Pulmonology":8,"Gastroenterology":8,"Nephrology":8,"Endocrinology":4,"Infectious Disease":4,"Rheumatology":4,"Neurology":4};
+const SCFHS_SENIOR={"GIM/CTU":16,"Cardiology":8,"Gastroenterology":8,"Endocrinology":8,"Hematology":8,"Neurology":8,"Infectious Disease":8,"Rheumatology":8,"ICU":4,"Pulmonology":4,"Nephrology":4,"Oncology":4};
+const SCFHS_TOTAL={};
+MANDATORY.forEach(m=>{SCFHS_TOTAL[m]=(SCFHS_JUNIOR[m]||0)+(SCFHS_SENIOR[m]||0);});
+// Night Duty, Medical Consult and Outpatient Clinic are DSFH service commitments with
+// no SCFHS counterpart. They consume real weeks, which is why the programme works to a
+// floor of half the SCFHS minimum rather than the full figure.
+const SCFHS_FLOOR=0.5;
+function scfhsTier(weeks,rot){
+  const need=SCFHS_TOTAL[rot]||0;
+  if(!need)return "na";
+  if(weeks>=need)return "full";
+  if(weeks>=need*SCFHS_FLOOR)return "floor";
+  return "under";
+}
 // Ongoing 50%: Quiz 15 | MM 15 | Academic Day 15 | Presentations 5
 // Yearly 50%: Committee 10 | QI 10 | Publication 10 | Oral-or-Poster 10 | Awards 5 | Volunteering 5
 // MM/Academic Day attendance is scoped to the current academic year (see loadSchedules()).
@@ -667,6 +692,59 @@ async function loadRotations(){
   render();
 }
 // entries: [{residentId, block, rotationName, leaveWeeks(optional,0), leavePosition(optional,'none')}]
+// Loads every academic year for the Rotation Tracker. Segment-2 rows are kept here
+// (unlike FULL_ROTA, which pins to segment 1) because a split block is two genuine
+// rotations and both count toward training time.
+async function loadRotaHistory(force){
+  if(HIST_ROTA_STATE==="loading")return;
+  if(HIST_ROTA_STATE==="ready"&&!force)return;
+  HIST_ROTA_STATE="loading";
+  const{data,error}=await sb.from("rotations")
+    .select("resident_id,academic_year,block_number,segment,rotation_name,weeks,leave_weeks,leave_position");
+  if(error){HIST_ROTA_STATE="error";HIST_ROTA=null;render();return;}
+  const byRes={},years={};
+  (data||[]).forEach(row=>{
+    const ay=row.academic_year;years[ay]=true;
+    const rid=row.resident_id;
+    if(!byRes[rid])byRes[rid]={};
+    if(!byRes[rid][ay])byRes[rid][ay]={};
+    const blk=String(row.block_number);
+    if(!byRes[rid][ay][blk])byRes[rid][ay][blk]=[];
+    byRes[rid][ay][blk].push({
+      seg:row.segment||1,
+      rot:row.rotation_name||"",
+      // `weeks` was added with the segment migration; rows written before it default to
+      // a whole block, except where the older leave split already implies a half.
+      weeks:row.weeks||((row.leave_weeks>0)?2:4),
+      leaveWeeks:row.leave_weeks||0,
+      leavePos:row.leave_position||"none"
+    });
+  });
+  Object.keys(byRes).forEach(rid=>Object.keys(byRes[rid]).forEach(ay=>
+    Object.keys(byRes[rid][ay]).forEach(b=>byRes[rid][ay][b].sort((x,y)=>x.seg-y.seg))));
+  HIST_ROTA={byRes,years:Object.keys(years).map(Number).sort((a,b)=>a-b)};
+  HIST_ROTA_STATE="ready";
+  render();
+}
+// Cumulative weeks per rotation across every year on record for one resident.
+function histWeeksFor(resId,onlyYear){
+  const acc={};
+  const per=(HIST_ROTA&&HIST_ROTA.byRes[resId])||{};
+  Object.keys(per).forEach(ay=>{
+    if(onlyYear!=null&&Number(ay)!==Number(onlyYear))return;
+    Object.keys(per[ay]).forEach(blk=>per[ay][blk].forEach(c=>{
+      if(c.rot)acc[c.rot]=(acc[c.rot]||0)+c.weeks;
+      if(c.leaveWeeks>0)acc["Annual Leave"]=(acc["Annual Leave"]||0)+c.leaveWeeks;
+    }));
+  });
+  return acc;
+}
+// Academic years this resident actually has rota rows for, oldest first.
+function histYearsFor(resId){
+  return Object.keys((HIST_ROTA&&HIST_ROTA.byRes[resId])||{}).map(Number).sort((a,b)=>a-b);
+}
+// Label a year the way the rota sheets do: academic_year 2022 is the 2022-23 cycle.
+function ayLabel(ay){return ay+"-"+String((ay+1)%100).padStart(2,"0");}
 async function saveRotaCells(entries){
   // Only send columns that exist in the base schema (block_label / created_by may not
   // be present in older deployments — omit them so the upsert always succeeds).
@@ -3081,24 +3159,86 @@ function renderRotaTable(resOverride){
   );
 }
 // ─── ROTATION TRACKER ────────────────────────────────────────────────────────
-function renderRotTrack(){
-  const vr=visRes();
-  const rid=STATE.rotTrackRes||(vr[0]?.id);
-  const res=resById(rid)||vr[0];
-  if(!res)return el("div",null,"No residents");
-  const done=ROT_H[res.id]||[];
-  const remaining=MANDATORY.filter(m=>!done.includes(m));
-  return el("div",{cls:"content"},
-    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
-      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
-      el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"Rotation Tracker")
-    ),
+// ─── ROTATION TRACKER (PD only) ──────────────────────────────────────────────
+// Three views over the same rota rows: one year across all residents, one resident
+// across all years, and cumulative training weeks against the SCFHS minimums.
+function rotTrackTab(){return STATE.rotTrackTab||"resident";}
+// One grid cell. A block holds either one rotation, one rotation plus 2 weeks of
+// leave, or two rotations of 2 weeks each (segments 1 and 2).
+function rotHistCell(cells){
+  if(!cells||!cells.length)return el("span",{st:{color:"rgba(31,26,18,.25)",fontSize:".75rem"}},"—");
+  const tight=cells.length>1||cells.some(c=>c.leaveWeeks>0);
+  const bst=r=>Object.assign(rotStyle(r),tight?{fontSize:".62rem",padding:"2px 6px"}:{});
+  const parts=[];
+  cells.forEach(c=>{
+    if(!c.rot)return;
+    if(c.leaveWeeks>0){
+      const lv=el("span",{cls:"rot-badge",st:bst("Annual Leave")},"Leave 2w");
+      const rt=el("span",{cls:"rot-badge",st:bst(c.rot)},(ROT_ABBR[c.rot]||c.rot)+" 2w");
+      if(c.leavePos==="start"){parts.push(lv,rt);}else{parts.push(rt,lv);}
+    }else{
+      parts.push(el("span",{cls:"rot-badge",st:bst(c.rot)},ROT_ABBR[c.rot]||c.rot));
+    }
+  });
+  if(!parts.length)return el("span",{st:{color:"rgba(31,26,18,.25)",fontSize:".75rem"}},"—");
+  if(parts.length===1)return parts[0];
+  return el("div",{st:{display:"flex",flexDirection:"column",gap:"2px"}},...parts);
+}
+function rotTrackLoading(){
+  if(HIST_ROTA_STATE==="error")return el("div",{cls:"card"},"Could not load rota history.");
+  return el("div",{cls:"card"},"Loading rota history…");
+}
+// ── Tab 1: one academic year, every resident
+function rotTrackByYear(){
+  const years=HIST_ROTA.years;
+  if(!years.length)return el("div",{cls:"card"},"No rota rows on record.");
+  const sel=years.includes(STATE.rotTrackYear)?STATE.rotTrackYear:years[years.length-1];
+  const rows=visRes().filter(r=>((HIST_ROTA.byRes[r.id]||{})[sel]));
+  return el("div",null,
     el("div",{cls:"card"},
-      el("div",{cls:"lbl"},"Select Resident"),
-      el("select",{onChange:e=>set({rotTrackRes:parseInt(e.target.value)})},
-        ...vr.map(r=>el("option",{value:r.id,...(r.id===rid?{selected:""}:{})},r.name+" ("+r.level+")"))
-      )
+      el("div",{cls:"lbl"},"Academic Year"),
+      el("div",{cls:"flex-wrap",st:{marginTop:"8px"}},
+        ...years.map(y=>el("button",{
+          cls:"sbtn "+(y===sel?"":"ghost"),
+          st:Object.assign({fontSize:".78rem"},y===sel?{background:"#c96a4a",color:"#fff"}:{}),
+          onClick:()=>set({rotTrackYear:y})
+        },ayLabel(y)+(y===CURRENT_ACADEMIC_YEAR?" · current":"")))
+      ),
+      el("div",{cls:"sub",st:{marginTop:"10px"}},
+        rows.length+" resident"+(rows.length===1?"":"s")+" · "+
+        (sel===CURRENT_ACADEMIC_YEAR?"current year, edited from the Rota module":"historical, read-only"))
     ),
+    rows.length===0?el("div",{cls:"card"},"No rota rows for "+ayLabel(sel)+"."):
+    el("div",{cls:"card"},
+      el("div",{cls:"tbl-wrap"},
+        el("table",null,
+          el("thead",null,el("tr",null,
+            el("th",{cls:"sticky-col",st:{minWidth:"150px"}},"Resident"),
+            ...Array.from({length:13},(_,i)=>el("th",{st:{minWidth:"78px",textAlign:"center"}},"B"+(i+1)))
+          )),
+          el("tbody",null,...rows.map(r=>{
+            const blocks=(HIST_ROTA.byRes[r.id]||{})[sel]||{};
+            return el("tr",null,
+              el("td",{cls:"sticky-col",st:{fontWeight:"600"}},r.name),
+              ...Array.from({length:13},(_,i)=>
+                el("td",{st:{textAlign:"center"}},rotHistCell(blocks[String(i+1)])))
+            );
+          }))
+        )
+      )
+    )
+  );
+}
+// ── Tab 2: one resident, every year, with running mandatory coverage
+function rotTrackResident(res){
+  const years=histYearsFor(res.id);
+  const cum=histWeeksFor(res.id);
+  const touched=MANDATORY.filter(m=>(cum[m]||0)>0);
+  const never=MANDATORY.filter(m=>!(cum[m]||0));
+  const pct=Math.round(touched.length/MANDATORY.length*100);
+  const totalWeeks=Object.keys(cum).reduce((s,k)=>s+cum[k],0);
+  const running={};
+  return el("div",null,
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
         avEl(res),
@@ -3109,48 +3249,167 @@ function renderRotTrack(){
         levelBadge(res.level)
       ),
       el("div",{cls:"grid-4",st:{marginBottom:"14px"}},
-        el("div",{cls:"statbox"},el("div",{cls:"statval"},done.length),el("div",{cls:"statlbl"},"Completed")),
-        el("div",{cls:"statbox"},el("div",{cls:"statval"},remaining.length),el("div",{cls:"statlbl"},"Remaining")),
-        el("div",{cls:"statbox"},el("div",{cls:"statval"},MANDATORY.length),el("div",{cls:"statlbl"},"Total Required")),
-        el("div",{cls:"statbox"},el("div",{cls:"statval"},Math.round(done.length/MANDATORY.length*100)+"%"),el("div",{cls:"statlbl"},"Progress"))
+        el("div",{cls:"statbox"},el("div",{cls:"statval"},touched.length),el("div",{cls:"statlbl"},"Rotations Done")),
+        el("div",{cls:"statbox"},el("div",{cls:"statval"},never.length),el("div",{cls:"statlbl"},"Never Rotated")),
+        el("div",{cls:"statbox"},el("div",{cls:"statval"},totalWeeks),el("div",{cls:"statlbl"},"Weeks On Record")),
+        el("div",{cls:"statbox"},el("div",{cls:"statval"},pct+"%"),el("div",{cls:"statlbl"},"Coverage"))
       ),
       el("div",{cls:"pbar-bg",st:{height:"12px",marginBottom:"16px"}},
-        el("div",{cls:"pbar",st:{width:Math.round(done.length/MANDATORY.length*100)+"%",background:"#10b981"}})
+        el("div",{cls:"pbar",st:{width:pct+"%",background:pct===100?"#10b981":"#c96a4a"}})
       ),
-      el("div",{cls:"lbl"},"Mandatory Rotations Status"),
+      el("div",{cls:"lbl"},"Mandatory Rotations"),
       el("div",{cls:"flex-wrap",st:{marginTop:"8px"}},
         ...MANDATORY.map(m=>{
-          const isDone=done.includes(m);
-          const c=rotColor(m);
-          return el("div",{
-            st:{display:"flex",alignItems:"center",gap:"6px",background:isDone?c.bg:"#F6EFE2",
-              border:"1px solid "+(isDone?c.bg:"rgba(31,26,18,.1)"),borderRadius:"8px",
-              padding:"6px 10px",opacity:isDone?"1":".6"}
-          },
-            el("span",{st:{fontSize:"1rem"}},isDone?"":""),
-            el("span",{st:{fontSize:".82rem",fontWeight:"600",color:isDone?c.tx:"#94a3b8"}},m)
+          const w=cum[m]||0,c=rotColor(m),tier=scfhsTier(w,m);
+          return el("div",{st:{display:"flex",alignItems:"center",gap:"7px",
+            background:w?c.bg:"#F6EFE2",border:"1px solid "+(w?c.bg:"rgba(31,26,18,.1)"),
+            borderRadius:"8px",padding:"6px 10px",opacity:w?"1":".55"}},
+            el("span",{st:{fontSize:".82rem",fontWeight:"600",color:w?c.tx:"#94a3b8"}},m),
+            el("span",{st:{fontSize:".72rem",fontWeight:"700",fontVariantNumeric:"tabular-nums",
+              color:tier==="under"?"#B4653F":(w?c.tx:"#94a3b8")}},w+"w")
           );
         })
-      ),
-      canEdit()?el("div",{st:{marginTop:"16px"}},
-        el("div",{cls:"lbl"},"Toggle Completed Rotations"),
-        el("div",{cls:"flex-wrap",st:{marginTop:"8px"}},
-          ...MANDATORY.map(m=>{
-            const isDone=done.includes(m);
-            return el("button",{
-              cls:"sbtn "+(isDone?"success":"ghost"),
-              st:{fontSize:".78rem"},
-              onClick:()=>{
-                const cur=ROT_H[res.id]||[];
-                if(isDone)ROT_H[res.id]=cur.filter(x=>x!==m);
-                else ROT_H[res.id]=[...cur,m].sort();
-                render();
-              }
-            },m);
-          })
+      )
+    ),
+    years.length===0?el("div",{cls:"card"},"No rota rows on record for this resident."):
+    el("div",{cls:"card"},
+      el("div",{cls:"lbl"},"Year by year"),
+      el("div",{cls:"tbl-wrap",st:{marginTop:"8px"}},
+        el("table",null,
+          el("thead",null,el("tr",null,
+            el("th",{cls:"sticky-col",st:{minWidth:"120px"}},"Year"),
+            ...Array.from({length:13},(_,i)=>el("th",{st:{minWidth:"78px",textAlign:"center"}},"B"+(i+1))),
+            el("th",{st:{textAlign:"center",minWidth:"90px"}},"Coverage")
+          )),
+          el("tbody",null,...years.map(ay=>{
+            const blocks=(HIST_ROTA.byRes[res.id]||{})[ay]||{};
+            const yw=histWeeksFor(res.id,ay);
+            Object.keys(yw).forEach(k=>{running[k]=(running[k]||0)+yw[k];});
+            const got=MANDATORY.filter(m=>running[m]).length;
+            return el("tr",null,
+              el("td",{cls:"sticky-col"},
+                el("div",{st:{fontWeight:"600"}},ayLabel(ay)),
+                ay===CURRENT_ACADEMIC_YEAR?el("div",{cls:"sub",st:{fontSize:".68rem"}},"current"):null
+              ),
+              ...Array.from({length:13},(_,i)=>
+                el("td",{st:{textAlign:"center"}},rotHistCell(blocks[String(i+1)]))),
+              el("td",{st:{textAlign:"center",fontWeight:"700",fontVariantNumeric:"tabular-nums",
+                color:got===MANDATORY.length?"#26523A":"rgba(31,26,18,.55)"}},got+"/"+MANDATORY.length)
+            );
+          }))
         )
-      ):null
+      ),
+      never.length?el("div",{cls:"sub",st:{marginTop:"10px"}},
+        "Never rotated on: "+never.join(", ")):
+        el("div",{cls:"sub",st:{marginTop:"10px"}},"All "+MANDATORY.length+" mandatory rotations covered.")
     )
+  );
+}
+// ── Tab 3: cumulative weeks vs the SCFHS minimums
+function rotTrackCumulative(){
+  const rows=visRes().filter(r=>histYearsFor(r.id).length);
+  if(!rows.length)return el("div",{cls:"card"},"No rota history to compare yet.");
+  const cum={};rows.forEach(r=>{cum[r.id]=histWeeksFor(r.id);});
+  const cell=(w,rot)=>{
+    const need=SCFHS_TOTAL[rot],tier=scfhsTier(w,rot);
+    const col=tier==="full"?"#26523A":(tier==="floor"?"#8a6d1f":"#B4653F");
+    const fill=tier==="full"?"#7FB89C":(tier==="floor"?"#E0C070":"#D98E6A");
+    return el("td",{st:{textAlign:"center"}},
+      el("div",{st:{fontWeight:"700",fontSize:".78rem",fontVariantNumeric:"tabular-nums",color:col}},w+" wk"),
+      el("div",{st:{position:"relative",height:"7px",borderRadius:"99px",background:"rgba(31,26,18,.07)",marginTop:"3px"}},
+        el("div",{st:{position:"absolute",left:"0",top:"0",bottom:"0",borderRadius:"99px",
+          background:fill,width:Math.min(100,need?(w/need)*100:0)+"%"}}),
+        el("div",{st:{position:"absolute",left:(SCFHS_FLOOR*100)+"%",top:"-2px",bottom:"-2px",
+          width:"1px",background:"rgba(31,26,18,.3)"}})
+      )
+    );
+  };
+  const svc=["Night Duty","Medical Consult","Outpatient Clinic","Elective","Annual Leave"];
+  const svcLoad=rows.map(r=>(cum[r.id]["Night Duty"]||0)+(cum[r.id]["Medical Consult"]||0)+(cum[r.id]["Outpatient Clinic"]||0));
+  const belowFloor=MANDATORY.filter(m=>rows.every(r=>scfhsTier(cum[r.id][m]||0,m)==="under"));
+  return el("div",null,
+    el("div",{cls:"card"},
+      el("div",{cls:"lbl"},"Cumulative training weeks vs SCFHS"),
+      el("div",{cls:"sub",st:{marginTop:"6px"}},
+        "Every year on record, summed. The tick on each bar is the programme floor of "+
+        Math.round(SCFHS_FLOOR*100)+"% of the SCFHS minimum. Green meets the minimum in full, "+
+        "amber clears the floor, orange is below it."),
+      el("div",{cls:"tbl-wrap",st:{marginTop:"12px"}},
+        el("table",null,
+          el("thead",null,el("tr",null,
+            el("th",{cls:"sticky-col",st:{minWidth:"150px"}},"Rotation"),
+            el("th",{st:{textAlign:"center",minWidth:"78px"}},"SCFHS"),
+            el("th",{st:{textAlign:"center",minWidth:"78px"}},"Floor"),
+            ...rows.map(r=>el("th",{st:{textAlign:"center",minWidth:"92px"}},dname(r.name)))
+          )),
+          el("tbody",null,
+            ...MANDATORY.map(m=>el("tr",null,
+              el("td",{cls:"sticky-col"},el("span",{cls:"rot-badge",st:rotStyle(m)},m)),
+              el("td",{st:{textAlign:"center",fontWeight:"700",fontSize:".78rem",color:"rgba(31,26,18,.45)"}},SCFHS_TOTAL[m]+" wk"),
+              el("td",{st:{textAlign:"center",fontWeight:"700",fontSize:".78rem",color:"rgba(31,26,18,.45)"}},Math.ceil(SCFHS_TOTAL[m]*SCFHS_FLOOR)+" wk"),
+              ...rows.map(r=>cell(cum[r.id][m]||0,m))
+            )),
+            el("tr",null,el("td",{colspan:String(rows.length+3),
+              st:{background:"#FBF6ED",fontSize:".66rem",letterSpacing:".06em",textTransform:"uppercase",
+                fontWeight:"700",color:"rgba(31,26,18,.45)"}},
+              "No SCFHS requirement — service and non-training weeks")),
+            ...svc.map(m=>el("tr",null,
+              el("td",{cls:"sticky-col"},el("span",{cls:"rot-badge",st:rotStyle(m)},m)),
+              el("td",{st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
+              el("td",{st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
+              ...rows.map(r=>el("td",{st:{textAlign:"center",fontSize:".78rem",fontWeight:"600",color:"rgba(31,26,18,.5)"}},(cum[r.id][m]||0)+" wk"))
+            )),
+            el("tr",null,
+              el("td",{cls:"sticky-col",st:{fontWeight:"700"}},"Total on record"),
+              el("td",{st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
+              el("td",{st:{textAlign:"center",color:"rgba(31,26,18,.3)"}},"—"),
+              ...rows.map(r=>el("td",{st:{textAlign:"center",fontWeight:"700",fontSize:".78rem"}},
+                Object.keys(cum[r.id]).reduce((s,k)=>s+cum[r.id][k],0)+" wk"))
+            )
+          )
+        )
+      )
+    ),
+    el("div",{cls:"card",st:{borderLeft:"3px solid #c96a4a"}},
+      el("div",{cls:"lbl"},"Reading this"),
+      el("div",{cls:"sub",st:{marginTop:"6px",lineHeight:"1.65"}},
+        belowFloor.length?
+          ("Below the "+Math.round(SCFHS_FLOOR*100)+"% floor for every resident shown: "+belowFloor.join(", ")+". "):
+          ("Every rotation clears the "+Math.round(SCFHS_FLOOR*100)+"% floor for at least one resident. "),
+        "Night Duty, Medical Consult and Outpatient Clinic take "+
+        Math.min(...svcLoad)+"–"+Math.max(...svcLoad)+" weeks per resident and count toward no SCFHS "+
+        "requirement, which is most of the reason the shortfalls exist. Weeks still unassigned in "+
+        ayLabel(CURRENT_ACADEMIC_YEAR)+" are the room available to close them."
+      )
+    )
+  );
+}
+function renderRotTrack(){
+  const vr=visRes();
+  const rid=STATE.rotTrackRes||(vr[0]&&vr[0].id);
+  const res=resById(rid)||vr[0];
+  if(!res)return el("div",null,"No residents");
+  if(HIST_ROTA_STATE==="idle")loadRotaHistory();
+  const tab=rotTrackTab();
+  const ready=HIST_ROTA_STATE==="ready"&&HIST_ROTA;
+  return el("div",{cls:"content"},
+    el("div",{cls:"flex-gap",st:{marginBottom:"16px"}},
+      el("button",{cls:"back-btn",onClick:()=>set({mod:null})},"Back"),
+      el("h2",{st:{fontWeight:"800",color:"#1F1A12"}},"Rotation Tracker")
+    ),
+    el("div",{cls:"ov-subtabs"},
+      el("div",{cls:"ov-subtab"+(tab==="year"?" active":""),onClick:()=>set({rotTrackTab:"year"})},"By year"),
+      el("div",{cls:"ov-subtab"+(tab==="resident"?" active":""),onClick:()=>set({rotTrackTab:"resident"})},"Resident history"),
+      el("div",{cls:"ov-subtab"+(tab==="cum"?" active":""),onClick:()=>set({rotTrackTab:"cum"})},"Cumulative vs SCFHS")
+    ),
+    tab==="resident"?el("div",{cls:"card"},
+      el("div",{cls:"lbl"},"Select Resident"),
+      el("select",{onChange:e=>set({rotTrackRes:parseInt(e.target.value)})},
+        ...vr.map(r=>el("option",Object.assign({value:r.id},r.id===res.id?{selected:""}:{}),r.name+" ("+r.level+")"))
+      )
+    ):null,
+    !ready?rotTrackLoading():
+      (tab==="year"?rotTrackByYear():tab==="cum"?rotTrackCumulative():rotTrackResident(res))
   );
 }
 // ─── SHARED: weekly-banded schedule table (mirrors the committee's distributed sheet) ──
