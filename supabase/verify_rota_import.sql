@@ -24,15 +24,15 @@ where coalesce(rotation_name,'') <> ''
          'Infectious Disease','Emergency Medicine','Oncology','Outpatient Clinic',
          'Elective','Annual Leave','Maternity Leave','Medical Consult','Freeze'));
 
--- 3. Import: the 7 R4s should have history in 2021-2024, not just 2025.
+-- 3. Import: 676 historical rows across the 26 residents who have a prior year.
+--    R1s are excluded on purpose — they are in their first year.
 select 'history' as check,
-       case when count(*) = 305 then 'OK'
-            else count(*)::text || ' rows, expected 305' end as status,
-       string_agg(distinct academic_year::text, ', ' order by academic_year::text) as years
+       case when count(*) = 676 then 'OK'
+            else count(*)::text || ' rows, expected 676' end as status,
+       count(distinct r.resident_id) || ' residents, years ' ||
+       string_agg(distinct r.academic_year::text, ', ' order by r.academic_year::text) as detail
 from rotations r
-join residents res on res.id = r.resident_id
-where res.username in ('harbi','joharji','bashanfar','omarb','zahra','yara','rafal')
-  and r.academic_year < 2025;
+where r.academic_year < 2025;
 
 -- 4. No block can run longer than 4 weeks. Fails until fix_leave_block_weeks.sql is run.
 select 'block length' as check,
@@ -41,14 +41,14 @@ select 'block length' as check,
 from rotations
 where weeks + coalesce(leave_weeks,0) > 4;
 
--- 5. Weeks per resident-year. Every completed year should total 52,
---    except Bashanfar 2022 (48 — block 1 is genuinely blank in the source).
+-- 5. Any resident-year that does not total 52 weeks. Expect exactly one row:
+--    bashanfar 2022 at 48, where block 1 is genuinely blank in the source.
 --    2025 is the year in progress, so it may legitimately come in under 52.
-select res.username, r.academic_year,
+select res.username, res.level, r.academic_year,
        sum(r.weeks + coalesce(r.leave_weeks,0)) as total_weeks,
        count(*) as rows
 from rotations r
 join residents res on res.id = r.resident_id
-where res.username in ('harbi','joharji','bashanfar','omarb','zahra','yara','rafal')
-group by res.username, r.academic_year
-order by res.username, r.academic_year;
+group by res.username, res.level, r.academic_year
+having sum(r.weeks + coalesce(r.leave_weeks,0)) <> 52
+order by r.academic_year, res.username;
