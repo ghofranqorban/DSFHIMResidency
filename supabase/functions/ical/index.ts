@@ -454,6 +454,55 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ── 6. Program events (Calendar page "+" button) ───────────────────────────
+  // Deliberately not behind a calendar_prefs toggle: PD/chief pick the audience
+  // when they create the event, so a resident who receives one is meant to see it.
+  {
+    const { data: cevs } = await sb
+      .from("calendar_events")
+      .select("id, event_date, title, all_day, start_time, end_time, target_all, target_resident_ids")
+      .or("academic_year.eq." + ay + ",academic_year.is.null")
+      .order("event_date");
+
+    (cevs ?? []).forEach((e: {
+      id: string; event_date: string; title: string; all_day: boolean;
+      start_time: string | null; end_time: string | null;
+      target_all: boolean; target_resident_ids: number[] | null;
+    }) => {
+      const forMe =
+        e.target_all || (resId && (e.target_resident_ids ?? []).some((r) => r == resId));
+      if (!forMe) return;
+      const ds = e.event_date.replace(/-/g, "");
+      const body = [
+        "BEGIN:VEVENT",
+        "UID:dsfh-calev-" + e.id + "@dsfh.local",
+        fold("SUMMARY:\uD83D\uDCC5 " + icsEscape(e.title)),
+      ];
+      if (e.all_day || !e.start_time || !e.end_time) {
+        // DTEND is exclusive for date-valued events, so it is the following day.
+        const [y, m, d] = e.event_date.split("-").map(Number);
+        const end = new Date(Date.UTC(y, m - 1, d + 1));
+        body.push("DTSTART;VALUE=DATE:" + ds, "DTEND;VALUE=DATE:" + icsDate(end));
+      } else {
+        // Postgres `time` arrives as HH:MM:SS, but an <input type=time> value is HH:MM.
+        const hm = (t: string) => {
+          const [h, m, s] = t.split(":");
+          return h.padStart(2, "0") + (m ?? "00").padStart(2, "0") + (s ?? "00").padStart(2, "0");
+        };
+        body.push(
+          "DTSTART;TZID=Asia/Riyadh:" + ds + "T" + hm(e.start_time),
+          "DTEND;TZID=Asia/Riyadh:" + ds + "T" + hm(e.end_time),
+        );
+      }
+      body.push(
+        fold("DESCRIPTION:" + icsEscape("DSFH IM Residency Program \u2022 " + e.title)),
+        "CATEGORIES:Program Event",
+        "END:VEVENT",
+      );
+      push(...body);
+    });
+  }
+
   lines.push("END:VCALENDAR");
 
   return new Response(lines.join("\r\n"), {

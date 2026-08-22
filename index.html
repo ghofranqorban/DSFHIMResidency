@@ -404,6 +404,83 @@ th.ov-th{text-align:center;}
 .notif-time{font-size:.71rem;color:rgba(31,26,18,.38);margin-top:3px;}
 .notif-empty{padding:36px 16px;text-align:center;color:rgba(31,26,18,.35);font-size:.88rem;}
 @media(max-width:600px){.notif-panel{width:100%;}}
+/* ─── Calendar ─── */
+.cl-hero{background:linear-gradient(135deg,#7c3a20 0%,#c96a4a 55%,#e8956d 100%);border-radius:18px;padding:26px 28px 40px;position:relative;overflow:hidden;color:#FEFBF3;}
+.cl-hero::after{content:'';position:absolute;right:-60px;top:-70px;width:230px;height:230px;border-radius:50%;background:rgba(254,251,243,.09);}
+.cl-hero::before{content:'';position:absolute;left:-40px;bottom:-90px;width:180px;height:180px;border-radius:50%;background:rgba(31,26,18,.07);}
+.cl-hero .lbl{font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(254,251,243,.72);position:relative;}
+.cl-hero h1{font-family:'Playfair Display',Georgia,serif;font-weight:400;color:#FEFBF3;font-size:2.1rem;margin:6px 0 4px;position:relative;line-height:1.1;}
+.cl-hero p{color:rgba(254,251,243,.78);font-size:.84rem;position:relative;}
+.cl-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:-22px;position:relative;z-index:2;}
+.cl-tile{background:#FEFBF3;border-radius:14px;box-shadow:0 4px 16px rgba(31,26,18,.10);padding:14px 16px;}
+.cl-tile .n{font-family:'Playfair Display',serif;font-size:1.5rem;line-height:1.15;}
+.cl-tile .t{font-size:.68rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:rgba(31,26,18,.5);}
+.cl-strip{display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:14px;background:linear-gradient(90deg,rgba(201,106,74,.10),rgba(201,106,74,0));margin:28px 0 22px;}
+.cl-strip .bn{font-family:'Playfair Display',serif;font-size:1.15rem;}
+.cl-strip .meta{font-size:.76rem;color:rgba(31,26,18,.55);}
+.cl-newweek{margin-left:auto;font-size:.65rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#26523A;background:rgba(127,184,156,.22);padding:5px 11px;border-radius:9999px;}
+.cl-nav{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
+.cl-nav h2{font-family:'Playfair Display',serif;font-weight:400;font-size:1.5rem;margin:0 auto 0 0;line-height:1.1;}
+.cl-ico{width:32px;height:32px;border-radius:9999px;border:none;background:#F6EFE2;cursor:pointer;display:grid;place-items:center;color:#4A4134;transition:background .15s;flex:none;}
+.cl-ico:hover{background:#EDE5DD;}
+.cl-dow{display:grid;grid-template-columns:repeat(7,1fr);}
+.cl-dow div{font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(31,26,18,.4);padding:0 0 8px 2px;}
+.cl-grid{display:grid;grid-template-columns:repeat(7,1fr);border-top:1px solid rgba(31,26,18,.07);}
+.cl-cell{min-height:104px;padding:7px 7px 9px;border-bottom:1px solid rgba(31,26,18,.07);border-right:1px solid rgba(31,26,18,.07);display:flex;flex-direction:column;gap:3px;position:relative;}
+.cl-cell:nth-child(7n){border-right:none;}
+.cl-cell.we{background:rgba(246,239,226,.6);}
+.cl-cell.out{background:rgba(246,239,226,.25);}
+.cl-cell.out .cl-dn{color:rgba(31,26,18,.22);}
+.cl-cell.new{background:rgba(127,184,156,.09);}
+.cl-dn{font-size:.76rem;font-weight:600;color:rgba(31,26,18,.62);margin-bottom:1px;}
+.cl-cell.today .cl-dn{background:#c96a4a;color:#FEFBF3;width:22px;height:22px;border-radius:9999px;display:grid;place-items:center;font-size:.7rem;}
+.cl-ev{font-size:.63rem;font-weight:600;line-height:1.35;padding:2px 6px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:filter .15s;}
+.cl-ev:hover{filter:brightness(.94);}
+.cl-more{font-size:.6rem;color:rgba(31,26,18,.42);padding-left:6px;}
+.cl-cell .cl-add{position:absolute;top:5px;right:5px;width:19px;height:19px;border-radius:9999px;border:none;background:rgba(31,26,18,.07);color:rgba(31,26,18,.5);cursor:pointer;display:none;place-items:center;padding:0;}
+.cl-cell:hover .cl-add{display:grid;}
+.cl-cell .cl-add:hover{background:#c96a4a;color:#FEFBF3;}
+.cl-cell.hl{box-shadow:inset 3px 0 0 var(--hl);}
+.cl-ev.custom{display:flex;align-items:center;gap:4px;cursor:pointer;}
+.cl-ev.custom .cdot{width:5px;height:5px;border-radius:50%;background:currentColor;flex:none;}
+.cl-daytag{font-size:.58rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:4px;align-self:flex-start;cursor:pointer;}
+.cl-ev.targeted::after,.cl-daytag.targeted::after{content:'';display:inline-block;width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.55;margin-left:5px;vertical-align:middle;}
+.cl-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:22px;padding-top:18px;border-top:1px solid rgba(31,26,18,.06);}
+.cl-lg{display:flex;align-items:center;gap:7px;font-size:.72rem;color:rgba(31,26,18,.6);}
+.cl-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+/* editor popover */
+.cl-pop{position:absolute;z-index:30;width:262px;background:#FEFBF3;border-radius:14px;box-shadow:0 10px 34px rgba(31,26,18,.18);padding:16px;text-align:left;}
+.cl-pop h3{font-family:'Playfair Display',serif;font-weight:400;font-size:1.05rem;margin:0 0 2px;}
+.cl-pop .sub{font-size:.7rem;color:rgba(31,26,18,.45);margin-bottom:13px;}
+/* direct children only — the resident rows are <label>s too and must not inherit this */
+.cl-pop>label{display:block;font-size:.65rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(31,26,18,.45);margin:11px 0 5px;}
+.cl-pop input[type=text],.cl-pop input[type=time]{width:100%;border:none;border-bottom:1px solid rgba(31,26,18,.15);background:transparent;font-family:'Inter',system-ui,sans-serif;font-size:.84rem;padding:5px 2px;color:#1F1A12;outline:none;border-radius:0;}
+.cl-pop input:focus{border-bottom-color:#c96a4a;}
+.cl-seg{display:flex;gap:6px;}
+.cl-seg button{flex:1;border:none;cursor:pointer;border-radius:9999px;padding:6px 0;font-family:'Inter',system-ui,sans-serif;font-size:.7rem;font-weight:600;background:#F6EFE2;color:rgba(31,26,18,.55);}
+.cl-seg button.on{background:#1F1A12;color:#FEFBF3;}
+.cl-times{display:flex;align-items:center;gap:8px;margin-top:8px;}
+.cl-times span{font-size:.7rem;color:rgba(31,26,18,.4);}
+.cl-sw{display:flex;gap:7px;flex-wrap:wrap;}
+.cl-sw button{width:24px;height:24px;border-radius:9999px;border:2px solid transparent;cursor:pointer;padding:0;}
+.cl-sw button.on{border-color:#1F1A12;}
+.cl-popfoot{display:flex;gap:8px;margin-top:16px;}
+.cl-popfoot button{flex:1;border:none;cursor:pointer;border-radius:9999px;padding:8px 0;font-family:'Inter',system-ui,sans-serif;font-size:.75rem;font-weight:600;background:#c96a4a;color:#FEFBF3;}
+.cl-popfoot button.ghost{background:#F6EFE2;color:#4A4134;}
+.cl-popfoot button.del{background:rgba(181,32,64,.10);color:#b52040;flex:none;padding:8px 12px;}
+.cl-picker{margin-top:9px;}
+.cl-picker .psearch{width:100%;border:none;border-bottom:1px solid rgba(31,26,18,.15);background:transparent;font-family:'Inter',system-ui,sans-serif;font-size:.78rem;padding:5px 2px;outline:none;color:#1F1A12;border-radius:0;}
+.cl-picker .psearch:focus{border-bottom-color:#c96a4a;}
+.cl-chips{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0;}
+.cl-chip{font-size:.62rem;font-weight:600;background:rgba(201,106,74,.14);color:#c96a4a;border-radius:9999px;padding:3px 9px;}
+.cl-chip.none{background:transparent;color:rgba(31,26,18,.3);font-weight:400;font-style:italic;padding-left:2px;}
+.cl-plist{max-height:132px;overflow-y:auto;margin-top:2px;}
+.cl-pr{display:flex;align-items:center;gap:8px;padding:5px 2px;cursor:pointer;border-bottom:1px solid rgba(31,26,18,.05);}
+.cl-pr:last-child{border-bottom:none;}
+.cl-pr span{font-size:.76rem;font-weight:400;letter-spacing:0;text-transform:none;color:#1F1A12;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cl-pr i{font-style:normal;font-size:.6rem;font-weight:700;letter-spacing:.04em;color:rgba(31,26,18,.35);background:rgba(31,26,18,.06);border-radius:9999px;padding:2px 7px;flex:none;}
+.cl-pr input{accent-color:#c96a4a;flex:none;width:auto;}
+@media(max-width:720px){.cl-cell{min-height:76px;}.cl-tiles{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
@@ -1704,6 +1781,7 @@ let STATE={
   ovLevel:"all",ovSort:"name",
   showPromoModal:false,promoSkip:{},
   showCalModal:false,
+  calMonth:null,calResId:null,
   calToken:null,
   calPrefs:{rota:true,oncall:true,mm_mine:true,mm_all:false,teach_mine:false,teach_all:false,deadlines:true},
 };
@@ -1867,6 +1945,40 @@ async function saveAnnouncement(ann,id){
 async function deleteAnnouncement(id){
   await sb.from("announcements").delete().eq("id",id);
   await loadAnnouncements();
+}
+// ─── CALENDAR CUSTOM EVENTS (table `calendar_events` — add_calendar_events.sql) ──
+// One-off things the rota cannot know about: Quiz Day, a mock exam, a research
+// meeting. Either a whole-day highlight or a timed period, published to everyone
+// or to named residents. Also read by the `ical` edge function, so they reach phones.
+let CALENDAR_EVENTS=[];
+const CAL_EVENT_PALETTE=["#c96a4a","#A47A28","#7FB89C","#1a4a7a","#b52040","#4a5e7a"];
+async function loadCalendarEvents(){
+  const{data,error}=await sb.from("calendar_events").select("*").order("event_date").order("start_time",{nullsFirst:true});
+  if(error){console.warn("calendar_events load error (table may not exist yet)",error.message);return;}
+  CALENDAR_EVENTS=data||[];
+  render();
+}
+// RLS already hides events a resident may not see, but PD/chief receive every row,
+// so the same filter has to run client-side when they preview another calendar.
+function calEventsForResident(resId){
+  return CALENDAR_EVENTS.filter(e=>e.target_all||(e.target_resident_ids||[]).some(id=>id==resId));
+}
+function canEditCalendarEvents(){const u=STATE.user;return!!u&&(isPdRole(u.role)||u.role==="chief");}
+async function saveCalendarEvent(ev,id){
+  if(id){
+    const{error}=await sb.from("calendar_events").update(ev).eq("id",id);
+    if(error){showToast("Could not save: "+error.message);return false;}
+  }else{
+    const{error}=await sb.from("calendar_events").insert({...ev,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null});
+    if(error){showToast("Could not save: "+error.message);return false;}
+  }
+  await loadCalendarEvents();
+  return true;
+}
+async function deleteCalendarEvent(id){
+  const{error}=await sb.from("calendar_events").delete().eq("id",id);
+  if(error){showToast("Could not delete: "+error.message);return;}
+  await loadCalendarEvents();
 }
 // ─── BEST RESIDENT DATA LAYER ────────────────────────────────────────────────
 async function loadBestResident(){
@@ -2334,6 +2446,7 @@ function renderLogin(){
     loadRotations();
     loadLeaveRecords();
     loadAnnouncements();
+    loadCalendarEvents();
     loadQuizzes().then(render);
     loadKpiQuarterly();
     loadKpiProposals();
@@ -2398,6 +2511,7 @@ function modIcon(id,sz){
 const MODS=[
   {id:"rota",label:"Rota Schedule",icon:"",desc:"Master rotation plan for all residents",color:"#2a7a5a",roles:["pd","chief","consultant","resident"]},
   {id:"oncall",label:"On-Call Schedule",icon:"",desc:"Duty assignments, personal schedule & on-call statistics",color:"#1a4a7a",roles:["pd","deputy_pd","chief","consultant","resident"]},
+  {id:"calendar",label:"Calendar",icon:"",desc:"Your month at a glance — rotation, on-call, meetings, leave & program events",color:"#c96a4a",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"rottrack",label:"Rotation Tracker",icon:"",desc:"Track where every resident is rotating",color:"#c96a4a",roles:["pd"]},
   {id:"morning",label:"Morning Meetings",icon:"",desc:"Attendance, schedules & topics",color:"#c97a2a",roles:["pd","chief","consultant","resident"]},
   {id:"teaching",label:"Academic Day Schedule",icon:"",desc:"Academic Day session schedule and attendance records",color:"#A47A28",roles:["pd","chief","consultant","resident"]},
@@ -10372,6 +10486,243 @@ function renderOncallEditModal(){
     )
   );
 }
+// ─── CALENDAR ────────────────────────────────────────────────────────────────
+// A month grid over every schedule the portal already holds client-side, plus the
+// one-off events PD/chief pin on top (calendar_events). Read-only for residents;
+// PD/chief can also preview any resident's calendar.
+const CAL_SRC={
+  oncall:{c:"#1a4a7a",n:"On-call"},mm:{c:"#c97a2a",n:"Morning Meeting"},
+  teach:{c:"#A47A28",n:"Academic Day"},leave:{c:"#0e78ba",n:"Leave"},
+  ann:{c:"#26523A",n:"Deadline"},custom:{c:"#c96a4a",n:"Program event"}
+};
+const CAL_MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const CAL_DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+// Draft rows are hidden from residents exactly as they are in the source modules.
+function calSeesDrafts(){const u=STATE.user;return!!u&&(isPdRole(u.role)||u.role==="chief"||u.role==="consultant");}
+function calBuildEvents(rid){
+  const ev={},seeAll=calSeesDrafts();
+  const push=(d,t,title,time)=>{if(d)(ev[d]=ev[d]||[]).push({t,title,time});};
+  ONCALL_DATA.filter(e=>rid&&e.resident_id===rid&&(seeAll||e.published)).forEach(e=>{
+    const sl=ONCALL_SLOTS.find(s=>s.key===e.slot_key);
+    push(e.schedule_date,"oncall",(sl?sl.label:e.slot_key)+(e.is_extra?" · Extra":""),oncallHoursLabel(e.slot_key,e.schedule_date).slice(0,5));
+  });
+  MM_SESSIONS.filter(s=>seeAll||s.published).forEach(s=>{
+    const role=rid&&s.presenter_resident_id==rid?" · Presenter":rid&&s.moderator_resident_id==rid?" · Moderator":"";
+    push(s.session_date,"mm","Morning Meeting"+role+(s.topic?": "+s.topic:""),"08:00");
+  });
+  TEACH_SESSIONS.filter(s=>seeAll||s.published).forEach(s=>{
+    push(s.session_date,"teach","Academic Day"+(s.topic?": "+s.topic:""),"15:00");
+  });
+  const ld=LEAVE_DATA[rid]||{};
+  (ld.manual||[]).filter(l=>l.approved&&l.from&&l.to).forEach(l=>{
+    for(let d=l.from;d<=l.to;d=oncallAddDays(d,1))push(d,"leave","Annual leave",null);
+  });
+  (ld.rota||[]).forEach(l=>{
+    const st=blockStartDate(l.period,CURRENT_ACADEMIC_YEAR);if(!st)return;
+    // Leave is always measured against a 4-week block: it does not stretch into
+    // block 13's 5th week, and a split is labelled "Wk 1-2"/"Wk 3-4" everywhere else.
+    const wks=l.partial?l.weeks:4;
+    const off=(l.partial&&l.position==="end")?(4-l.weeks)*7:0;
+    const s0=toLocalYMD(new Date(st.getTime()+off*86400000));
+    const kind=(l.rot||"").includes("Maternity")?"Maternity leave":"Annual leave";
+    for(let i=0;i<wks*7;i++)push(oncallAddDays(s0,i),"leave",kind,null);
+  });
+  announcementsForResident(rid).filter(a=>a.deadline_date).forEach(a=>{
+    push(a.deadline_date,"ann",a.title+" — due",null);
+  });
+  // Day-scope entries (leave, deadlines) first, then the timed ones in clock order,
+  // so a cell reads top to bottom the way the day actually runs.
+  Object.keys(ev).forEach(d=>ev[d].sort((a,b)=>(a.time||"").localeCompare(b.time||"")));
+  return ev;
+}
+function calRecipientLabel(e){
+  if(e.target_all)return"Everyone";
+  const names=(e.target_resident_ids||[]).map(id=>{const r=anyResById(id);return r?dname(r.name):"#"+id;});
+  return names.length?"Only "+names.length+" resident"+(names.length>1?"s":"")+": "+names.join(", "):"No one selected";
+}
+let _calPopEl=null;
+function calClosePop(){if(_calPopEl){_calPopEl.remove();_calPopEl=null;document.removeEventListener("click",calClosePop);}}
+function calOpenPop(cell,ymd,existing){
+  calClosePop();
+  const d=oncallDateObj(ymd);
+  const p=el("div",{cls:"cl-pop",onClick:e=>e.stopPropagation()});
+  let allDay=existing?!!existing.all_day:true;
+  let color=existing&&CAL_EVENT_PALETTE.includes(existing.color)?existing.color:CAL_EVENT_PALETTE[0];
+  let audience=existing&&!existing.target_all?"some":"all";
+  const picked=new Set((existing&&existing.target_resident_ids||[]).map(String));
+  p.innerHTML=
+    "<h3>"+(existing?"Edit event":"Add event")+"</h3>"+
+    '<div class="sub">'+CAL_DOW[d.getDay()]+" "+d.getDate()+" "+CAL_MONTHS[d.getMonth()]+" "+d.getFullYear()+"</div>"+
+    "<label>Title</label><input type=\"text\" class=\"cl-title\" placeholder=\"e.g. Quiz Day\">"+
+    "<label>Duration</label>"+
+    '<div class="cl-seg cl-dur"><button data-k="all">Whole day</button><button data-k="part">Time period</button></div>'+
+    '<div class="cl-times"><input type="time" class="cl-t0"><span>to</span><input type="time" class="cl-t1"></div>'+
+    "<label>Colour</label><div class=\"cl-sw\">"+CAL_EVENT_PALETTE.map(c=>'<button data-c="'+c+'" style="background:'+c+'"></button>').join("")+"</div>"+
+    "<label>Publish to</label>"+
+    '<div class="cl-seg cl-aud"><button data-a="all">Everyone</button><button data-a="some">Selected</button></div>'+
+    '<div class="cl-picker">'+
+      '<input type="text" class="psearch" placeholder="Search residents…">'+
+      '<div class="cl-chips"></div>'+
+      '<div class="cl-plist">'+RESIDENTS.map(r=>'<label class="cl-pr"><input type="checkbox" value="'+r.id+'"><span>'+dname(r.name)+"</span><i>"+(r.level||"")+"</i></label>").join("")+"</div>"+
+    "</div>"+
+    '<div class="cl-popfoot">'+(existing?'<button class="del" title="Delete">Delete</button>':"")+
+      '<button class="ghost">Cancel</button><button class="save">Save</button></div>';
+  const title=p.querySelector(".cl-title"),t0=p.querySelector(".cl-t0"),t1=p.querySelector(".cl-t1"),
+        times=p.querySelector(".cl-times"),picker=p.querySelector(".cl-picker"),
+        chips=p.querySelector(".cl-chips"),boxes=[...p.querySelectorAll(".cl-plist input")];
+  title.value=existing?existing.title:"";
+  t0.value=existing&&existing.start_time?String(existing.start_time).slice(0,5):"13:00";
+  t1.value=existing&&existing.end_time?String(existing.end_time).slice(0,5):"15:00";
+  boxes.forEach(b=>{b.checked=picked.has(b.value);});
+  function syncDur(){
+    p.querySelectorAll(".cl-dur button").forEach(b=>b.classList.toggle("on",(b.dataset.k==="all")===allDay));
+    times.style.display=allDay?"none":"flex";
+  }
+  function syncAud(){
+    p.querySelectorAll(".cl-aud button").forEach(b=>b.classList.toggle("on",b.dataset.a===audience));
+    picker.style.display=audience==="all"?"none":"block";
+  }
+  function syncColor(){p.querySelectorAll(".cl-sw button").forEach(b=>b.classList.toggle("on",b.dataset.c===color));}
+  function syncChips(){
+    const sel=boxes.filter(b=>b.checked);
+    chips.innerHTML=sel.length
+      ?sel.map(b=>{const r=anyResById(b.value);return'<span class="cl-chip">'+(r?dname(r.name).split(" ")[0]:b.value)+"</span>";}).join("")
+      :'<span class="cl-chip none">No one selected</span>';
+  }
+  p.querySelectorAll(".cl-dur button").forEach(b=>b.onclick=()=>{allDay=b.dataset.k==="all";syncDur();});
+  p.querySelectorAll(".cl-aud button").forEach(b=>b.onclick=()=>{audience=b.dataset.a;syncAud();});
+  p.querySelectorAll(".cl-sw button").forEach(b=>b.onclick=()=>{color=b.dataset.c;syncColor();});
+  boxes.forEach(b=>b.onchange=syncChips);
+  p.querySelector(".psearch").oninput=e=>{
+    const q=e.target.value.toLowerCase();
+    p.querySelectorAll(".cl-plist .cl-pr").forEach(r=>{r.style.display=r.textContent.toLowerCase().includes(q)?"flex":"none";});
+  };
+  syncDur();syncAud();syncColor();syncChips();
+  p.querySelector(".ghost").onclick=calClosePop;
+  const delBtn=p.querySelector(".del");
+  if(delBtn)delBtn.onclick=()=>{const id=existing.id;calClosePop();deleteCalendarEvent(id);};
+  p.querySelector(".save").onclick=async()=>{
+    const t=title.value.trim();
+    if(!t){showToast("Give the event a title.","warning");return;}
+    const ids=boxes.filter(b=>b.checked).map(b=>Number(b.value));
+    if(audience==="some"&&!ids.length){showToast("Pick at least one resident, or publish to everyone.","warning");return;}
+    if(!allDay&&!(t1.value>t0.value)){showToast("End time must be after the start time.","warning");return;}
+    calClosePop();
+    await saveCalendarEvent({
+      event_date:ymd,title:t,all_day:allDay,
+      start_time:allDay?null:t0.value,end_time:allDay?null:t1.value,
+      color,target_all:audience==="all",target_resident_ids:audience==="all"?[]:ids
+    },existing?existing.id:null);
+  };
+  cell.appendChild(p);
+  _calPopEl=p;
+  // Deferred so this same click does not immediately close what it just opened.
+  setTimeout(()=>document.addEventListener("click",calClosePop),0);
+  const r=p.getBoundingClientRect();
+  if(r.right>window.innerWidth-12)p.style.right="0";
+  if(r.bottom>window.innerHeight-12)p.style.bottom="100%";
+}
+function renderCalendar(){
+  const u=STATE.user;
+  const canEdit=canEditCalendarEvents();
+  const rid=canEdit?(STATE.calResId||u.rid||(RESIDENTS[0]&&RESIDENTS[0].id)||null):(u.rid||null);
+  const res=rid?anyResById(rid):null;
+  const EV=calBuildEvents(rid);
+  const CUSTOM={};
+  calEventsForResident(rid).forEach(e=>{(CUSTOM[e.event_date]=CUSTOM[e.event_date]||[]).push(e);});
+  const todayStr=toLocalYMD(new Date());
+  const mk=STATE.calMonth||todayStr.slice(0,7);
+  const my=Number(mk.slice(0,4)),mi=Number(mk.slice(5,7))-1;
+  const lead=new Date(my,mi,1).getDay();
+  const dim=new Date(my,mi+1,0).getDate();
+  const cellCount=Math.ceil((lead+dim)/7)*7;
+  const shift=n=>{const d=new Date(my,mi+n,1);set({calMonth:d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")});};
+  // Block strip always describes today's block, not the month being browsed —
+  // a month can straddle two blocks, and only the current year's rota is loaded.
+  const blk=CURRENT_PERIOD,bw=blockWeeks(blk,CURRENT_ACADEMIC_YEAR);
+  const bStart=blockStartDate(blk,CURRENT_ACADEMIC_YEAR);
+  const bDates=bStart?{from:toLocalYMD(bStart),to:oncallAddDays(toLocalYMD(bStart),blockDays(blk,CURRENT_ACADEMIC_YEAR)-1)}:null;
+  const myRot=rid?((FULL_ROTA[rid]||{})[String(blk)]||"—"):"—";
+  const ocCount=rid?ONCALL_DATA.filter(e=>e.resident_id===rid&&e.block_number===blk&&(calSeesDrafts()||e.published)).length:0;
+  let monthSessions=0;
+  Object.keys(EV).forEach(d=>{if(d.slice(0,7)===mk)EV[d].forEach(e=>{if(e.t==="mm"||e.t==="teach")monthSessions++;});});
+  const grid=el("div",{cls:"cl-grid"});
+  for(let i=0;i<cellCount;i++){
+    const d=new Date(my,mi,1-lead+i),s=toLocalYMD(d),dow=d.getDay();
+    const out=d.getMonth()!==mi;
+    const inNewWeek=!!(bDates&&bw>4&&s>=oncallAddDays(bDates.from,28)&&s<=bDates.to);
+    const cell=el("div",{cls:"cl-cell"+(dow===5||dow===6?" we":"")+(out?" out":"")+(s===todayStr?" today":"")+(inNewWeek?" new":"")});
+    cell.appendChild(el("div",{cls:"cl-dn"},d.getDate()===1?d.getDate()+" "+CAL_MONTHS[d.getMonth()].slice(0,3):String(d.getDate())));
+    (CUSTOM[s]||[]).forEach(ce=>{
+      const tip=ce.title+" — "+calRecipientLabel(ce);
+      const targeted=ce.target_all?"":" targeted";
+      const open=e=>{e.stopPropagation();if(canEdit)calOpenPop(cell,s,ce);};
+      if(ce.all_day){
+        cell.classList.add("hl");
+        cell.style.setProperty("--hl",ce.color);
+        cell.style.background=ce.color+"14";
+        const tag=el("div",{cls:"cl-daytag"+targeted,title:tip,st:{background:ce.color+"26",color:ce.color}},ce.title);
+        if(canEdit)tag.addEventListener("click",open);
+        cell.appendChild(tag);
+      }else{
+        const chip=el("div",{cls:"cl-ev custom"+targeted,title:tip,st:{background:ce.color+"1f",color:ce.color}},
+          el("span",{cls:"cdot"}),String(ce.start_time).slice(0,5)+"–"+String(ce.end_time).slice(0,5)+"  "+ce.title);
+        if(canEdit)chip.addEventListener("click",open);
+        cell.appendChild(chip);
+      }
+    });
+    if(canEdit&&!out){
+      const add=el("button",{cls:"cl-add",title:"Add event",onClick:e=>{e.stopPropagation();calOpenPop(cell,s,null);}});
+      add.innerHTML='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+      cell.appendChild(add);
+    }
+    const all=EV[s]||[],shown=all.slice(0,3);
+    shown.forEach(e=>{
+      const c=CAL_SRC[e.t].c;
+      cell.appendChild(el("div",{cls:"cl-ev",title:e.title,st:{background:c+"1f",color:c}},(e.time?e.time+"  ":"")+e.title));
+    });
+    if(all.length>shown.length)cell.appendChild(el("div",{cls:"cl-more"},"+"+(all.length-shown.length)+" more"));
+    grid.appendChild(cell);
+  }
+  const chevron=dir=>{
+    const b=el("button",{cls:"cl-ico",title:dir<0?"Previous month":"Next month",onClick:()=>shift(dir)});
+    b.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="'+(dir<0?"15 18 9 12 15 6":"9 18 15 12 9 6")+'"/></svg>';
+    return b;
+  };
+  return el("div",{cls:"content"},
+    el("div",{cls:"cl-hero"},
+      el("div",{cls:"lbl"},canEdit&&res&&res.id!==u.rid?"Viewing "+dname(res.name):"My Schedule"),
+      el("h1",null,"Calendar"),
+      el("p",null,"Rotation, on-call, morning meetings, academic day and leave — one view.")
+    ),
+    el("div",{cls:"cl-tiles"},
+      el("div",{cls:"cl-tile"},el("div",{cls:"n"},String(ocCount)),el("div",{cls:"t"},"On-call this block")),
+      el("div",{cls:"cl-tile"},el("div",{cls:"n"},String(monthSessions)),el("div",{cls:"t"},"Sessions this month")),
+      el("div",{cls:"cl-tile"},el("div",{cls:"n"},myRot),el("div",{cls:"t"},"Current rotation"))
+    ),
+    el("div",{cls:"cl-strip"},
+      el("div",null,
+        el("div",{cls:"bn"},"Block "+blk+" · "+myRot),
+        el("div",{cls:"meta"},blockLabel(blk,CURRENT_ACADEMIC_YEAR)+" · "+bw+" weeks")
+      ),
+      bw>4?el("span",{cls:"cl-newweek"},"Week 5 covered"):null
+    ),
+    el("div",{cls:"cl-nav"},
+      el("h2",null,CAL_MONTHS[mi]+" "+my),
+      mk!==todayStr.slice(0,7)?el("button",{cls:"sbtn ghost",st:{fontSize:".75rem"},onClick:()=>set({calMonth:null})},"Today"):null,
+      canEdit?el("select",{cls:"input",st:{width:"auto",fontSize:".8rem",padding:"6px 10px"},onChange:e=>set({calResId:Number(e.target.value)})},
+        ...RESIDENTS.map(r=>el("option",{value:String(r.id),...(r.id===rid?{selected:""}:{})},dname(r.name)+" · "+(r.level||"")))
+      ):null,
+      chevron(-1),chevron(1)
+    ),
+    el("div",{cls:"cl-dow"},...CAL_DOW.map(d=>el("div",null,d))),
+    grid,
+    el("div",{cls:"cl-legend"},
+      ...Object.keys(CAL_SRC).map(k=>el("span",{cls:"cl-lg"},el("span",{cls:"cl-dot",st:{background:CAL_SRC[k].c}}),CAL_SRC[k].n)),
+      el("button",{cls:"sbtn primary",st:{marginLeft:"auto",fontSize:".75rem"},onClick:()=>set({showCalModal:true})},"Subscribe on my phone")
+    )
+  );
+}
 function renderOncall(){
   const u=STATE.user;
   const blk=STATE.oncallBlock||CURRENT_PERIOD;
@@ -10923,6 +11274,7 @@ function render(){
         case"kpi_exec":content=renderKPIExecutive();break;
         case"cumulative_kpi":content=renderCumulativeKPI();break;
         case"oncall":content=renderOncall();break;
+        case"calendar":content=renderCalendar();break;
         case"best_resident":content=renderBestResident();break;
         case"leave_plan":content=renderLeavePlan();break;
         default:content=renderModGrid();
@@ -11139,6 +11491,7 @@ function renderCalModal(){
         loadRotations();
         loadLeaveRecords();
         loadAnnouncements();
+        loadCalendarEvents();
         loadKpiQuarterly();
         loadKpiProposals();
         loadOncallData();
