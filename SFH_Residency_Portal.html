@@ -82,6 +82,7 @@ body{background:#FEFBF3;color:#1F1A12;min-height:100vh;}
 .sbtn.ghost:hover{background:#ede5d4;}
 .sbtn.warn{background:#A47A28;color:#FEFBF3;}
 .sbtn.warn:hover{background:#8a6520;}
+.sbtn.small{padding:5px 13px;font-size:.74rem;border-radius:7px;}
 .back-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;background:#F6EFE2;border:1px solid rgba(31,26,18,.1);border-radius:8px;cursor:pointer;font-weight:600;font-size:.83rem;color:#1F1A12;margin-bottom:18px;}
 .back-btn:hover{background:#ede5d4;}
 /* ── Alerts ── */
@@ -404,6 +405,78 @@ th.ov-th{text-align:center;}
 .notif-time{font-size:.71rem;color:rgba(31,26,18,.38);margin-top:3px;}
 .notif-empty{padding:36px 16px;text-align:center;color:rgba(31,26,18,.35);font-size:.88rem;}
 @media(max-width:600px){.notif-panel{width:100%;}}
+/* ─── Master Rota Builder ─── */
+.rb-hero{background:linear-gradient(135deg,#7c3a20 0%,#c96a4a 55%,#e8956d 100%);border-radius:18px;padding:26px 30px 42px;color:#FEFBF3;position:relative;overflow:hidden;}
+.rb-hero::after{content:'';position:absolute;right:-70px;top:-70px;width:250px;height:250px;border-radius:50%;background:rgba(254,251,243,.09);}
+.rb-tiles{display:flex;gap:12px;margin-top:-24px;position:relative;z-index:2;}
+.rb-tile{flex:1;background:#FEFBF3;border-radius:14px;box-shadow:0 4px 16px rgba(31,26,18,.10);padding:14px 16px;border:2px solid transparent;}
+.rb-tile.on{border-color:#c96a4a;}
+.rb-tile .v{font-family:'Playfair Display',serif;font-size:1.5rem;line-height:1.1;}
+.rb-tile .k{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:rgba(31,26,18,.5);}
+.rb-strip{display:flex;margin:0 0 18px;border-top:1px solid rgba(31,26,18,.08);border-bottom:1px solid rgba(31,26,18,.08);}
+.rb-strip>div{flex:1;padding:11px 4px;text-align:center;font-size:.66rem;font-weight:600;letter-spacing:.04em;border-right:1px solid rgba(31,26,18,.06);cursor:pointer;transition:filter .12s;}
+.rb-strip>div:last-child{border-right:none;}
+.rb-strip>div:hover{filter:brightness(.95);}
+.rb-strip>div.sel{box-shadow:inset 0 -3px 0 #c96a4a;}
+.rb-published{background:rgba(127,184,156,.16);color:#26523A;}
+.rb-approved{background:rgba(164,122,40,.14);color:#A47A28;}
+.rb-review{background:rgba(201,106,74,.12);color:#9d4a2a;}
+.rb-draft{background:rgba(31,26,18,.04);color:rgba(31,26,18,.45);}
+.rb-gwrap{overflow-x:auto;border-top:1px solid rgba(31,26,18,.08);}
+.rb-grid{border-collapse:collapse;width:100%;font-size:.78rem;}
+.rb-grid th{background:#F6EFE2;color:rgba(31,26,18,.55);font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:9px 8px;text-align:center;white-space:nowrap;}
+.rb-grid th.rb-res{text-align:left;position:sticky;left:0;z-index:3;min-width:170px;}
+.rb-grid td{padding:0;border-bottom:1px solid rgba(31,26,18,.06);text-align:center;}
+.rb-grid td.rb-res{position:sticky;left:0;background:#FEFBF3;z-index:2;text-align:left;padding:8px 10px;font-weight:600;font-size:.8rem;white-space:nowrap;}
+.rb-grid td.rb-res .lv{font-size:.62rem;font-weight:700;color:#FEFBF3;border-radius:9999px;padding:1px 7px;margin-right:7px;}
+.rb-grid tbody tr:hover td{background:rgba(239,139,111,.04);}
+.rb-grid tbody tr:hover td.rb-res{background:#fdf3ec;}
+.rb-cell{min-height:38px;display:flex;flex-direction:column;justify-content:center;padding:5px 4px;cursor:pointer;position:relative;transition:box-shadow .12s;}
+.rb-cell:hover{box-shadow:inset 0 0 0 2px #c96a4a;}
+.rb-cell b{font-weight:600;font-size:.72rem;display:block;}
+.rb-seg{display:flex;flex-direction:column;gap:2px;}
+.rb-seg span{font-size:.64rem;font-weight:600;padding:2px 0;border-radius:3px;display:block;}
+.rb-wk{font-size:.56rem;font-weight:700;opacity:.62;letter-spacing:.03em;font-style:normal;}
+.rb-flag{position:absolute;top:2px;right:3px;width:0;height:0;border-left:7px solid transparent;border-top:7px solid #b52040;}
+.rb-flag.amber{border-top-color:#A47A28;}
+.rb-panel{background:#FEFBF3;border-radius:16px;width:980px;max-width:96vw;max-height:90vh;overflow:hidden;box-shadow:0 24px 60px rgba(31,26,18,.3);display:flex;flex-direction:column;}
+.rb-phead{padding:20px 26px 16px;border-bottom:1px solid rgba(31,26,18,.07);display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
+.rb-pbody{display:flex;overflow:hidden;flex:1;}
+.rb-pleft{flex:1;padding:18px 24px 24px;overflow-y:auto;}
+.rb-pright{width:320px;background:#F6EFE2;padding:18px 22px 24px;overflow-y:auto;border-left:1px solid rgba(31,26,18,.06);}
+.rb-rotlist{display:grid;grid-template-columns:1fr 1fr;gap:1px 22px;margin-top:6px;}
+.rb-rot{display:flex;align-items:center;gap:9px;padding:8px;border-bottom:1px solid rgba(31,26,18,.06);cursor:pointer;border-radius:5px;}
+.rb-rot:hover{background:rgba(239,139,111,.07);}
+.rb-rot.pick{background:rgba(201,106,74,.13);box-shadow:inset 0 0 0 1px rgba(201,106,74,.4);}
+.rb-dot{width:9px;height:9px;border-radius:2px;flex:none;}
+.rb-rname{flex:1;font-size:.79rem;font-weight:500;}
+.rb-rprog{font-size:.7rem;font-weight:700;font-variant-numeric:tabular-nums;}
+.rb-ok{color:#26523A;}.rb-low{color:#A47A28;}.rb-bad{color:#b52040;}
+.rb-mini{height:3px;background:rgba(31,26,18,.09);border-radius:2px;margin-top:3px;position:relative;overflow:hidden;}
+.rb-mini i{position:absolute;left:0;top:0;bottom:0;border-radius:2px;}
+.rb-capmark{position:absolute;top:-2px;bottom:-2px;width:1.5px;background:rgba(31,26,18,.5);}
+.rb-tip{background:#1F1A12;color:#FEFBF3;padding:13px 15px;font-size:.71rem;line-height:1.55;border-radius:11px;box-shadow:0 6px 18px rgba(31,26,18,.22);margin:-4px 0 4px;}
+.rb-tip .th{font-weight:700;font-size:.82rem;margin-bottom:6px;font-family:'Playfair Display',serif;}
+.rb-tip .idle{color:rgba(254,251,243,.5);font-style:italic;}
+.rb-tip .tr{display:flex;justify-content:space-between;gap:14px;}
+.rb-tip .tm{color:rgba(254,251,243,.6);}
+.rb-tipbar{height:5px;background:rgba(254,251,243,.2);border-radius:3px;margin:7px 0 4px;position:relative;overflow:hidden;}
+.rb-tipbar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;}
+.rb-tipbar u{position:absolute;top:-2px;bottom:-2px;width:1.5px;background:#FEFBF3;text-decoration:none;}
+.rb-railsec{padding:14px 0;border-bottom:1px solid rgba(31,26,18,.08);}
+.rb-railsec:last-child{border-bottom:none;}
+.rb-railsec h3{font-family:'Playfair Display',serif;font-weight:400;font-size:1.02rem;margin:0 0 2px;}
+.rb-kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:.76rem;}
+.rb-chip{display:inline-block;font-size:.66rem;font-weight:700;border-radius:9999px;padding:2px 9px;margin:2px 3px 2px 0;}
+.rb-chip.leave{background:#fefce8;color:#854d0e;}
+.rb-chip.gim{background:#ede9fe;color:#5b21b6;}
+.rb-chip.elec{background:#f0fdf4;color:#166534;}
+.rb-warn{background:rgba(181,32,64,.08);border-left:3px solid #b52040;padding:9px 11px;font-size:.73rem;color:#8a1a30;border-radius:0 5px 5px 0;margin-top:6px;}
+.rb-splitrow{display:flex;gap:5px;margin:9px 0 2px;}
+.rb-wkbtn{flex:1;text-align:center;font-size:.68rem;font-weight:700;padding:7px 0;border-radius:6px;background:rgba(31,26,18,.05);color:rgba(31,26,18,.42);cursor:pointer;transition:all .15s;}
+.rb-note{font-size:.71rem;color:rgba(31,26,18,.5);margin-top:7px;}
+.rb-foot{padding:14px 26px;border-top:1px solid rgba(31,26,18,.07);display:flex;justify-content:space-between;align-items:center;gap:12px;background:#F6EFE2;}
+.rb-lbl{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(31,26,18,.55);}
 /* ─── Calendar ─── */
 .cl-hero{background:linear-gradient(135deg,#7c3a20 0%,#c96a4a 55%,#e8956d 100%);border-radius:18px;padding:26px 28px 40px;position:relative;overflow:hidden;color:#FEFBF3;}
 .cl-hero::after{content:'';position:absolute;right:-60px;top:-70px;width:230px;height:230px;border-radius:50%;background:rgba(254,251,243,.09);}
@@ -488,6 +561,10 @@ th.ov-th{text-align:center;}
 <script>
 // ─── DATA ────────────────────────────────────────────────────────────────────
 let RESIDENTS=[];
+// Next year's cohort, created in `residents` months before its year opens. Held out of
+// RESIDENTS — and so out of every current-year list — until 1 October of its start year.
+// Only the rota builder and the admin panel look at it; use allRoster() to see both.
+let INCOMING=[];
 let CONSULTANTS=[];
 let MENTORS={};
 const ROTA_PERIODS=["28/9-25/10","26/10-22/11","23/11-20/12","21/12-17/1","18/1-14/2","15/2-14/3","15/3-11/4","12/4-9/5","10/5-6/6","7/6-4/7","5/7-1/8","2/8-29/8","30/8-26/9"];
@@ -500,11 +577,19 @@ const BLOCK_WEEKS_OVERRIDE={2025:{13:5}};
 const AY_START_OVERRIDE={2026:[4,10]};
 function blockWeeks(blk,ay){return(BLOCK_WEEKS_OVERRIDE[ay]&&BLOCK_WEEKS_OVERRIDE[ay][blk])||4;}
 function blockDays(blk,ay){return blockWeeks(blk,ay)*7;}
+// Years whose blocks do not follow the shared ROTA_PERIODS at all. AY 2026-27 starts
+// Sun 4 Oct 2026, a week later than every previous year, so all 13 of its blocks shift.
+// Kept as a separate table because ROTA_PERIODS is read by all five historical years.
+const ROTA_PERIODS_OVERRIDE={2026:["4/10-31/10","1/11-28/11","29/11-26/12","27/12-23/1","24/1-20/2","21/2-20/3","21/3-17/4","18/4-15/5","16/5-12/6","13/6-10/7","11/7-7/8","8/8-4/9","5/9-2/10"]};
+function rotaPeriods(ay){return ROTA_PERIODS_OVERRIDE[ay]||ROTA_PERIODS;}
+// Calendar month an academic year opens in. Blocks in months at or after it sit in the
+// first calendar year of the cycle; earlier months sit in the second.
+function ayStartMonth(ay){return(AY_START_OVERRIDE[ay]&&AY_START_OVERRIDE[ay][1])||9;}
 // Display label for a block, e.g. "30/8-3/10". Only derived from start + length where a
 // per-year override exists; otherwise the ROTA_PERIODS string stays authoritative, since
 // block 6 runs 29 days in a leap year and so cannot be derived from a week count.
 function blockLabel(blk,ay){
-  const raw=ROTA_PERIODS[blk-1]||"";
+  const raw=rotaPeriods(ay)[blk-1]||"";
   if(!(BLOCK_WEEKS_OVERRIDE[ay]&&BLOCK_WEEKS_OVERRIDE[ay][blk]))return raw;
   const s=blockStartDate(blk,ay);if(!s)return raw;
   const e=new Date(s.getTime()+(blockDays(blk,ay)-1)*86400000);
@@ -889,15 +974,27 @@ function histYearsFor(resId){
 }
 // Label a year the way the rota sheets do: academic_year 2022 is the 2022-23 cycle.
 function ayLabel(ay){return ay+"-"+String((ay+1)%100).padStart(2,"0");}
-// entries: [{residentId, block, rotationName, leaveWeeks(optional,0), leavePosition(optional,'none')}]
-async function saveRotaCells(entries){
+// entries: [{residentId, block, rotationName, weeks, weekStart, leaveWeeks(optional,0), leavePosition(optional,'none')}]
+// `ay` defaults to the current year; the rota builder passes the year it is planning.
+async function saveRotaCells(entries,ay){
+  const year=ay==null?CURRENT_ACADEMIC_YEAR:Number(ay);
   // Only send columns that exist in the base schema (block_label / created_by may not
   // be present in older deployments — omit them so the upsert always succeeds).
-  const rows=entries.map(e=>({
-    resident_id:e.residentId,academic_year:CURRENT_ACADEMIC_YEAR,block_number:parseInt(e.block),
-    segment:e.segment||1,
-    rotation_name:e.rotationName||"",
-    leave_weeks:e.leaveWeeks||0,leave_position:e.leavePosition||"none" }));
+  const rows=entries.map(e=>{
+    const blk=parseInt(e.block);
+    // `weeks` must be written explicitly. Left out, the column falls back to its default
+    // of 4 and a 2-week segment is silently recorded as a whole block, which corrupts
+    // every cumulative week count downstream.
+    const weeks=e.weeks!=null?Number(e.weeks)
+      :(e.leaveWeeks>0?blockWeeks(blk,year)-Number(e.leaveWeeks):blockWeeks(blk,year));
+    return{
+      resident_id:e.residentId,academic_year:year,block_number:blk,
+      segment:e.segment||1,
+      week_start:e.weekStart||1,
+      weeks:Math.max(1,weeks),
+      rotation_name:e.rotationName||"",
+      leave_weeks:e.leaveWeeks||0,leave_position:e.leavePosition||"none" };
+  });
   const{error}=await sb.from("rotations").upsert(rows,{onConflict:"resident_id,academic_year,block_number,segment"});
   if(error){showToast("Could not save rota: "+error.message);return false;}
   await loadRotations();
@@ -912,6 +1009,146 @@ function rotCellInfo(resId,block){
   const split=!!(meta&&meta.weeks>0);
   const splitLabel=split?(meta.position==="end"?"AL: Wk 3-4":"AL: Wk 1-2"):"";
   return{rot,split,weeks:meta?.weeks||0,position:meta?.position||"none",splitLabel};
+}
+
+// ─── MASTER ROTA BUILDER ─────────────────────────────────────────────────────
+// The builder lays out the NEXT academic year in a draft table (`rota_plan`) and only
+// copies a block into `rotations` at Push Live, so the live rota stays clean while the
+// plan is still churning.
+const PLAN_AY=CURRENT_ACADEMIC_YEAR+1;
+// ROTA_PLAN[residentId][block] = [{seg,weekStart,weeks,rot,leaveWeeks,leavePos}] sorted by seg
+let ROTA_PLAN={};
+// PLAN_STATUS[block] = {state,approved_at,published_at,pushed_at}
+let PLAN_STATUS={};
+let PLAN_STATE="idle"; // idle | loading | ready | error
+const PLAN_FLOW=["draft","review","approved","published"];
+// Mirrors can_build_rota() / can_approve_rota() in the database. Kept role-for-role
+// identical so the UI never offers a button that RLS will reject: dio and ceo are
+// observers elsewhere in the portal but hold no write policy here.
+function canBuildRota(){
+  const u=STATE.user;if(!u)return false;
+  return u.role==="pd"||u.role==="deputy_pd"||u.role==="chief"||hasPriv(u.profileId,"plan_rota");
+}
+function canApproveRota(){
+  const u=STATE.user;return!!u&&(u.role==="pd"||u.role==="deputy_pd");
+}
+function planBlockState(blk){return(PLAN_STATUS[blk]&&PLAN_STATUS[blk].state)||"draft";}
+// A block stops accepting cell edits once the PD has approved it.
+function planBlockEditable(blk){
+  const st=planBlockState(blk);
+  return canApproveRota()?true:(st==="draft"||st==="review");
+}
+async function loadRotaPlan(){
+  if(PLAN_STATE==="loading")return;
+  PLAN_STATE="loading";
+  // 38 residents x 13 blocks is already past PostgREST's 1000-row cap once blocks split,
+  // so page it and order by the unique key.
+  const[{data,error},{data:sdata,error:serr}]=await Promise.all([
+    fetchAllRows(()=>sb.from("rota_plan")
+      .select("resident_id,block_number,segment,week_start,weeks,rotation_name,leave_weeks,leave_position,note")
+      .eq("academic_year",PLAN_AY)
+      .order("resident_id").order("block_number").order("segment")),
+    sb.from("rota_plan_block_status").select("*").eq("academic_year",PLAN_AY)
+  ]);
+  if(error||serr){PLAN_STATE="error";console.warn("rota_plan load error",(error||serr).message);render();return;}
+  const plan={};
+  (data||[]).forEach(r=>{
+    const rid=r.resident_id,blk=String(r.block_number);
+    if(!plan[rid])plan[rid]={};
+    if(!plan[rid][blk])plan[rid][blk]=[];
+    plan[rid][blk].push({seg:r.segment||1,weekStart:r.week_start||1,weeks:r.weeks||4,
+      rot:r.rotation_name||"",leaveWeeks:r.leave_weeks||0,leavePos:r.leave_position||"none",note:r.note||""});
+  });
+  Object.keys(plan).forEach(rid=>Object.keys(plan[rid]).forEach(b=>plan[rid][b].sort((x,y)=>x.seg-y.seg)));
+  const st={};
+  (sdata||[]).forEach(r=>{st[r.block_number]=r;});
+  ROTA_PLAN=plan;PLAN_STATUS=st;PLAN_STATE="ready";
+  render();
+}
+// Replace one resident's whole block. `segments` is the full new set, so removing a split
+// means passing fewer segments — the stale rows have to be deleted, not just overwritten.
+async function savePlanCell(residentId,block,segments){
+  const blk=parseInt(block);
+  const{error:derr}=await sb.from("rota_plan").delete()
+    .eq("academic_year",PLAN_AY).eq("resident_id",residentId).eq("block_number",blk);
+  if(derr){showToast("Could not save: "+derr.message,"error");return false;}
+  const rows=segments.filter(s=>s.rot).map((s,i)=>({
+    resident_id:residentId,academic_year:PLAN_AY,block_number:blk,
+    segment:i+1,week_start:s.weekStart,weeks:s.weeks,
+    rotation_name:s.rot,leave_weeks:s.leaveWeeks||0,leave_position:s.leavePos||"none",
+    updated_by:STATE.user?.profileId||null,updated_at:new Date().toISOString()
+  }));
+  if(rows.length){
+    const{error}=await sb.from("rota_plan").insert(rows);
+    if(error){showToast("Could not save: "+error.message,"error");return false;}
+  }
+  await loadRotaPlan();
+  return true;
+}
+async function setPlanBlockState(blk,state){
+  const now=new Date().toISOString(),me=STATE.user?.profileId||null;
+  const row={academic_year:PLAN_AY,block_number:parseInt(blk),state,updated_at:now};
+  if(state==="approved"){row.approved_by=me;row.approved_at=now;}
+  if(state==="published"){row.published_by=me;row.published_at=now;}
+  const{error}=await sb.from("rota_plan_block_status").upsert(row,{onConflict:"academic_year,block_number"});
+  if(error){showToast("Could not update block status: "+error.message,"error");return false;}
+  await loadRotaPlan();
+  return true;
+}
+// Copy one approved block of the draft into `rotations`, then mark it published. Residents
+// read `rotations`, so this is the only step that makes a block visible to them.
+async function pushBlockLive(blk){
+  const entries=[];
+  Object.keys(ROTA_PLAN).forEach(rid=>{
+    (ROTA_PLAN[rid][String(blk)]||[]).forEach(s=>entries.push({
+      residentId:parseInt(rid),block:blk,segment:s.seg,weekStart:s.weekStart,weeks:s.weeks,
+      rotationName:s.rot,leaveWeeks:s.leaveWeeks,leavePosition:s.leavePos
+    }));
+  });
+  if(!entries.length){showToast("Block "+blk+" has nothing to push.","warning");return false;}
+  const ok=await saveRotaCells(entries,PLAN_AY);
+  if(!ok)return false;
+  await sb.from("rota_plan_block_status").upsert(
+    {academic_year:PLAN_AY,block_number:parseInt(blk),state:"published",
+     published_by:STATE.user?.profileId||null,published_at:new Date().toISOString(),
+     pushed_at:new Date().toISOString(),updated_at:new Date().toISOString()},
+    {onConflict:"academic_year,block_number"});
+  await loadRotaPlan();
+  showToast("Block "+blk+" published — "+entries.length+" assignments are now live.","success");
+  return true;
+}
+// Weeks per rotation that the DRAFT plan adds, for one resident.
+function planWeeksFor(resId){
+  const acc={},per=ROTA_PLAN[resId]||{};
+  Object.keys(per).forEach(blk=>per[blk].forEach(s=>{
+    if(s.rot)acc[s.rot]=(acc[s.rot]||0)+s.weeks;
+    if(s.leaveWeeks>0)acc["Annual Leave"]=(acc["Annual Leave"]||0)+s.leaveWeeks;
+  }));
+  return acc;
+}
+// Everything already on record plus everything the draft would add.
+function projectedWeeksFor(resId){
+  const acc=histWeeksFor(resId),add=planWeeksFor(resId);
+  Object.keys(add).forEach(k=>{acc[k]=(acc[k]||0)+add[k];});
+  return acc;
+}
+// The level a resident will hold in PLAN_AY, or null if they graduate before it starts.
+// The incoming cohort already sits in `residents` as active R1s months ahead of its start
+// date, so reading `level` straight off would promote them alongside the current R1s.
+function planLevel(res){
+  if(!res)return null;
+  return res.yearStarted>=PLAN_AY?"R1":nextAYLevel(res.level);
+}
+// The programme works to half the SCFHS total as a hard floor — see SCFHS_FLOOR.
+function scfhsCap(rot){return Math.round((SCFHS_TOTAL[rot]||0)*SCFHS_FLOOR);}
+// A cell is flagged when the rotation sitting in it is still short of its minimum cap
+// once the whole draft year is counted. R1s have the rest of the programme to make it
+// up, so theirs is a warning rather than a problem.
+function cellShortfall(resId,rot,cum){
+  if(!rot||!SCFHS_TOTAL[rot])return null;
+  const done=scfhsWeeks(cum||projectedWeeksFor(resId),rot),cap=scfhsCap(rot);
+  if(done>=cap)return null;
+  return planLevel(resById(resId))==="R1"?"amber":"red";
 }
 let QUIZZES=[];
 let QUIZZES_LOAD_ERR=null;
@@ -1892,7 +2129,9 @@ async function loadCoreData(){
   if(pverr)console.warn("account_privileges load error (non-critical)",pverr.message);
   if(kpierr)console.warn("kpi_scores load error (table may not exist yet)",kpierr.message);
   CONSULTANTS=(cons||[]).map(c=>({id:c.id,name:c.name,user:c.username}));
-  RESIDENTS=(res||[]).map(r=>({id:r.id,name:r.name,user:r.username,level:r.level,ph:r.photo_initials||initialsFromName(r.name),yearStarted:r.year_started,chiefRole:r.chief_role||null}));
+  const mapped=(res||[]).map(r=>({id:r.id,name:r.name,user:r.username,level:r.level,ph:r.photo_initials||initialsFromName(r.name),yearStarted:r.year_started,chiefRole:r.chief_role||null}));
+  RESIDENTS=mapped.filter(cohortVisible);
+  INCOMING=mapped.filter(r=>!cohortVisible(r));
   CHIEF_RES_ID=RESIDENTS.find(r=>r.chiefRole==="chief")?.id||null;
   sb.from("residents").select("id,name,level").eq("active",false).then(({data:ir})=>{_inactiveResById={};(ir||[]).forEach(r=>{_inactiveResById[r.id]=r;});});
   CO_CHIEF_RES_ID=RESIDENTS.find(r=>r.chiefRole==="cochief")?.id||null;
@@ -2343,7 +2582,11 @@ function fmtDate(d){if(!d)return"";const p=d.split("-");return p[2]+"/"+p[1]+"/"
 // that converts to UTC and shifts the date backward in positive-offset zones like KSA (UTC+3).
 function toLocalYMD(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 function diffDays(from,to){return Math.round((new Date(to)-new Date(from))/(86400000))+1;}
-function resById(id){return RESIDENTS.find(r=>r.id==id);}
+// A cohort becomes part of the current roster on 1 October of the year it starts.
+function cohortVisible(r){return !r.yearStarted||new Date()>=new Date(r.yearStarted,9,1);}
+// Current roster plus any cohort still waiting for 1 October.
+function allRoster(){return INCOMING.length?RESIDENTS.concat(INCOMING):RESIDENTS;}
+function resById(id){return RESIDENTS.find(r=>r.id==id)||INCOMING.find(r=>r.id==id);}
 function anyResById(id){return resById(id)||_inactiveResById[id]||null;}
 function dname(name){return(name||"").replace(/^Dr\.\s*/i,"");}
 const _LVL_ORD={R4:0,R3:1,R2:2,R1:3};
@@ -2649,7 +2892,7 @@ function renderSidebar(){
         el("span",{cls:"sni"},modIcon("home",15)),
         el("span",null,"Home")
       ),
-      ...avail.map(m=>el("div",{cls:"snav"+(STATE.mod===m.id?" active":""),onClick:()=>set({mod:m.id,adminProfile:null,searchQ:"",showMobileNav:false,...(m.id==="kpi_exec"?{kpiExResident:null}:{}),...(m.id==="leave_plan"?{lpFirstKey:undefined,lpSecondKey:undefined,lpFirstAltKey:undefined,lpSecondAltKey:undefined,lpTab:undefined,lpDecision:undefined,lpDecisionEditKey:undefined,ayCard:undefined,gimBlocks:undefined}:{})})},
+      ...avail.map(m=>el("div",{cls:"snav"+(STATE.mod===m.id?" active":""),onClick:()=>set({mod:m.id,adminProfile:null,searchQ:"",showMobileNav:false,...(m.id==="kpi_exec"?{kpiExResident:null}:{}),...(m.id==="leave_plan"?{lpFirstKey:undefined,lpSecondKey:undefined,lpFirstAltKey:undefined,lpSecondAltKey:undefined,lpTab:undefined,lpDecision:undefined,lpDecisionEditKey:undefined,ayCard:undefined,gimBlocks:undefined,rbCell:null,rbBlock:null,rbLevel:undefined,rbShort:false}:{})})},
         el("span",{cls:"sni"},modIcon(m.id,15)),
         el("span",null,m.label)
       ))
@@ -2999,7 +3242,7 @@ function renderModGrid(){
     el("p",{cls:"home-section-tag"},"Quick Access"),
     el("h2",{cls:"home-section-title"},"Where would you like to go?"),
     el("div",{cls:"home-mod-grid"},
-      ...avail.map(m=>el("div",{cls:"home-modbtn",onClick:()=>set({mod:m.id,adminProfile:null,...(m.id==="kpi_exec"?{kpiExResident:null}:{}),...(m.id==="leave_plan"?{lpFirstKey:undefined,lpSecondKey:undefined,lpFirstAltKey:undefined,lpSecondAltKey:undefined,lpTab:undefined,lpDecision:undefined,lpDecisionEditKey:undefined,ayCard:undefined,gimBlocks:undefined}:{})})},
+      ...avail.map(m=>el("div",{cls:"home-modbtn",onClick:()=>set({mod:m.id,adminProfile:null,...(m.id==="kpi_exec"?{kpiExResident:null}:{}),...(m.id==="leave_plan"?{lpFirstKey:undefined,lpSecondKey:undefined,lpFirstAltKey:undefined,lpSecondAltKey:undefined,lpTab:undefined,lpDecision:undefined,lpDecisionEditKey:undefined,ayCard:undefined,gimBlocks:undefined,rbCell:null,rbBlock:null,rbLevel:undefined,rbShort:false}:{})})},
         el("div",{cls:"home-mod-ico-wrap",st:{background:(m.color||"#c96a4a")+"22"}},
           el("span",{cls:"home-mod-ico"},modIcon(m.id))
         ),
@@ -3962,10 +4205,13 @@ function renderMMScheduleForm(blk,editingSession){
 // Parse ROTA_PERIODS[idx] start date for a given academic year.
 function blockStartDate(blockNum,academicYear){
   const idx=blockNum-1;
-  const period=ROTA_PERIODS[idx];if(!period)return null;
+  const period=rotaPeriods(academicYear)[idx];if(!period)return null;
   const[startStr]=period.split("-");
   const[sd,sm]=startStr.split("/").map(Number);
-  const year=(sm>=9)?academicYear:academicYear+1;
+  // Months at or after the year's own start month belong to the first calendar year.
+  // The old fixed threshold of 9 assumed every year began in September; AY 2026-27
+  // begins in October, which puts its block 13 (5/9) in the SECOND calendar year.
+  const year=(sm>=ayStartMonth(academicYear))?academicYear:academicYear+1;
   return new Date(year,sm-1,sd,0,0,0);
 }
 // Generate Sunday–Thursday dates for every week of a block (5 days × 4 weeks = 20 sessions,
@@ -4686,7 +4932,7 @@ function renderPromoModal(){
     if(btn){btn.disabled=true;btn.textContent="Saving…";}
     const changes=[];
     for(const r of sorted){
-      if(STATE.promoSkip[r.id])continue;
+      if(STATE.promoSkip[r.id]||r.yearStarted>=PLAN_AY)continue;
       if(r.level==="R4"){
         await sb.from("residents").update({active:false}).eq("id",r.id);
         changes.push({id:r.id,name:r.name,from:"R4",to:"archived"});
@@ -4704,7 +4950,7 @@ function renderPromoModal(){
   return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)set({showPromoModal:false});}},
     el("div",{cls:"modal-card",st:{width:"620px",maxWidth:"100%"}},
       el("h3",null," Promotion Review — AY "+(CURRENT_ACADEMIC_YEAR+1)+"–"+(CURRENT_ACADEMIC_YEAR+2)),
-      el("p",{cls:"sh",st:{margin:"6px 0 16px"}},"Review proposed level changes for the new academic year. Uncheck anyone to skip them. R4 graduates will be archived and removed from active view."),
+      el("p",{cls:"sh",st:{margin:"6px 0 16px"}},"Everyone is promoted by default. Uncheck anyone who is being held back at their current level. R4 graduates will be archived and removed from active view; the incoming cohort already starts at its own level and is left alone."),
       el("div",{cls:"tbl-wrap"},
         el("table",null,
           el("thead",null,
@@ -4715,16 +4961,21 @@ function renderPromoModal(){
           ),
           el("tbody",null,
             ...sorted.map(r=>{
+              // The incoming cohort is added to `residents` months before its year opens,
+              // already holding the level it starts on. Promoting would skip them past R1.
+              const incoming=r.yearStarted>=PLAN_AY;
               const skip=!!STATE.promoSkip[r.id];
-              const proposed=r.level==="R4" ?el("span",{cls:"bdg",st:{background:"#fee2e2",color:"#b91c1c"}},"Archive")
+              const proposed=incoming?el("span",{cls:"bdg",st:{background:"#f6efe2",color:"#8a6d3b"}},"Starts as "+r.level)
+                :r.level==="R4" ?el("span",{cls:"bdg",st:{background:"#fee2e2",color:"#b91c1c"}},"Archive")
                 :nextLvl[r.level]?el("span",{cls:"bdg",st:{background:"#dcfce7",color:"#166534"}},nextLvl[r.level])
                 :el("span",{cls:"sh"},"—");
-              return el("tr",{st:{opacity:skip?"0.4":"1",transition:"opacity .15s"}},
+              return el("tr",{st:{opacity:skip||incoming?"0.4":"1",transition:"opacity .15s"}},
                 el("td",null,el("div",{cls:"flex-gap"},avEl(r),el("span",{cls:"name",st:{fontSize:".84rem"}},r.name))),
                 el("td",null,levelBadge(r.level)),
                 el("td",null,proposed),
                 el("td",{st:{textAlign:"center"}},
-                  el("input",{type:"checkbox",...(!skip?{checked:""}:{}),
+                  incoming?el("span",{cls:"sh",st:{fontSize:".72rem"}},"n/a")
+                  :el("input",{type:"checkbox",...(!skip?{checked:""}:{}),
                     onChange:e=>{
                       const sk={...STATE.promoSkip};
                       if(e.target.checked)delete sk[r.id];else sk[r.id]=true;
@@ -4737,7 +4988,7 @@ function renderPromoModal(){
           )
         )
       ),
-      el("p",{cls:"sh",st:{fontSize:".75rem",marginTop:"10px"}},"R4 residents marked as archived will no longer appear in the portal. Use Admin Panel → Residents to add incoming R1s."),
+      el("p",{cls:"sh",st:{fontSize:".75rem",marginTop:"10px"}},"R4 residents marked as archived will no longer appear in the portal. Anyone held back keeps their current level and can be promoted later from Admin Panel → Residents."),
       el("div",{cls:"flex-gap",st:{marginTop:"16px",justifyContent:"flex-end",gap:"10px"}},
         el("button",{cls:"sbtn ghost",onClick:()=>set({showPromoModal:false})},"Remind Me Later"),
         el("button",{id:"promo_confirm_btn",cls:"sbtn success",onClick:confirmPromo}," Confirm Promotions")
@@ -7142,7 +7393,9 @@ async function createLoginFor(kind,record){
 }
 function renderAdminResidents(){
   const flt=STATE.adminResFilter||"all";
-  const filtered=flt==="all"?RESIDENTS:RESIDENTS.filter(r=>r.level.toLowerCase()===flt);
+  // allRoster, not RESIDENTS: an incoming cohort must be manageable before its year opens.
+  const all=allRoster();
+  const filtered=flt==="all"?all:all.filter(r=>r.level.toLowerCase()===flt);
   function levelYearStarted(level){
     const offset={R1:0,R2:-1,R3:-2,R4:-3}[level]||0;
     return CURRENT_ACADEMIC_YEAR+offset;
@@ -7452,7 +7705,8 @@ function renderAccountRow(row){
 }
 function renderAdminAccounts(){
   const levelOrder={"R4":0,"R3":1,"R2":2,"R1":3};
-  const resRows=RESIDENTS
+  // allRoster: the incoming cohort needs logins created before its year opens.
+  const resRows=allRoster()
     .slice().sort((a,b)=>(levelOrder[a.level]??9)-(levelOrder[b.level]??9))
     .map(r=>({kind:"resident",id:r.id,name:r.name,sub:r.level,level:r.level,profile:PROFILE_BY_RESIDENT[r.id]}));
   const mentorRows=CONSULTANTS.map(c=>({kind:"consultant",id:c.id,name:c.name,sub:"Mentor / Consultant",level:"Mentor",profile:PROFILE_BY_CONSULTANT[c.id]}));
@@ -8610,6 +8864,12 @@ function renderLeavePlan(){
         iconBg:"rgba(164,122,40,.1)",title:"R4 Rotation Preferences",status:r4StatusLabel,statusColors:r4StatusColors,desc:r4Desc,locked:r4Locked,
         onClick:()=>{if(r4Locked){showToast("R4 preferences will open soon","info");return;}set({ayCard:"r4prefs"});}})});
     }
+    if(canBuildRota()){
+      allCards.push({pri:1,el:card({icon:ayIcon('<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/>',"#7a3f8f"),
+        iconBg:"rgba(122,63,143,.1)",title:"Master Rota Builder",status:"MANAGE",statusColors:{bg:"rgba(122,63,143,.1)",c:"#7a3f8f"},
+        desc:"Lay out all 13 blocks for every resident, block by block, against their leave, GIM and elective preferences. Publish one block at a time.",
+        onClick:()=>set({ayCard:"rota"})})});
+    }
     allCards.sort((a,b)=>a.pri-b.pri);
 
     const cards=el("div",{st:{display:"flex",gap:"18px",marginTop:"24px",flexWrap:"wrap"}});
@@ -9007,7 +9267,7 @@ function renderLeavePlan(){
   }
 
   const wrap=el("div",{st:{padding:"0 40px 40px"}});
-  const showSub=tab==="mine"&&(STATE.ayCard==="leave"||STATE.ayCard==="gim"||STATE.ayCard==="chief"||STATE.ayCard==="r4prefs");
+  const showSub=tab==="mine"&&(STATE.ayCard==="leave"||STATE.ayCard==="gim"||STATE.ayCard==="chief"||STATE.ayCard==="r4prefs"||STATE.ayCard==="rota");
   if(!showSub){
     wrap.appendChild(el("div",{st:{padding:"36px 0 0"}},
       el("div",{st:{fontSize:".67rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"6px"}},"Academic Year 2026 - 27"),
@@ -9039,6 +9299,8 @@ function renderLeavePlan(){
     mainContent=chiefSection();
   }else if(STATE.ayCard==="r4prefs"){
     mainContent=r4PrefsSection();
+  }else if(STATE.ayCard==="rota"){
+    mainContent=renderRotaBuilder();
   }else{
     mainContent=landingCards();
   }
@@ -9046,6 +9308,333 @@ function renderLeavePlan(){
   if(STATE.lpAltPending)wrap.appendChild(altModal());
   if(STATE.lpDecision)wrap.appendChild(decisionModal());
   return wrap;
+}
+
+// ─── MASTER ROTA BUILDER ──────────────────────────────────────────────────────
+const RB_MANDATORY_TOTAL=MANDATORY.reduce((s,m)=>s+SCFHS_TOTAL[m],0);
+// Rotations that carry no SCFHS minimum: service time, clinic, elective and leave.
+const RB_EXTRA=["Night Duty","Medical Consult","Outpatient Clinic","Elective","Annual Leave","Maternity Leave"];
+function rbOpenCell(rid,blk){
+  const segs=(ROTA_PLAN[rid]||{})[String(blk)]||[];
+  const bw=blockWeeks(blk,PLAN_AY);
+  set({rbCell:{rid,blk},
+    // Boundary = how many weeks the first rotation runs. Equal to the block length
+    // means the block is not split at all.
+    rbBound:segs.length>1?segs[0].weeks:bw,
+    rbSeg:0,
+    rbRots:[segs[0]?.rot||"",segs[1]?.rot||""]});
+}
+function rbSegments(){
+  const{blk}=STATE.rbCell,bw=blockWeeks(blk,PLAN_AY),b=STATE.rbBound,rots=STATE.rbRots||["",""];
+  if(b>=bw)return rots[0]?[{weekStart:1,weeks:bw,rot:rots[0],leaveWeeks:0,leavePos:"none"}]:[];
+  const out=[];
+  if(rots[0])out.push({weekStart:1,weeks:b,rot:rots[0],leaveWeeks:0,leavePos:"none"});
+  if(rots[1])out.push({weekStart:b+1,weeks:bw-b,rot:rots[1],leaveWeeks:0,leavePos:"none"});
+  return out;
+}
+async function rbSaveCell(){
+  const{rid,blk}=STATE.rbCell;
+  if(await savePlanCell(rid,blk,rbSegments())){showToast("Saved to the plan.","success");set({rbCell:null});}
+}
+function renderRotaBuilder(){
+  const u=STATE.user;if(!u)return null;
+  if(!canBuildRota())return el("div",{st:{padding:"40px 0",color:"rgba(31,26,18,.45)"}},"You do not have access to the rota builder.");
+  if(PLAN_STATE==="idle")loadRotaPlan();
+  // Cap progress is measured against the resident's whole training record, not just
+  // this year, so the full history has to be on hand before the flags mean anything.
+  if(HIST_ROTA_STATE==="idle")loadRotaHistory();
+  const loading=PLAN_STATE!=="ready"||HIST_ROTA_STATE!=="ready";
+  const periods=rotaPeriods(PLAN_AY);
+  const blocks=periods.map((_,i)=>i+1);
+  const canApprove=canApproveRota();
+  const selBlk=STATE.rbBlock||null;
+  const lvlFilter=STATE.rbLevel||"all";
+  // allRoster, not RESIDENTS: the plan year's incoming cohort is the whole point here, and
+  // it stays out of RESIDENTS until 1 October. planLevel() is null for this year's R4s,
+  // who graduate before the plan year opens.
+  const roster=allRoster().filter(r=>planLevel(r))
+    .sort((a,b)=>(_LVL_ORD[planLevel(a)]??9)-(_LVL_ORD[planLevel(b)]??9)||a.name.localeCompare(b.name));
+  const CUM={};roster.forEach(r=>{CUM[r.id]=projectedWeeksFor(r.id);});
+  function flagsFor(rid,blk){
+    const segs=(ROTA_PLAN[rid]||{})[String(blk)]||[];
+    let worst=null;
+    segs.forEach(s=>{const f=cellShortfall(rid,s.rot,CUM[rid]);if(f==="red")worst="red";else if(f&&!worst)worst=f;});
+    return worst;
+  }
+  let shortCells=0;
+  roster.forEach(r=>blocks.forEach(b=>{if(flagsFor(r.id,b))shortCells++;}));
+  let rows=roster.filter(r=>lvlFilter==="all"||planLevel(r)===lvlFilter);
+  if(STATE.rbShort)rows=rows.filter(r=>blocks.some(b=>flagsFor(r.id,b)));
+
+  const counts={published:0,approved:0,review:0,draft:0};
+  blocks.forEach(b=>{counts[planBlockState(b)]++;});
+
+  const wrap=el("div",null);
+  wrap.appendChild(el("span",{st:{fontSize:".78rem",color:"#c96a4a",fontWeight:"600",cursor:"pointer",marginBottom:"14px",display:"inline-block"},
+    onClick:()=>set({ayCard:undefined,rbCell:null,rbBlock:null})},"← Back to Academic Year Plan"));
+  wrap.appendChild(el("div",{cls:"rb-hero"},
+    el("div",{cls:"rb-lbl",st:{color:"rgba(254,251,243,.6)"}},"AY Plan "+ayLabel(PLAN_AY)+" · Master Rota Builder"),
+    el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2.1rem",fontWeight:"400",lineHeight:"1.1",color:"#FEFBF3",margin:"2px 0 4px"}},"Master Rota"),
+    el("div",{st:{fontSize:".82rem",color:"rgba(254,251,243,.72)"}},
+      blocks.length+" blocks · "+fmtBlockRange(1,PLAN_AY)+" – "+fmtBlockRange(blocks.length,PLAN_AY,true)+" · "+roster.length+" residents")
+  ));
+  const tiles=el("div",{cls:"rb-tiles"});
+  [["Published",counts.published],["Approved",counts.approved],["In review",counts.review],
+   ["Draft",counts.draft],["Cap shortfalls",shortCells]].forEach(([k,v])=>{
+    tiles.appendChild(el("div",{cls:"rb-tile"+(k==="Cap shortfalls"&&v?" on":"")},
+      el("div",{cls:"v"},String(v)),el("div",{cls:"k"},k)));
+  });
+  wrap.appendChild(tiles);
+
+  // ── block status strip ──
+  const secA=el("div",{st:{padding:"40px 0 0"}});
+  const stateLabel={draft:"DRAFT",review:"REVIEW",approved:"APPROVED",published:"PUBLISHED"};
+  const actions=el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap"}});
+  if(selBlk){
+    const st=planBlockState(selBlk);
+    if(st==="draft")actions.appendChild(el("button",{cls:"sbtn",onClick:()=>setPlanBlockState(selBlk,"review")},"Send Block "+selBlk+" for review"));
+    if(st==="review"&&canApprove)actions.appendChild(el("button",{cls:"sbtn",onClick:()=>setPlanBlockState(selBlk,"approved")},"Approve Block "+selBlk));
+    if(st==="review"&&!canApprove)actions.appendChild(el("button",{cls:"sbtn ghost",onClick:()=>setPlanBlockState(selBlk,"draft")},"Pull back to draft"));
+    if(st==="approved"&&canApprove){
+      actions.appendChild(el("button",{cls:"sbtn ghost",onClick:()=>setPlanBlockState(selBlk,"review")},"Send back"));
+      actions.appendChild(el("button",{cls:"sbtn primary",onClick:()=>showConfirm(
+        "Publish Block "+selBlk+"? This writes the block into the live rota for "+ayLabel(PLAN_AY)+". Other blocks stay in draft.",
+        ()=>pushBlockLive(selBlk),"Publish & Push Live","primary")},"Publish Block "+selBlk));
+    }
+    if(st==="published")actions.appendChild(el("div",{st:{fontSize:".76rem",color:"#26523A",fontWeight:"600",padding:"8px 0"}},"Block "+selBlk+" is live."));
+  }else{
+    actions.appendChild(el("div",{st:{fontSize:".76rem",color:"rgba(31,26,18,.4)",padding:"8px 0"}},"Select a block below to approve or publish it."));
+  }
+  secA.appendChild(el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",flexWrap:"wrap",marginBottom:"14px"}},
+    el("div",null,
+      el("h2",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.3rem",fontWeight:"400",margin:"0 0 4px"}},"Block status"),
+      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.55)"}},"Publish one block at a time — the rest stay hidden from residents.")),
+    actions));
+  const strip=el("div",{cls:"rb-strip"});
+  blocks.forEach(b=>{
+    const st=planBlockState(b);
+    strip.appendChild(el("div",{cls:"rb-"+st+(selBlk===b?" sel":""),
+      onClick:()=>set({rbBlock:selBlk===b?null:b})},
+      "B"+b+(st==="draft"?"":" · "+stateLabel[st])));
+  });
+  secA.appendChild(strip);
+  wrap.appendChild(secA);
+
+  // ── the grid ──
+  const secB=el("div",{st:{padding:"20px 0 0"}});
+  const pills=el("div",{st:{display:"flex",gap:"6px",flexWrap:"wrap"}});
+  // Levels as they will be IN the plan year, so R4 is this year's R3s, not the graduands.
+  ["all","R1","R2","R3","R4"].forEach(lv=>{
+    pills.appendChild(el("button",{cls:"sbtn small"+(lvlFilter===lv?" primary":" ghost"),
+      onClick:()=>set({rbLevel:lv})},lv==="all"?"All":lv));
+  });
+  pills.appendChild(el("button",{cls:"sbtn small"+(STATE.rbShort?" primary":" ghost"),
+    onClick:()=>set({rbShort:!STATE.rbShort})},"Shortfalls only"));
+  secB.appendChild(el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",flexWrap:"wrap",marginBottom:"14px"}},
+    el("div",{st:{maxWidth:"620px"}},
+      el("h2",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.3rem",fontWeight:"400",margin:"0 0 4px"}},"The grid"),
+      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.55)"}},
+        "Double-click any cell to assign. A corner flag means that rotation is still below its minimum cap — ",
+        el("b",{st:{color:"#A47A28"}},"amber")," for R1, ",el("b",{st:{color:"#b52040"}},"red")," for R2 and above.")),
+    pills));
+  if(loading){
+    secB.appendChild(el("div",{st:{padding:"40px 0",textAlign:"center",color:"rgba(31,26,18,.4)",fontSize:".85rem"}},"Loading the plan and training history…"));
+  }else{
+    const tbl=el("table",{cls:"rb-grid"});
+    const hr=el("tr",null,el("th",{cls:"rb-res"},"Resident"));
+    blocks.forEach(b=>hr.appendChild(el("th",{st:selBlk===b?{background:"rgba(201,106,74,.16)"}:{}},
+      "B"+b,el("div",{st:{fontWeight:"500",textTransform:"none",letterSpacing:"0",opacity:".6",fontSize:".6rem"}},periods[b-1].replace("-","–")))));
+    tbl.appendChild(el("thead",null,hr));
+    const tb=el("tbody");
+    rows.forEach(r=>{
+      const lvl=planLevel(r);
+      const tr=el("tr",null,el("td",{cls:"rb-res"},
+        el("span",{cls:"lv",st:{background:LC[lvl]||"#888"}},lvl),dname(r.name)));
+      blocks.forEach(b=>{
+        const segs=(ROTA_PLAN[r.id]||{})[String(b)]||[];
+        const flag=flagsFor(r.id,b);
+        const editable=planBlockEditable(b);
+        const kids=[];
+        if(!segs.length){
+          kids.push(el("b",{st:{color:"rgba(31,26,18,.2)",fontWeight:"400"}},"—"));
+        }else if(segs.length===1){
+          const c=rotColor(segs[0].rot);
+          kids.push(el("b",{st:{color:c.tx}},ROT_ABBR[segs[0].rot]||segs[0].rot));
+        }else{
+          kids.push(el("div",{cls:"rb-seg"},...segs.map(s=>{
+            const c=rotColor(s.rot);
+            return el("span",{st:{background:c.bg,color:c.tx}},
+              (ROT_ABBR[s.rot]||s.rot)+" ",
+              el("i",{cls:"rb-wk"},"w"+s.weekStart+"-"+(s.weekStart+s.weeks-1)));
+          })));
+        }
+        if(flag)kids.push(el("i",{cls:"rb-flag"+(flag==="amber"?" amber":"")}));
+        const bg=segs.length===1?rotColor(segs[0].rot).bg:(selBlk===b?"rgba(201,106,74,.05)":"");
+        tr.appendChild(el("td",{st:bg?{background:bg}:{}},
+          el("div",{cls:"rb-cell",st:editable?{}:{cursor:"not-allowed",opacity:".72"},
+            onDblclick:()=>{if(editable)rbOpenCell(r.id,b);else showToast("Block "+b+" is "+planBlockState(b)+" — ask the PD to reopen it.","warning");}},...kids)));
+      });
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb);
+    secB.appendChild(el("div",{cls:"rb-gwrap"},tbl));
+    if(!rows.length)secB.appendChild(el("div",{st:{padding:"30px 0",textAlign:"center",color:"rgba(31,26,18,.4)",fontSize:".85rem"}},"No residents match this filter."));
+  }
+  wrap.appendChild(secB);
+  if(STATE.rbCell)wrap.appendChild(rbCellPanel());
+  return wrap;
+}
+const RB_MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+// "4 Oct 2026", or with `end`, the block's last day. The end year is taken from the start
+// and only rolls forward when the block itself crosses new year (block 4 is 27/12-23/1).
+// A month threshold cannot do this: AY 2026-27 both opens and closes in October.
+function fmtBlockRange(blk,ay,end){
+  const s=blockStartDate(blk,ay);if(!s)return "";
+  if(!end)return s.getDate()+" "+RB_MON[s.getMonth()]+" "+s.getFullYear();
+  const[d,m]=String((rotaPeriods(ay)[blk-1]||"").split("-")[1]||"").split("/").map(Number);
+  if(!d||!m)return "";
+  return d+" "+RB_MON[m-1]+" "+(s.getFullYear()+(m<s.getMonth()+1?1:0));
+}
+function rbCellPanel(){
+  const{rid,blk}=STATE.rbCell;
+  const res=resById(rid);if(!res)return null;
+  const bw=blockWeeks(blk,PLAN_AY),bound=STATE.rbBound,rots=STATE.rbRots||["",""];
+  const split=bound<bw;
+  const activeSeg=split?(STATE.rbSeg||0):0;
+  const cum=projectedWeeksFor(rid);
+  const lp=LEAVE_PLAN[rid]||null;
+  const gim=(GIM_PREFS[rid]&&GIM_PREFS[rid].blocks)||[];
+  const r4=R4_PREFS[rid]||null;
+
+  const tip=el("div",{cls:"rb-tip"},el("div",{cls:"idle"},"Hover a specialty to see its cap."));
+  function showTip(k){
+    const need=SCFHS_TOTAL[k];
+    if(!need){tip.replaceChildren(el("div",{cls:"th"},k),el("div",{cls:"idle"},"No SCFHS minimum — service, clinic or leave time."));return;}
+    const cap=scfhsCap(k),done=scfhsWeeks(cum,k),short=Math.max(0,cap-done);
+    const fill=done>=cap?"#7FB89C":(done>=cap*.5?"#CBA155":"#e06a7f");
+    tip.replaceChildren(
+      el("div",{cls:"th"},k),
+      el("div",{cls:"tr"},el("span",{cls:"tm"},"SCFHS total"),el("span",null,need+" wks")),
+      el("div",{cls:"tr"},el("span",{cls:"tm"},"Minimum cap"),el("span",null,el("b",null,cap+" wks"))),
+      el("div",{cls:"rb-tipbar"},
+        el("i",{st:{width:Math.min(100,done/need*100)+"%",background:fill}}),
+        el("u",{st:{left:(cap/need*100)+"%"}})),
+      el("div",{cls:"tr"},el("span",{cls:"tm"},"Done so far"),el("span",null,done+" wks")),
+      short?el("div",{cls:"tr",st:{color:"#e88"}},el("span",{cls:"tm"},"Still needs"),el("span",null,el("b",null,short+" wks")))
+           :el("div",{cls:"tr",st:{color:"#9fd6b6"}},el("span",{cls:"tm"},"Cap met"),el("span",null,"✓")));
+  }
+
+  // week pills — clicking week w puts the boundary after w
+  const wkRow=el("div",{cls:"rb-splitrow"});
+  for(let w=1;w<=bw;w++){
+    const inSeg2=split&&w>bound;
+    const on=split?(inSeg2?activeSeg===1:activeSeg===0):true;
+    wkRow.appendChild(el("div",{cls:"rb-wkbtn",
+      st:on?(inSeg2?{background:"rgba(38,90,72,.14)",color:"#26523A",boxShadow:"inset 0 0 0 1px rgba(38,90,72,.35)"}
+                   :{background:"rgba(201,106,74,.18)",color:"#9d4a2a",boxShadow:"inset 0 0 0 1px rgba(201,106,74,.45)"}):{},
+      onClick:()=>set({rbBound:w,rbSeg:0})},"WK "+w));
+  }
+  const segTabs=el("div",{st:{display:"flex",gap:"6px",marginTop:"10px"}});
+  if(split){
+    [0,1].forEach(i=>{
+      const label=i===0?("Weeks 1–"+bound):("Weeks "+(bound+1)+"–"+bw);
+      segTabs.appendChild(el("button",{cls:"sbtn small"+(activeSeg===i?" primary":" ghost"),
+        onClick:()=>set({rbSeg:i})},label+(rots[i]?" · "+(ROT_ABBR[rots[i]]||rots[i]):" · empty")));
+    });
+  }
+
+  const rotList=el("div",{cls:"rb-rotlist"});
+  function rotRow(k,scored){
+    const c=rotColor(k),picked=rots[activeSeg]===k;
+    const kids=[el("span",{cls:"rb-dot",st:{background:c.tx}})];
+    if(scored){
+      const need=SCFHS_TOTAL[k],cap=scfhsCap(k),done=scfhsWeeks(cum,k);
+      const cls=done>=cap?"rb-ok":(done>=cap*.5?"rb-low":"rb-bad");
+      const fill=done>=cap?"#7FB89C":(done>=cap*.5?"#A47A28":"#b52040");
+      kids.push(el("span",{cls:"rb-rname"},k,
+        el("div",{cls:"rb-mini"},
+          el("i",{st:{width:Math.min(100,done/need*100)+"%",background:fill}}),
+          el("span",{cls:"rb-capmark",st:{left:(cap/need*100)+"%"}}))),
+        el("span",{cls:"rb-rprog "+cls},done+"/"+cap));
+    }else{
+      kids.push(el("span",{cls:"rb-rname"},k),
+        el("span",{cls:"rb-rprog",st:{color:"rgba(31,26,18,.35)"}},"—"));
+    }
+    return el("div",{cls:"rb-rot"+(picked?" pick":""),
+      onMouseenter:()=>showTip(k),
+      onClick:()=>{const nr=rots.slice();nr[activeSeg]=picked?"":k;set({rbRots:nr});}},...kids);
+  }
+  MANDATORY.forEach(k=>rotList.appendChild(rotRow(k,true)));
+  RB_EXTRA.forEach(k=>rotList.appendChild(rotRow(k,false)));
+
+  // ── right rail ──
+  const rail=el("div",{cls:"rb-pright"},tip);
+  const leaveChips=[];
+  if(lp){
+    ["first_leave_key","second_leave_key"].forEach(kk=>{
+      const p=LP_PERIODS.find(x=>x.key===lp[kk]);
+      if(p)leaveChips.push(el("span",{cls:"rb-chip leave"},"B"+p.blk+" · "+(p.half==="first"?"1st half":"2nd half")));
+    });
+  }
+  const leaveSec=el("div",{cls:"rb-railsec"},el("h3",null,"Suggested leave"),
+    leaveChips.length?el("div",null,...leaveChips):el("div",{cls:"rb-note"},"No leave plan submitted."));
+  // Warn only when the weeks actually being assigned overlap the requested half.
+  if(lp){
+    const clash=LP_PERIODS.find(p=>p.blk===blk&&(p.key===lp.first_leave_key||p.key===lp.second_leave_key));
+    if(clash){
+      const half=clash.half==="first"?[1,Math.ceil(bw/2)]:[Math.ceil(bw/2)+1,bw];
+      const hits=rbSegments().some(s=>s.rot&&!/Leave/.test(s.rot)&&s.weekStart<=half[1]&&(s.weekStart+s.weeks-1)>=half[0]);
+      if(hits)leaveSec.appendChild(el("div",{cls:"rb-warn"},
+        "This resident asked for leave in weeks "+half[0]+"–"+half[1]+" of this block. The rotation you are assigning covers those weeks."));
+    }
+  }
+  rail.appendChild(leaveSec);
+  rail.appendChild(el("div",{cls:"rb-railsec"},el("h3",null,"GIM preference"),
+    gim.length?el("div",null,...gim.map(b=>el("span",{cls:"rb-chip gim",
+      st:b===blk?{outline:"2px solid #5b21b6"}:{}},"B"+b)))
+      :el("div",{cls:"rb-note"},"No GIM preference submitted."),
+    el("div",{cls:"rb-note"},"Non-binding — the resident's own suggestion.")));
+  if(r4){
+    rail.appendChild(el("div",{cls:"rb-railsec"},el("h3",null,"Elective & clinic"),
+      el("div",{cls:"rb-kv"},el("span",null,"Elective 1"),el("b",null,r4.elective1_block?("B"+r4.elective1_block+" · "+(r4.elective1_subspecialty||"—")):"—")),
+      el("div",{cls:"rb-kv"},el("span",null,"Elective 2"),el("b",null,r4.elective2_block?("B"+r4.elective2_block+" · "+(r4.elective2_subspecialty||"—")):"—")),
+      el("div",{cls:"rb-kv"},el("span",null,"Clinic"),el("b",null,[r4.clinic1_block,r4.clinic2_block].filter(Boolean).map(b=>"B"+b).join(", ")||"—"))));
+  }
+  const mandDone=MANDATORY.reduce((s,m)=>s+Math.min(scfhsWeeks(cum,m),SCFHS_TOTAL[m]),0);
+  const belowCap=MANDATORY.filter(m=>scfhsWeeks(cum,m)<scfhsCap(m)).length;
+  rail.appendChild(el("div",{cls:"rb-railsec"},el("h3",null,"Totals (projected)"),
+    el("div",{cls:"rb-kv"},el("span",null,"Mandatory weeks"),el("b",null,mandDone+" / "+RB_MANDATORY_TOTAL)),
+    el("div",{cls:"rb-kv"},el("span",null,"Below cap"),el("b",{cls:belowCap?"rb-bad":"rb-ok"},belowCap+" specialt"+(belowCap===1?"y":"ies"))),
+    el("div",{cls:"rb-kv"},el("span",null,"Elective"),el("b",null,(cum["Elective"]||0)+" wks")),
+    el("div",{cls:"rb-kv"},el("span",null,"Leave"),el("b",null,(cum["Annual Leave"]||0)+" wks"))));
+
+  const panel=el("div",{cls:"rb-panel",onClick:e=>e.stopPropagation()},
+    el("div",{cls:"rb-phead"},
+      el("div",null,
+        el("div",{cls:"rb-lbl"},"Block "+blk+" · "+fmtBlockRange(blk,PLAN_AY)+" – "+fmtBlockRange(blk,PLAN_AY,true)+" · "+bw+" weeks"),
+        el("h2",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.3rem",fontWeight:"400",margin:"2px 0 0"}},dname(res.name)),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.5)"}},
+          (res.yearStarted>=PLAN_AY?"Incoming":res.level+" now")+" · "+planLevel(res)+" in "+ayLabel(PLAN_AY))),
+      el("button",{cls:"x",st:{background:"none",border:"none",fontSize:"1.5rem",color:"rgba(31,26,18,.35)",cursor:"pointer",lineHeight:"1"},
+        onClick:()=>set({rbCell:null})},"×")),
+    el("div",{cls:"rb-pbody"},
+      el("div",{cls:"rb-pleft"},
+        el("div",{cls:"rb-lbl"},"Split this block"),
+        wkRow,
+        el("div",{cls:"rb-note"},split
+          ?"Split "+bound+" + "+(bw-bound)+". Click a week to move the boundary; click week "+bw+" for a single rotation."
+          :"One rotation for the whole block. Click an earlier week to split it."),
+        segTabs,
+        el("div",{cls:"rb-lbl",st:{marginTop:"18px"}},"Assign rotation",
+          el("span",{st:{textTransform:"none",letterSpacing:"0",fontWeight:"500"}}," — hover any specialty for its cap")),
+        rotList),
+      rail),
+    el("div",{cls:"rb-foot"},
+      el("div",{st:{fontSize:".78rem",color:"rgba(31,26,18,.5)"}},"Saved to the plan — not live until Push Live."),
+      el("div",{st:{display:"flex",gap:"8px"}},
+        el("button",{cls:"sbtn ghost",onClick:async()=>{if(await savePlanCell(rid,blk,[]))set({rbCell:null});}},"Clear cell"),
+        el("button",{cls:"sbtn primary",onClick:rbSaveCell},"Save"))));
+  return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)set({rbCell:null});}},panel);
 }
 
 // ─── BEST RESIDENT MODULE ─────────────────────────────────────────────────────
