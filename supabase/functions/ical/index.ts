@@ -39,10 +39,25 @@ function blockStartDate(blockNum: number, academicYear: number): Date {
   return new Date(Date.UTC(year, sm - 1, sd));
 }
 
+// Blocks that do not run the usual 4 weeks, keyed by academic year then block number.
+// Mirrors BLOCK_WEEKS_OVERRIDE in SFH_Residency_Portal.html — keep the two in step.
+const BLOCK_WEEKS_OVERRIDE: Record<number, Record<number, number>> = { 2025: { 13: 5 } };
+// Years that do not start on 1 Oct, as [day, month].
+const AY_START_OVERRIDE: Record<number, [number, number]> = { 2026: [4, 10] };
+
+function blockWeeks(blockNum: number, academicYear: number): number {
+  return BLOCK_WEEKS_OVERRIDE[academicYear]?.[blockNum] ?? 4;
+}
+
 function currentAcademicYear(): number {
   const now = new Date();
   const m = now.getMonth(); // 0-indexed; 9 = October
-  return m >= 9 ? now.getFullYear() : now.getFullYear() - 1;
+  let y = m >= 9 ? now.getFullYear() : now.getFullYear() - 1;
+  // AY 2025-26 block 13 was extended to 5 weeks (ends 3 Oct 2026), so the turnover is
+  // the next year's real start date rather than 1 Oct.
+  const start = AY_START_OVERRIDE[y];
+  if (start && now < new Date(Date.UTC(y, start[1] - 1, start[0]))) y = y - 1;
+  return y;
 }
 
 function icsDate(d: Date): string {
@@ -244,7 +259,8 @@ Deno.serve(async (req) => {
 
     (rots ?? []).forEach((r: { block_number: number; rotation_name: string }) => {
       const start = blockStartDate(r.block_number, ay);
-      const end = new Date(start.getTime() + 28 * 86400000);
+      // DTEND is exclusive, so this is the day after the block's last day.
+      const end = new Date(start.getTime() + blockWeeks(r.block_number, ay) * 7 * 86400000);
       push(
         "BEGIN:VEVENT",
         fold("SUMMARY:B" + r.block_number + " \u2013 " + icsEscape(r.rotation_name)),

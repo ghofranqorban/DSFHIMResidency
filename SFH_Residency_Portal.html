@@ -414,21 +414,49 @@ let RESIDENTS=[];
 let CONSULTANTS=[];
 let MENTORS={};
 const ROTA_PERIODS=["28/9-25/10","26/10-22/11","23/11-20/12","21/12-17/1","18/1-14/2","15/2-14/3","15/3-11/4","12/4-9/5","10/5-6/6","7/6-4/7","5/7-1/8","2/8-29/8","30/8-26/9"];
+// Blocks that do not run the usual 4 weeks, keyed by academic year then block number.
+// AY 2025-26 block 13 was extended to 5 weeks (30 Aug - 3 Oct 2026) so the year meets
+// AY 2026-27 with no uncovered week in between.
+const BLOCK_WEEKS_OVERRIDE={2025:{13:5}};
+// The academic year normally turns over on 1 Oct. Where a year starts on a different
+// date, record it here as [day, month] so the rollover follows the rota, not the month.
+const AY_START_OVERRIDE={2026:[4,10]};
+function blockWeeks(blk,ay){return(BLOCK_WEEKS_OVERRIDE[ay]&&BLOCK_WEEKS_OVERRIDE[ay][blk])||4;}
+function blockDays(blk,ay){return blockWeeks(blk,ay)*7;}
+// Display label for a block, e.g. "30/8-3/10". Only derived from start + length where a
+// per-year override exists; otherwise the ROTA_PERIODS string stays authoritative, since
+// block 6 runs 29 days in a leap year and so cannot be derived from a week count.
+function blockLabel(blk,ay){
+  const raw=ROTA_PERIODS[blk-1]||"";
+  if(!(BLOCK_WEEKS_OVERRIDE[ay]&&BLOCK_WEEKS_OVERRIDE[ay][blk]))return raw;
+  const s=blockStartDate(blk,ay);if(!s)return raw;
+  const e=new Date(s.getTime()+(blockDays(blk,ay)-1)*86400000);
+  return s.getDate()+"/"+(s.getMonth()+1)+"-"+e.getDate()+"/"+(e.getMonth()+1);
+}
 // Blocks/academic year are computed from today's date instead of hand-updated each month,
-// so the app never falls out of sync with the calendar (each block = 4 fixed weeks;
-// the academic year runs Oct 1 - Sep 30, matching residents.year_started convention).
+// so the app never falls out of sync with the calendar. End dates are read from
+// ROTA_PERIODS rather than derived from a length, because a block is not always 28 days:
+// block 6 ("15/2-14/3") runs 29 days in a leap year.
 function computeCurrentBlock(today){
   today=today||new Date();
   const m=today.getMonth();
-  const y=m>=9?today.getFullYear():today.getFullYear()-1;
+  let y=m>=9?today.getFullYear():today.getFullYear()-1;
+  const ayStart=AY_START_OVERRIDE[y];
+  if(ayStart&&today<new Date(y,ayStart[1]-1,ayStart[0],0,0,0))y=y-1;
   for(let i=0;i<ROTA_PERIODS.length;i++){
     const[startStr,endStr]=ROTA_PERIODS[i].split("-");
     const[sd,sm]=startStr.split("/").map(Number);
     const[ed,em]=endStr.split("/").map(Number);
     const startYear=(i===0&&sm===9)?y:(sm>=10?y:y+1);
-    const endYear=(i===ROTA_PERIODS.length-1&&em===9)?y+1:(em>=10?y:y+1);
     const start=new Date(startYear,sm-1,sd,0,0,0);
-    const end=new Date(endYear,em-1,ed,23,59,59);
+    let end;
+    if(BLOCK_WEEKS_OVERRIDE[y]&&BLOCK_WEEKS_OVERRIDE[y][i+1]){
+      end=new Date(start.getTime()+(blockDays(i+1,y)-1)*86400000);
+      end.setHours(23,59,59);
+    }else{
+      const endYear=(i===ROTA_PERIODS.length-1&&em===9)?y+1:(em>=10?y:y+1);
+      end=new Date(endYear,em-1,ed,23,59,59);
+    }
     if(today>=start&&today<=end)return{block:i+1,academicYear:y};
   }
   return{block:13,academicYear:y};
@@ -836,11 +864,11 @@ function buildLeaveData(){
       const rot=(FULL_ROTA[r.id]||{})[String(p)]||"";
       const meta=(ROTA_LEAVE_META[r.id]||{})[String(p)];
       if((rot.includes("Annual Leave")||rot.includes("Maternity Leave"))&&!existing_periods.includes(p)){
-        rota.push({period:p,label:ROTA_PERIODS[p-1],rot});
+        rota.push({period:p,label:blockLabel(p,CURRENT_ACADEMIC_YEAR),rot});
       }else if(meta&&!existing_periods.includes(p)){
         // Split-block case: 2wks Annual/Maternity Leave + the rest of the block on `rot`.
         const kindLabel=meta.kind==="maternity"?"Maternity Leave":"Annual Leave";
-        rota.push({period:p,label:ROTA_PERIODS[p-1],rot:meta.weeks+"wks "+kindLabel+" ("+meta.position+") + "+rot,partial:true,weeks:meta.weeks,position:meta.position});
+        rota.push({period:p,label:blockLabel(p,CURRENT_ACADEMIC_YEAR),rot:meta.weeks+"wks "+kindLabel+" ("+meta.position+") + "+rot,partial:true,weeks:meta.weeks,position:meta.position});
       }
     }
   });
@@ -2676,7 +2704,7 @@ function renderModGrid(){
   const dateStr=today.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
   const timeStr=today.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true});
   const firstName=u.name.split(" ").length>1?u.name.split(" ")[1]:u.name.split(" ")[0];
-  const periodLabel=ROTA_PERIODS[CURRENT_PERIOD-1]||"";
+  const periodLabel=blockLabel(CURRENT_PERIOD,CURRENT_ACADEMIC_YEAR);
   const roleLabel=ROLE_LABELS[u.role]||"Resident";
 
   // ── Animated confetti canvas ──────────────────────────────
@@ -2986,7 +3014,7 @@ function renderRotaBlock(resOverride){
   return el("div",null,
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
-        el("span",{cls:"card-title",st:{margin:"0"}},"Block "+p+" — "+ROTA_PERIODS[p-1]),
+        el("span",{cls:"card-title",st:{margin:"0"}},"Block "+p+" — "+blockLabel(p,CURRENT_ACADEMIC_YEAR)),
         canEdit()?el("button",{cls:"sbtn "+(STATE.rotaEdit?"warn":"ghost"),onClick:()=>set({rotaEdit:!STATE.rotaEdit})},STATE.rotaEdit?"Cancel":"Edit Mode"):null,
         STATE.rotaEdit?el("button",{cls:"sbtn success",onClick:saveEdit},"Save Changes"):null
       ),
@@ -3145,7 +3173,7 @@ function renderRotaTable(resOverride){
             el("th",{cls:"sticky-col",st:{minWidth:"140px"}},"Resident"),
             ...ROTA_PERIODS.map((lbl,i)=>el("th",{st:{minWidth:"70px",textAlign:"center",background:i+1===CURRENT_PERIOD?"#fff8e1":""}},
               el("div",{st:{fontSize:".72rem"}},"B"+(i+1)),
-              el("div",{st:{fontSize:".65rem",color:"#94a3b8"}},lbl)
+              el("div",{st:{fontSize:".65rem",color:"#94a3b8"}},blockLabel(i+1,CURRENT_ACADEMIC_YEAR))
             ))
           )
         ),
@@ -3508,7 +3536,7 @@ function currentWeekInBlock(blk){
   const start=blockStartDate(blk,CURRENT_ACADEMIC_YEAR);if(!start)return null;
   const today=new Date();today.setHours(0,0,0,0);
   const diffDays=Math.floor((today-start)/86400000);
-  if(diffDays<0||diffDays>=28)return null;
+  if(diffDays<0||diffDays>=blockDays(blk,CURRENT_ACADEMIC_YEAR))return null;
   return Math.floor(diffDays/7)+1;
 }
 function shortFmtDate(d){if(!d)return"";const p=d.split("-");const M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return parseInt(p[2])+" "+M[parseInt(p[1])-1];}
@@ -3579,7 +3607,7 @@ function renderScheduleTable(sessions,blk,cols){
 // ─── MORNING MEETINGS ────────────────────────────────────────────────────────
 function renderMorning(){
   const blk=STATE.mmBlock;
-  const period=ROTA_PERIODS[blk-1]||"";
+  const period=blockLabel(blk,CURRENT_ACADEMIC_YEAR);
   const canEdit=canEditMMSchedule();
   const header=el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
     el("div",null,
@@ -3616,7 +3644,7 @@ function renderMMScheduleForm(blk,editingSession){
     el("div",{cls:"grid-3",st:{marginBottom:"10px"}},
       el("div",null,el("label",null,"Week (in block)"),
         el("select",{id:"mm_f_week"},
-          [1,2,3,4].map(n=>el("option",{value:n,...(wk===n?{selected:""}:{})},"Week "+n))
+          Array.from({length:blockWeeks(blk,CURRENT_ACADEMIC_YEAR)},(_,k)=>k+1).map(n=>el("option",{value:n,...(wk===n?{selected:""}:{})},"Week "+n))
         )
       ),
       el("div",null,el("label",null,"Day"),el("input",{id:"mm_f_day",placeholder:"e.g. Sunday",value:editingSession?.day_label||""})),
@@ -3826,12 +3854,13 @@ function blockStartDate(blockNum,academicYear){
   const year=(sm>=9)?academicYear:academicYear+1;
   return new Date(year,sm-1,sd,0,0,0);
 }
-// Generate Sunday–Thursday dates for each of the 4 weeks of a block (5 days × 4 weeks = 20 sessions).
+// Generate Sunday–Thursday dates for every week of a block (5 days × 4 weeks = 20 sessions,
+// or 25 where the block runs 5 weeks — see BLOCK_WEEKS_OVERRIDE).
 function mmDatesForBlock(blockNum,academicYear){
   const start=blockStartDate(blockNum,academicYear);if(!start)return[];
   const DAY_NAMES=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   const dates=[];
-  for(let wk=0;wk<4;wk++){
+  for(let wk=0;wk<blockWeeks(blockNum,academicYear);wk++){
     [0,1,2,3,4].forEach(dow=>{
       const d=new Date(start.getTime()+(wk*7+dow)*86400000);
       const yr=d.getFullYear(),mo=String(d.getMonth()+1).padStart(2,"0"),dy=String(d.getDate()).padStart(2,"0");
@@ -3841,7 +3870,7 @@ function mmDatesForBlock(blockNum,academicYear){
   return dates;
 }
 async function generateMMSessions(blk){
-  showConfirm("Auto-generate Sunday–Thursday session slots (20 total) for Block "+blk+"? Only dates not already in the schedule will be added.",async()=>{
+  showConfirm("Auto-generate Sunday–Thursday session slots ("+(blockWeeks(blk,CURRENT_ACADEMIC_YEAR)*5)+" total) for Block "+blk+"? Only dates not already in the schedule will be added.",async()=>{
     const dates=mmDatesForBlock(blk,CURRENT_ACADEMIC_YEAR);
     if(!dates.length){showToast("Could not compute dates for Block "+blk);return;}
     const existingDates=new Set(MM_SESSIONS.filter(s=>s.block_number===blk).map(s=>s.session_date));
@@ -4267,7 +4296,7 @@ function renderMMOverview(){
 }
 // ─── ACADEMIC DAY SCHEDULE ────────────────────────────────────────────────────
 function renderTeaching(){
-  const blkT=STATE.teachBlock;const periodT=ROTA_PERIODS[blkT-1]||"";
+  const blkT=STATE.teachBlock;const periodT=blockLabel(blkT,CURRENT_ACADEMIC_YEAR);
   return el("div",{cls:"content"},
     el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
       el("div",null,
@@ -4296,7 +4325,7 @@ function renderTeachScheduleForm(blk,editingSession){
     el("div",{cls:"grid-3",st:{marginBottom:"10px"}},
       el("div",null,el("label",null,"Week (in block)"),
         el("select",{id:"teach_f_week"},
-          [1,2,3,4].map(n=>el("option",{value:n,...(wk===n?{selected:""}:{})},"Week "+n))
+          Array.from({length:blockWeeks(blk,CURRENT_ACADEMIC_YEAR)},(_,k)=>k+1).map(n=>el("option",{value:n,...(wk===n?{selected:""}:{})},"Week "+n))
         )
       ),
       el("div",null,el("label",null,"Day"),
@@ -4679,7 +4708,7 @@ function exportOncall(blk){
   });
   const rows=[];
   const DN=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-  for(let i=0;i<28;i++){
+  for(let i=0;i<blockDays(blk,CURRENT_ACADEMIC_YEAR);i++){
     const d=new Date(blockStart.getTime()+i*86400000);
     const ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
     const day=DN[d.getDay()];
@@ -7746,7 +7775,7 @@ function renderProfileRota(res){
         const p=String(i+1);
         const rot=(FULL_ROTA[res.id]||{})[p]||"";
         const inp=el("div",null,
-          el("label",null,"Block "+(i+1)+" ("+lbl+")"),
+          el("label",null,"Block "+(i+1)+" ("+blockLabel(i+1,CURRENT_ACADEMIC_YEAR)+")"),
           el("select",{cls:"input-sm"},
             el("option",{value:""},"— None —"),
             ...ALL_ROTATIONS.map(r=>el("option",{value:r,...(rot===r?{selected:""}:{})},r))
@@ -10348,12 +10377,12 @@ function renderOncall(){
   const blk=STATE.oncallBlock||CURRENT_PERIOD;
   const tab=STATE.oncallTab||(u.role==="resident"?"mine":"schedule");
   const canEdit=canEditOncall();
-  // Build full 28-day block date list
+  // Build the full block date list (28 days, or 35 where the block runs 5 weeks)
   const allDates=[];
   const blockStart=blockStartDate(blk,CURRENT_ACADEMIC_YEAR);
   if(blockStart){
     const DN=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-    for(let i=0;i<28;i++){
+    for(let i=0;i<blockDays(blk,CURRENT_ACADEMIC_YEAR);i++){
       const d=new Date(blockStart.getTime()+i*86400000);
       const yr=d.getFullYear(),mo=String(d.getMonth()+1).padStart(2,"0"),dy=String(d.getDate()).padStart(2,"0");
       allDates.push({date:yr+"-"+mo+"-"+dy,day:DN[d.getDay()],isWe:d.getDay()===5||d.getDay()===6});
@@ -10681,7 +10710,7 @@ function renderOncall(){
       )
     );
   }
-  const blkPeriodOC=ROTA_PERIODS[blk-1]||"";
+  const blkPeriodOC=blockLabel(blk,CURRENT_ACADEMIC_YEAR);
   return el("div",{cls:"content"},
     el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
       el("div",null,
