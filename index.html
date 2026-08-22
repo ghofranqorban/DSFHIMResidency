@@ -475,6 +475,25 @@ th.ov-th{text-align:center;}
 .rb-splitrow{display:flex;gap:5px;margin:9px 0 2px;}
 .rb-wkbtn{flex:1;text-align:center;font-size:.68rem;font-weight:700;padding:7px 0;border-radius:6px;background:rgba(31,26,18,.05);color:rgba(31,26,18,.42);cursor:pointer;transition:all .15s;}
 .rb-note{font-size:.71rem;color:rgba(31,26,18,.5);margin-top:7px;}
+.rb-lv{background:rgba(254,251,243,.66);border:1px solid rgba(31,26,18,.07);border-radius:9px;padding:8px 10px;margin-top:7px;cursor:pointer;transition:border-color .15s,background .15s;}
+.rb-lv:hover{border-color:rgba(201,106,74,.45);background:#FEFBF3;}
+.rb-lv.here{border-color:rgba(201,106,74,.55);box-shadow:inset 3px 0 0 #c96a4a;}
+.rb-lv .top{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.rb-lv .who{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(31,26,18,.42);}
+.rb-lv .per{font-size:.79rem;font-weight:600;margin-top:3px;}
+.rb-lv .per span{color:rgba(31,26,18,.35);font-weight:400;}
+.rb-lv .alt{font-size:.68rem;color:rgba(31,26,18,.5);margin-top:3px;}
+.rb-lv .alt b{font-weight:600;color:rgba(31,26,18,.68);}
+.rb-pill{font-size:.56rem;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:9999px;text-transform:uppercase;white-space:nowrap;}
+.rb-pill.appr{background:#e6f4ea;color:#1e7a43;}
+.rb-pill.over{background:#fde8e8;color:#b52040;}
+.rb-pill.pend{background:#f1ece1;color:rgba(31,26,18,.5);}
+.rb-editcue{font-size:.65rem;color:rgba(201,106,74,.85);font-weight:600;margin-top:6px;}
+.rb-sub{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(31,26,18,.4);margin:10px 0 1px;}
+.rb-kv.stack{display:block;padding:3px 0;}
+.rb-kv.stack .k{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(31,26,18,.42);}
+.rb-kv.stack .v{font-size:.78rem;font-weight:600;margin-top:1px;}
+.rb-kv.stack .v .loc{font-size:.7rem;color:rgba(31,26,18,.52);font-weight:400;}
 .rb-foot{padding:14px 26px;border-top:1px solid rgba(31,26,18,.07);display:flex;justify-content:space-between;align-items:center;gap:12px;background:#F6EFE2;}
 .rb-lbl{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(31,26,18,.55);}
 /* ─── Calendar ─── */
@@ -9572,15 +9591,30 @@ function rbCellPanel(){
 
   // ── right rail ──
   const rail=el("div",{cls:"rb-pright"},tip);
-  const leaveChips=[];
+  // Both picks, each with the alternate the resident nominated, and its cap/approval
+  // state. Clicking one opens the same decisionModal() the AY Plan leave table uses —
+  // the module wrapper renders it, so it works from inside this panel too.
+  const leaveRows=[];
   if(lp){
-    ["first_leave_key","second_leave_key"].forEach(kk=>{
-      const p=LP_PERIODS.find(x=>x.key===lp[kk]);
-      if(p)leaveChips.push(el("span",{cls:"rb-chip leave"},"B"+p.blk+" · "+(p.half==="first"?"1st half":"2nd half")));
+    [["first","First leave"],["second","Second leave"]].forEach(([w,label])=>{
+      const p=LP_PERIODS.find(x=>x.key===lp[w+"_leave_key"]);
+      if(!p)return;
+      const alt=lp[w+"_leave_alt_key"]?LP_PERIODS.find(x=>x.key===lp[w+"_leave_alt_key"]):null;
+      const appr=!!lp[w+"_leave_approved"];
+      const over=lpPeriodCount(p.key,null)>lpCapFor(p);
+      leaveRows.push(el("div",{cls:"rb-lv"+(p.blk===blk?" here":""),
+        title:"Click to approve, decline or reassign",
+        onClick:()=>set({lpDecision:{residentId:res.id,which:w},lpDecisionEditKey:undefined})},
+        el("div",{cls:"top"},el("span",{cls:"who"},label),
+          el("span",{cls:"rb-pill "+(appr?"appr":over?"over":"pend")},appr?"Approved":over?"Over cap":"Suggested")),
+        el("div",{cls:"per"},p.label.replace(" - "," — "),el("span",null," · "+p.disp)),
+        alt?el("div",{cls:"alt"},"2nd preference: ",el("b",null,alt.label.replace(" - "," — ")))
+          :el("div",{cls:"alt"},"No 2nd preference given.")));
     });
   }
   const leaveSec=el("div",{cls:"rb-railsec"},el("h3",null,"Suggested leave"),
-    leaveChips.length?el("div",null,...leaveChips):el("div",{cls:"rb-note"},"No leave plan submitted."));
+    leaveRows.length?el("div",null,...leaveRows,el("div",{cls:"rb-editcue"},"Click a leave to approve, decline or reassign →"))
+      :el("div",{cls:"rb-note"},"No leave plan submitted."));
   // Warn only when the weeks actually being assigned overlap the requested half.
   if(lp){
     const clash=LP_PERIODS.find(p=>p.blk===blk&&(p.key===lp.first_leave_key||p.key===lp.second_leave_key));
@@ -9598,10 +9632,25 @@ function rbCellPanel(){
       :el("div",{cls:"rb-note"},"No GIM preference submitted."),
     el("div",{cls:"rb-note"},"Non-binding — the resident's own suggestion.")));
   if(r4){
-    rail.appendChild(el("div",{cls:"rb-railsec"},el("h3",null,"Elective & clinic"),
-      el("div",{cls:"rb-kv"},el("span",null,"Elective 1"),el("b",null,r4.elective1_block?("B"+r4.elective1_block+" · "+(r4.elective1_subspecialty||"—")):"—")),
-      el("div",{cls:"rb-kv"},el("span",null,"Elective 2"),el("b",null,r4.elective2_block?("B"+r4.elective2_block+" · "+(r4.elective2_subspecialty||"—")):"—")),
-      el("div",{cls:"rb-kv"},el("span",null,"Clinic"),el("b",null,[r4.clinic1_block,r4.clinic2_block].filter(Boolean).map(b=>"B"+b).join(", ")||"—"))));
+    // Every elective and clinic pick, each on its own row with the location the resident
+    // named, so the block being edited can be checked against all four at a glance.
+    const elecRow=(n)=>{
+      const b=r4["elective"+n+"_block"],sub=r4["elective"+n+"_subspecialty"],loc=r4["elective"+n+"_location"];
+      return el("div",{cls:"rb-kv stack"},
+        el("div",{cls:"k"},"Elective "+n+(b?" · Block "+b:""),
+          b===blk?el("span",{st:{color:"#c96a4a"}}," · this block"):null),
+        el("div",{cls:"v"},b?(sub||"Subspecialty not given"):"—",
+          loc?el("span",{cls:"loc"}," — "+loc):null));
+    };
+    const clinicRow=(n)=>{
+      const b=r4["clinic"+n+"_block"];
+      return el("div",{cls:"rb-kv"},el("span",null,"Clinic "+n),
+        el("b",{st:b===blk?{color:"#c96a4a"}:{}},b?"Block "+b:"—"));
+    };
+    rail.appendChild(el("div",{cls:"rb-railsec"},el("h3",null,"Electives"),
+      elecRow(1),elecRow(2),
+      el("div",{cls:"rb-sub"},"Clinics"),clinicRow(1),clinicRow(2),
+      el("div",{cls:"rb-note"},"R4 picks — shown here so you don't double-book the block.")));
   }
   const mandDone=MANDATORY.reduce((s,m)=>s+Math.min(scfhsWeeks(cum,m),SCFHS_TOTAL[m]),0);
   const belowCap=MANDATORY.filter(m=>scfhsWeeks(cum,m)<scfhsCap(m)).length;
