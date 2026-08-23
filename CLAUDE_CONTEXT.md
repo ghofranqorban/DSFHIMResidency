@@ -304,6 +304,7 @@ path not yet written — comment in place at the Scholar leg).
 
 | File | Status | Purpose |
 |---|---|---|
+| `fix_block13_week5.sql` | ✅ STEP 1 run (23 Aug 2026) | Closes the two cases `extend_block13_ay2025.sql` left for a human. STEP 1 (the one 2+2→2+3 split block) is applied. **STEP 2 is still commented out** — whole-block-leave residents need a team named per person before their week 5 can be assigned; the VERIFY query at the bottom lists anyone still SHORT. |
 | `add_canmeds_kpi_v2.sql` | ✅ Run (21 Aug 2026) | CanMEDS v2 — `research_projects`, `advocacy_activities`, `research_ramp` view, RLS (`is_pd_or_chief()` + assigned mentor) |
 | `add_canmeds_kpi_v2b.sql` | ✅ Run (21 Aug 2026) | `committee_memberships`, `committee_summary` view, ramp widened to 6 states (`behind` added) |
 | `add_canmeds_kpi_v2c_backfill.sql` | ✅ Run (21 Aug 2026) | `canmeds_verified_at`/`_by` on `kpi_scores` + placeholder rows migrated from the old boolean columns (`notes` starts `Auto-migrated`) |
