@@ -474,6 +474,16 @@ th.ov-th{text-align:center;}
 .rb-warn{background:rgba(181,32,64,.08);border-left:3px solid #b52040;padding:9px 11px;font-size:.73rem;color:#8a1a30;border-radius:0 5px 5px 0;margin-top:6px;}
 .rb-splitrow{display:flex;gap:5px;margin:9px 0 2px;}
 .rb-wkbtn{flex:1;text-align:center;font-size:.68rem;font-weight:700;padding:7px 0;border-radius:6px;background:rgba(31,26,18,.05);color:rgba(31,26,18,.42);cursor:pointer;transition:all .15s;}
+.rb-wkbtn.lv{background:repeating-linear-gradient(135deg,#fdf6dd,#fdf6dd 5px,#f7ecc4 5px,#f7ecc4 10px);color:#7a5c12;box-shadow:inset 0 0 0 1px rgba(164,122,40,.5);cursor:default;}
+.rb-lvban{display:flex;align-items:center;gap:13px;background:#fdf6dd;border:1px solid rgba(164,122,40,.34);border-left:3px solid #A47A28;border-radius:0 10px 10px 0;padding:11px 14px;margin-top:10px;}
+.rb-lvban .txt{flex:1;}
+.rb-lvban .t1{font-size:.79rem;font-weight:600;color:#5f470d;}
+.rb-lvban .t2{font-size:.69rem;color:rgba(31,26,18,.55);margin-top:2px;}
+.rb-lvban .lnk{font-size:.7rem;font-weight:600;color:#9d4a2a;cursor:pointer;text-decoration:underline;white-space:nowrap;}
+.rb-sw{width:40px;height:22px;border-radius:9999px;background:#A47A28;position:relative;cursor:pointer;flex:none;transition:background .15s;}
+.rb-sw::after{content:'';position:absolute;top:3px;left:21px;width:16px;height:16px;border-radius:50%;background:#FEFBF3;transition:left .15s;}
+.rb-sw.off{background:rgba(31,26,18,.16);}
+.rb-sw.off::after{left:3px;}
 .rb-note{font-size:.71rem;color:rgba(31,26,18,.5);margin-top:7px;}
 .rb-lv{background:rgba(254,251,243,.66);border:1px solid rgba(31,26,18,.07);border-radius:9px;padding:8px 10px;margin-top:7px;cursor:pointer;transition:border-color .15s,background .15s;}
 .rb-lv:hover{border-color:rgba(201,106,74,.45);background:#FEFBF3;}
@@ -9450,18 +9460,48 @@ function renderLeavePlan(){
 const RB_MANDATORY_TOTAL=MANDATORY.reduce((s,m)=>s+SCFHS_TOTAL[m],0);
 // Rotations that carry no SCFHS minimum: service time, clinic, elective and leave.
 const RB_EXTRA=["Night Duty","Medical Consult","Outpatient Clinic","Elective","Annual Leave","Maternity Leave"];
+// A resident's two leave picks can both land in the same block, which makes the whole
+// block leave. Only an approved pick prefills the builder — a merely suggested one is
+// left for the PD to approve first, and the rail already shows it as pending.
+function rbApprovedLeave(rid,blk){
+  const lp=LEAVE_PLAN[rid];
+  if(!lp)return null;
+  const hits=[];
+  ["first","second"].forEach(w=>{
+    if(!lp[w+"_leave_approved"])return;
+    const p=LP_PERIODS.find(x=>x.key===lp[w+"_leave_key"]);
+    if(p&&p.blk===blk)hits.push({which:w,period:p});
+  });
+  if(!hits.length)return null;
+  return{mode:hits.length>1?"whole":(hits[0].period.half==="first"?"start":"end"),hits};
+}
+// A leave period is two weeks and never stretches to fill a longer block — the rotation
+// side absorbs any extra week. bw-1 keeps at least one week of rotation to hang it on.
+function rbLeaveWeeks(mode,bw){return(mode==="start"||mode==="end")?Math.min(2,bw-1):0;}
 function rbOpenCell(rid,blk){
   const segs=(ROTA_PLAN[rid]||{})[String(blk)]||[];
   const bw=blockWeeks(blk,PLAN_AY);
+  const savedLv=segs.find(s=>s.leaveWeeks>0);
+  // Only an unplanned cell takes the leave plan's default, so switching the leave off
+  // and saving sticks instead of springing back every time the cell is reopened.
+  const appr=segs.length?null:rbApprovedLeave(rid,blk);
   set({rbCell:{rid,blk},
     // Boundary = how many weeks the first rotation runs. Equal to the block length
     // means the block is not split at all.
     rbBound:segs.length>1?segs[0].weeks:bw,
     rbSeg:0,
-    rbRots:[segs[0]?.rot||"",segs[1]?.rot||""]});
+    // Whole-block leave is carried as the rotation itself, not as leave weeks — the DB
+    // write drops any segment with no rotation name, so bare leave has nothing to sit on.
+    rbRots:[appr&&appr.mode==="whole"?"Annual Leave":(segs[0]?.rot||""),segs[1]?.rot||""],
+    rbLv:savedLv?savedLv.leavePos:(appr&&appr.mode!=="whole"?appr.mode:"none")});
 }
 function rbSegments(){
   const{blk}=STATE.rbCell,bw=blockWeeks(blk,PLAN_AY),b=STATE.rbBound,rots=STATE.rbRots||["",""];
+  // Leave takes its weeks out of the single rotation beside it, so a block cannot be
+  // split and carry a half-block leave at once — 4 weeks will not divide into 2 weeks
+  // of leave plus two rotations.
+  const lw=rbLeaveWeeks(STATE.rbLv,bw);
+  if(lw)return rots[0]?[{weekStart:1,weeks:bw-lw,rot:rots[0],leaveWeeks:lw,leavePos:STATE.rbLv}]:[];
   if(b>=bw)return rots[0]?[{weekStart:1,weeks:bw,rot:rots[0],leaveWeeks:0,leavePos:"none"}]:[];
   const out=[];
   if(rots[0])out.push({weekStart:1,weeks:b,rot:rots[0],leaveWeeks:0,leavePos:"none"});
@@ -9591,21 +9631,30 @@ function renderRotaBuilder(){
         const flag=flagsFor(r.id,b);
         const editable=planBlockEditable(b);
         const kids=[];
+        const plain=segs.length===1&&!segs[0].leaveWeeks;
         if(!segs.length){
           kids.push(el("b",{st:{color:"rgba(31,26,18,.2)",fontWeight:"400"}},"—"));
-        }else if(segs.length===1){
+        }else if(plain){
           const c=rotColor(segs[0].rot);
           kids.push(el("b",{st:{color:c.tx}},ROT_ABBR[segs[0].rot]||segs[0].rot));
         }else{
-          kids.push(el("div",{cls:"rb-seg"},...segs.map(s=>{
-            const c=rotColor(s.rot);
-            return el("span",{st:{background:c.bg,color:c.tx}},
+          const parts=[];
+          segs.forEach(s=>{
+            const c=rotColor(s.rot),lc=rotColor("Annual Leave");
+            const rotFrom=s.leavePos==="start"?s.weekStart+s.leaveWeeks:s.weekStart;
+            const rotChip=el("span",{st:{background:c.bg,color:c.tx}},
               (ROT_ABBR[s.rot]||s.rot)+" ",
-              el("i",{cls:"rb-wk"},"w"+s.weekStart+"-"+(s.weekStart+s.weeks-1)));
-          })));
+              el("i",{cls:"rb-wk"},"w"+rotFrom+"-"+(rotFrom+s.weeks-1)));
+            if(!s.leaveWeeks){parts.push(rotChip);return;}
+            const lvFrom=s.leavePos==="start"?s.weekStart:s.weekStart+s.weeks;
+            const lvChip=el("span",{st:{background:lc.bg,color:lc.tx}},"AL ",
+              el("i",{cls:"rb-wk"},"w"+lvFrom+"-"+(lvFrom+s.leaveWeeks-1)));
+            if(s.leavePos==="start")parts.push(lvChip,rotChip);else parts.push(rotChip,lvChip);
+          });
+          kids.push(el("div",{cls:"rb-seg"},...parts));
         }
         if(flag)kids.push(el("i",{cls:"rb-flag"+(flag==="amber"?" amber":"")}));
-        const bg=segs.length===1?rotColor(segs[0].rot).bg:(selBlk===b?"rgba(201,106,74,.05)":"");
+        const bg=plain?rotColor(segs[0].rot).bg:(selBlk===b?"rgba(201,106,74,.05)":"");
         tr.appendChild(el("td",{st:bg?{background:bg}:{}},
           el("div",{cls:"rb-cell",st:editable?{}:{cursor:"not-allowed",opacity:".72"},
             onDblclick:()=>{if(editable)rbOpenCell(r.id,b);else showToast("Block "+b+" is "+planBlockState(b)+" — ask the PD to reopen it.","warning");}},...kids)));
@@ -9635,7 +9684,10 @@ function rbCellPanel(){
   const{rid,blk}=STATE.rbCell;
   const res=resById(rid);if(!res)return null;
   const bw=blockWeeks(blk,PLAN_AY),bound=STATE.rbBound,rots=STATE.rbRots||["",""];
-  const split=bound<bw;
+  const lvMode=STATE.rbLv||"none",lvWeeks=rbLeaveWeeks(lvMode,bw),lvOn=lvWeeks>0;
+  const wholeLv=rots[0]==="Annual Leave"&&bound>=bw;
+  const apprLv=rbApprovedLeave(rid,blk);
+  const split=lvOn?false:bound<bw;
   const activeSeg=split?(STATE.rbSeg||0):0;
   const cum=projectedWeeksFor(rid);
   const lp=LEAVE_PLAN[rid]||null;
@@ -9663,13 +9715,47 @@ function rbCellPanel(){
   // week pills — clicking week w puts the boundary after w
   const wkRow=el("div",{cls:"rb-splitrow"});
   for(let w=1;w<=bw;w++){
+    if(wholeLv||(lvOn&&(lvMode==="start"?w<=lvWeeks:w>bw-lvWeeks))){
+      wkRow.appendChild(el("div",{cls:"rb-wkbtn lv"},"WK "+w));
+      continue;
+    }
     const inSeg2=split&&w>bound;
     const on=split?(inSeg2?activeSeg===1:activeSeg===0):true;
     wkRow.appendChild(el("div",{cls:"rb-wkbtn",
       st:on?(inSeg2?{background:"rgba(38,90,72,.14)",color:"#26523A",boxShadow:"inset 0 0 0 1px rgba(38,90,72,.35)"}
                    :{background:"rgba(201,106,74,.18)",color:"#9d4a2a",boxShadow:"inset 0 0 0 1px rgba(201,106,74,.45)"}):{},
-      onClick:()=>set({rbBound:w,rbSeg:0})},"WK "+w));
+      onClick:()=>{if(!lvOn&&!wholeLv)set({rbBound:w,rbSeg:0});}},"WK "+w));
   }
+  const splitNote=wholeLv?"The whole block is annual leave — saved as the Annual Leave rotation."
+    :lvOn?(lvMode==="start"
+        ?"Weeks 1–"+lvWeeks+" are leave. The rotation below runs weeks "+(lvWeeks+1)+"–"+bw+"."
+        :"The rotation below runs weeks 1–"+(bw-lvWeeks)+". Weeks "+(bw-lvWeeks+1)+"–"+bw+" are leave.")
+    :split?"Split "+bound+" + "+(bw-bound)+". Click a week to move the boundary; click week "+bw+" for a single rotation."
+    :"One rotation for the whole block. Click an earlier week to split it.";
+  // Only rendered when the block has an approved leave or already carries one, so blocks
+  // with no leave look exactly as they did before. Switched on by default when approved.
+  const lvSwitchOn=wholeLv||lvOn;
+  const lvBanner=(apprLv||lvSwitchOn)?el("div",{cls:"rb-lvban"},
+    el("div",{cls:"rb-sw"+(lvSwitchOn?"":" off"),
+      title:lvSwitchOn?"Take the leave off this block":"Put the leave on this block",
+      onClick:()=>{
+        if(lvSwitchOn){set({rbLv:"none",rbRots:[wholeLv?"":rots[0],rots[1]]});return;}
+        const m=apprLv?apprLv.mode:"start";
+        if(m==="whole")set({rbLv:"none",rbBound:bw,rbRots:["Annual Leave",""]});
+        else set({rbLv:m,rbBound:bw,rbRots:[rots[0],""]});
+      }}),
+    el("div",{cls:"txt"},
+      el("div",{cls:"t1"},lvSwitchOn
+        ?(wholeLv?"Annual leave, whole block"
+          :"Annual leave, weeks "+(lvMode==="start"?"1–"+lvWeeks:(bw-lvWeeks+1)+"–"+bw))
+        :"Annual leave — not applied to this block"),
+      el("div",{cls:"t2"},apprLv
+        ?"Approved "+(apprLv.hits.length>1?"first and second leave":apprLv.hits[0].which+" leave")
+          +" · "+apprLv.hits.map(h=>h.period.disp).join(" + ")
+        :"Set here in the builder — no approved leave in this block.")),
+    (lvSwitchOn&&!wholeLv)?el("span",{cls:"lnk",
+      onClick:()=>set({rbLv:lvMode==="start"?"end":"start"})},lvMode==="start"?"Move to end":"Move to start"):null
+  ):null;
   const segTabs=el("div",{st:{display:"flex",gap:"6px",marginTop:"10px"}});
   if(split){
     [0,1].forEach(i=>{
@@ -9734,7 +9820,13 @@ function rbCellPanel(){
     const clash=LP_PERIODS.find(p=>p.blk===blk&&(p.key===lp.first_leave_key||p.key===lp.second_leave_key));
     if(clash){
       const half=clash.half==="first"?[1,Math.ceil(bw/2)]:[Math.ceil(bw/2)+1,bw];
-      const hits=rbSegments().some(s=>s.rot&&!/Leave/.test(s.rot)&&s.weekStart<=half[1]&&(s.weekStart+s.weeks-1)>=half[0]);
+      // weekStart is the start of the whole segment; when the leave sits first the
+      // rotation actually begins after it, so the warning must not fire on those weeks.
+      const hits=rbSegments().some(s=>{
+        if(!s.rot||/Leave/.test(s.rot))return false;
+        const from=s.leavePos==="start"?s.weekStart+s.leaveWeeks:s.weekStart;
+        return from<=half[1]&&(from+s.weeks-1)>=half[0];
+      });
       if(hits)leaveSec.appendChild(el("div",{cls:"rb-warn"},
         "This resident asked for leave in weeks "+half[0]+"–"+half[1]+" of this block. The rotation you are assigning covers those weeks."));
     }
@@ -9787,9 +9879,8 @@ function rbCellPanel(){
       el("div",{cls:"rb-pleft"},
         el("div",{cls:"rb-lbl"},"Split this block"),
         wkRow,
-        el("div",{cls:"rb-note"},split
-          ?"Split "+bound+" + "+(bw-bound)+". Click a week to move the boundary; click week "+bw+" for a single rotation."
-          :"One rotation for the whole block. Click an earlier week to split it."),
+        el("div",{cls:"rb-note"},splitNote),
+        lvBanner,
         segTabs,
         el("div",{cls:"rb-lbl",st:{marginTop:"18px"}},"Assign rotation",
           el("span",{st:{textTransform:"none",letterSpacing:"0",fontWeight:"500"}}," — hover any specialty for its cap")),
