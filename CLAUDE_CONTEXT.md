@@ -57,9 +57,18 @@ MM_ATT_CMT       // {block: {date: {resident_id: comment}}}
 TEACH_ATT        // same shape as MM_ATT
 TEACH_ATT_CMT    // same shape as MM_ATT_CMT
 QUIZZES          // [{id, title, max, published, sc: {resident_id: score}}]
-KPI_SCORES       // {resident_id: {commScore, researchDone, qiDone, bonusPublished, bonusOral, bonusPoster, awardsHonors, volunteering}}
+KPI_SCORES       // {resident_id: {commScore, researchDone, qiDone, bonusPublished, bonusOral, bonusPoster, awardsHonors, volunteering, canmedsVerifiedAt, canmedsVerifiedBy}}
 KPI_QUARTERLY    // {resident_id: {quarter: {research_milestone, research_achieved, improvement_area, improvement_achieved, ...}}}
 KPI_PROPOSALS    // [{id, resident_id, field_key, quarter, note, proposed_by_role, status, ...}]
+// --- CanMEDS KPI v2 (loadCanmeds / refreshCanmedsFor) ---
+RESEARCH_PROJECTS // {resident_id: [rows]} — NOT year-filtered: publication is once per training
+ADVOCACY          // {resident_id: [rows]} — kind: awareness_campaign | volunteering
+COMMITTEES        // {resident_id: [rows]}
+RESEARCH_RAMP     // {resident_id: row}  — server-side view, 6 ramp states, computed in SQL
+COMMITTEE_SUM     // {resident_id: row}  — server-side view
+CANMEDS_LOADED    // bool
+CANMEDS_ERR       // string|null — a failed read and an empty table are otherwise
+                  // indistinguishable, and the difference is "could not load" vs "38 residents failed"
 LEAVE_DATA       // {resident_id: {rota:[], manual:[], absences:[], requests:[]}}
 LEAVE_PENDING_COUNT  // int
 COUNSEL_CACHE    // {resident_id: [records] | null | undefined}
@@ -90,7 +99,12 @@ R4_PREFS_STATUS  // {academic_year, is_open, opened_at, deadline} | null
 | `teaching_sessions` | Teaching session schedule |
 | `teaching_attendance` | Teaching attendance |
 | `rotations` | Full rota grid (resident_id, block_number, rotation_name) |
-| `kpi_scores` | Yearly KPI fields (committee_score, research, QI, bonuses, awards_honors, volunteering) |
+| `kpi_scores` | Yearly KPI fields (committee_score, research, QI, bonuses, awards_honors, volunteering) + `canmeds_verified_at`/`_by` — NULL means "awaiting entry", NOT NULL means the PD confirmed the year complete |
+| `research_projects` | CanMEDS v2. **`started_year`, not `academic_year`** · `research_projects_status_dates_ck` |
+| `advocacy_activities` | CanMEDS v2. `kind` = awareness_campaign \| volunteering · `hours numeric(5,1)` |
+| `committee_memberships` | CanMEDS v2. `is_chair` counts as Performance only, never gates the KPI |
+| `research_ramp` *(view)* | 6-state publication ramp, computed server-side. **Cannot see `canmeds_verified_at`** — corrected client-side |
+| `committee_summary` *(view)* | Per-resident committee rollup |
 | `kpi_quarterly` | Per-resident per-quarter milestones + improvement areas ⚠️ needs migration |
 | `kpi_proposals` | Achievement submissions pending PD approval ⚠️ needs migration |
 | `quizzes` | Quiz metadata |
@@ -126,11 +140,100 @@ R4_PREFS_STATUS  // {academic_year, is_open, opened_at, deadline} | null
 - MM overview table · Export to Excel
 - **Excel export on all modules (6 Aug 2026):** "Export Excel" button on Rota (full table), MM Schedule (per block), Academic Day Schedule (per block), On-Call (per block), Quiz Marks (all published, with averages), and Leave Summary. All use SheetJS `XLSX.writeFile()`. Functions: `exportRota()`, `exportSchedule(type,blk)`, `exportOncall(blk)`, `exportQuizAll()`, `exportLeave()`.
 
-### KPI Dashboard (rebuilt Jul 2026, weights overhauled Jul 2026)
-**Central weight table:** `KPI_W` (~line 417) — all scoring below derives from this constant. **When changing `KPI_W`, grep for every consumer** — `calcKPI()`, `calcKPIQ()`, `renderKPI()`'s duplicate `yearlyRaw` calc, and the independent `kpiOngoingScore()` (Best Resident module) all hardcode/derive weights separately and have gone out of sync before (see Known Bugs/Gotchas + session log).
+### KPI Dashboard (rebuilt Jul 2026 · CanMEDS v2 shipped 23 Aug 2026)
 
-**3-tab structure per resident:**
-- **📊 Ongoing (50%):** Quiz 15% · MM Att 15% · Teaching 15% · Presenter/Moderator 5% — all auto-tracked, **scoped to `CURRENT_ACADEMIC_YEAR` only** (MM/Teaching attendance and presenter/moderator sessions are filtered by academic_year before aggregating)
+**The Ongoing tab is gone.** As of 23 Aug 2026 (`458750e`) the per-resident page is
+**KPI · Performance · Quarterly · Yearly**. The old single weighted 0–100 `overall` was
+retired: there was no defensible answer to "why is quiz 25% and QI 10%", so a KPI is now
+**binary per CanMEDS role**, and everything continuous became **Performance**, reported as a
+profile and never totalled. `KPI_W` and `calcKPI().overall` still exist and still drive the
+**Yearly** tab, Best Resident and the Performance Report — those are unchanged and out of scope.
+
+**KPI tab — `canmedsVerdicts(id, opts)`** (sits directly after `calcKPI`, pure, returns 7 role
+verdicts + counts). `opts.k` accepts a pre-computed `calcKPI` result so the all-residents table
+costs one pass per row, not two. `opts.assumeComplete` re-runs the verdicts against a
+hypothetical verification so the confirm dialog can name the exact number of domains that would flip.
+
+Roles: Medical Expert (quiz ≥60%) · Communicator (**`na` — held in Mumaris**) · Collaborator
+(≥1 committee) · Manager (≥1 QI; labelled *Manager*, SCFHS uses CanMEDS **2005**, with
+"CanMEDS 2015: Leader" as small print) · Health Advocate (≥1 awareness campaign) ·
+**Scholar** (composite: publication ramp AND ≥1 MM presentation) · **Professional** (composite:
+MM ≥75% AND Academic Day ≥75%). Composites report their weakest leg and render both legs.
+
+**Five states, and only two are scored.** `met` / `not_met` enter the denominator; `in_progress`,
+`awaiting`, `na` are counted and shown separately. Headline is `met of (met+notMet)`.
+`canmedsStateStyle()` is the single state→colour map — nothing else may invent a red.
+
+⚠️ **"Not recorded ≠ not met" is the core invariant of this feature.** The three tables are
+nearly empty, so a naive build accuses most of the programme of failing. Six guards, all in
+`canmedsVerdicts`, all commented in place — do not remove one without reading its comment:
+1. `canmedsRecordComplete(id)` = `!!KPI_SCORES[id].canmedsVerifiedAt`. Empty domain → `not_met`
+   only if the PD has confirmed the year complete, otherwise `awaiting`.
+2. `research_ramp` is computed in SQL and **cannot see `canmeds_verified_at`** — it returns
+   `not_met` for any R2/R3/R4 with nothing on file. Downgraded to `awaiting` client-side when the
+   resident has no projects and is unverified.
+3. **Quiz is never gated on the verified flag** — `calcKPI` returns `qAvg = 0`, not null, when no
+   published quiz has been sat, and 0% reads as catastrophic failure. `QUIZZES` is recounted;
+   zero sat → `awaiting` unconditionally.
+4. **`mmPct`/`tPct` are `null`, not 0**, for no data. `null >= 75` is `false`, so `== null` is
+   tested first or a resident with no sessions silently fails.
+5. **Awareness-campaign circuit breaker** — `canmedsNoCampaignsYet()`. Zero campaign rows exist
+   programme-wide and the activity is opt-in, so nobody has been offered one. Delete that function
+   and its single branch once the first campaign is recorded.
+6. **`committee_score = 0` means "nobody scored them"**, not "not a member" → renders "Not scored",
+   never a zero out of ten.
+Unrecognised ramp states name themselves on screen and stay out of the denominator — deliberately
+no catch-all pass or fail, so a seventh state added to the view is never absorbed silently.
+
+**Performance tab** — the renamed old Ongoing metrics, sliced **block → quarter → annual**.
+**Reuses `calcKPIQ(id, qBlocks)`; there is no second aggregator.** The three slices are just three
+block-sets (`[n]` · `QUARTER_BLOCKS[q]` · all 13), so the numbers cannot drift from the quarterly
+cards. Gradients with no block dimension (publications, committee, campaigns, volunteering, chair
+roles) are **annual-only** and are greyed with a reason on block/quarter — never rendered as zero.
+Block lengths are **not uniform** — always use `ROTA_PERIODS`/`ROTA_PERIODS_OVERRIDE`.
+
+**Inline entry (Phase 5).** `canEditCanmeds(resId)` **mirrors RLS `is_pd_or_chief()` exactly** =
+pd/chief/deputy_pd + the assigned mentor. **Do not reuse `canEditKPI`** — it also allows dio and
+ceo, who are outside the write policy, so they would get a bare 403. Residents cannot write to
+these tables at all; the buttons are hidden entirely rather than failing. Their route stays
+`kpi_proposals`. `canVerifyCanmeds` is stricter still (PD/deputy only) — confirming completeness
+is a governance act, not data entry.
+- One modal, three forms (`CANMEDS_FORMS`: research / advocacy / committee) using the
+  module-level **`_canmedsDraft`** live-draft pattern, copied from `_kpiPropLive`. `set()` rebuilds
+  the whole DOM, so every input reads from the draft and mutates only the draft; submit never
+  touches `getElementById().value`.
+- `canmedsErrMsg()` translates the three unique indexes (23505), the status/date check and 42501
+  into plain English before they reach a toast.
+- **Every write clears `canmeds_verified_at`**, otherwise the flag drifts into meaning "somebody
+  checked this at some point". `writeCanmedsVerified` **upserts** — most residents have no
+  `kpi_scores` row at all.
+- v2c backfill placeholders (`notes` starting `Auto-migrated`) are badged amber "Needs title" and
+  open the edit form focused on the title field.
+
+**Schema traps:** `research_projects.started_year` vs `academic_year` on both siblings ·
+`research_projects_status_dates_ck` (published/submitted/irb_approved each force their date
+non-null — all three date fields stay on the form when editing, or an update writes the others
+back to null) · `advocacy_activities.hours` is `numeric(5,1)`, caps at 9999.9.
+
+⚠️ **Open question — is `deputy_pd` actually inside `is_pd_or_chief()` on prod?** `schema.sql:56`
+defines it as `pd/chief`; `fix_attendance_rls_and_deputy_pd.sql:11` widens it to
+`pd/chief/deputy_pd` but that file is marked **⛔ Do NOT run** in the migrations table. Repo `.sql`
+files are not the live schema, so this is unverified either way — **query prod before relying on
+it**. It is not currently reachable in practice: `MODS.kpi` (~line 3170) lists
+`pd/chief/consultant/resident`, so a `deputy_pd` cannot open the KPI module at all and never sees
+the buttons. `canEditCanmeds` allows deputy_pd optimistically; the module gate fires first.
+Widening `MODS.kpi` would grant the whole dashboard (quiz marks, all-residents table), so that is a
+permission decision for the PD, not a bug fix.
+
+**From AY 2026-27** the MM presentation target becomes **≥2 per quarter** (per-quarter evaluation
+path not yet written — comment in place at the Scholar leg).
+
+---
+
+**Legacy weighted scoring (still live for Yearly / Best Resident / Performance Report):**
+**Central weight table:** `KPI_W` (~line 417). **When changing `KPI_W`, grep for every consumer** — `calcKPI()`, `calcKPIQ()`, `renderKPI()`'s duplicate `yearlyRaw` calc, and the independent `kpiOngoingScore()` (Best Resident module) all hardcode/derive weights separately and have gone out of sync before (see Known Bugs/Gotchas + session log).
+
+- **📊 Ongoing (50%) — REMOVED from the UI 23 Aug 2026, math retained:** Quiz 15% · MM Att 15% · Teaching 15% · Presenter/Moderator 5% — all auto-tracked, **scoped to `CURRENT_ACADEMIC_YEAR` only** (MM/Teaching attendance and presenter/moderator sessions are filtered by academic_year before aggregating)
   - **Outside-rotation attendance (18 Jul 2026):** the `O` attendance status (electives, Cardiology, etc.) is excluded entirely from MM/Teaching attendance % — not counted for or against, same as an unmarked day. `E` (Excused) still counts as full credit. If a resident has zero non-`O` days recorded for the whole year, `calcKPI()` returns `mmPct`/`tPct` as `null` (shown as gray "N/A" everywhere, excluded from cohort averages/at-risk flags) instead of the old behavior of defaulting to 100%.
 - **📆 Quarterly (informational, not scored):** Mentor sets Research Milestone + Area of Improvement per quarter as text. Anyone can submit "achieved" → PD approves. Resident can see (read-only).
 - **🏆 Yearly (50%):** Committee 10% (PD scores 0–10) + 5 achievement cards: QI Project 10% · Research Publication 10% · Oral-or-Poster Presentation 10% (merged bucket — either counts, no double credit) · Awards/Honors 5% · Volunteering 5%
@@ -201,6 +304,10 @@ R4_PREFS_STATUS  // {academic_year, is_open, opened_at, deadline} | null
 
 | File | Status | Purpose |
 |---|---|---|
+| `add_canmeds_kpi_v2.sql` | ✅ Run (21 Aug 2026) | CanMEDS v2 — `research_projects`, `advocacy_activities`, `research_ramp` view, RLS (`is_pd_or_chief()` + assigned mentor) |
+| `add_canmeds_kpi_v2b.sql` | ✅ Run (21 Aug 2026) | `committee_memberships`, `committee_summary` view, ramp widened to 6 states (`behind` added) |
+| `add_canmeds_kpi_v2c_backfill.sql` | ✅ Run (21 Aug 2026) | `canmeds_verified_at`/`_by` on `kpi_scores` + placeholder rows migrated from the old boolean columns (`notes` starts `Auto-migrated`) |
+| `check_canmeds_readiness.sql` | ⚪ Not a migration | Read-only work queue — counts what is still unrecorded per resident. **Data entry, not display, is the real bottleneck**: the page reads "awaiting entry" nearly everywhere until the PD enters records. Run it before and after an entry session. |
 | `fix_attendance_status_constraint.sql` | ✅ Run | Allow E and O statuses |
 | `add_attendance_comments.sql` | ✅ Run | Add comment column to attendance tables |
 | `fix_residents_attendance_rls.sql` | ✅ Run | RLS fix for privileged residents |
