@@ -1246,6 +1246,14 @@ let KPI_QUARTERLY={}; // {resident_id: {quarter: row}}
 let KPI_PROPOSALS=[]; // [{id,resident_id,field_key,quarter,note,proposed_by,proposed_by_role,proposed_at,status,...}]
 let CUMULATIVE_KPI={}; // {resId: {year: {scores:{...}, quarterly:{q:{...}}}}}
 let CUMULATIVE_KPI_LOADING=false;
+// CanMEDS KPI v2 (supabase/add_canmeds_kpi_v2*.sql) — three tables plus two server-side views.
+let RESEARCH_PROJECTS={}; // {resident_id:[row]} — every year, see loadCanmeds
+let ADVOCACY={};          // {resident_id:[row]} — current academic year only
+let COMMITTEES={};        // {resident_id:[row]} — current academic year only
+let RESEARCH_RAMP={};     // {resident_id:row} — six-state ramp_state, computed in SQL
+let COMMITTEE_SUM={};     // {resident_id:row} — counts are all-time, not per year
+let CANMEDS_LOADED=false;
+let CANMEDS_ERR=null;
 // LEAVE PLAN (AY 2026-27 planning — separate from leave_records)
 const LP_AY=2026;
 // Counted per half-block period, so a whole block can absorb up to 2x this.
@@ -1791,6 +1799,61 @@ async function loadKpiProposals(){
   if(error){console.warn("kpi_proposals load error",error.message);return;}
   KPI_PROPOSALS=data||[];
 }
+function canmedsByRes(rows){
+  const o={};(rows||[]).forEach(r=>{(o[r.resident_id]=o[r.resident_id]||[]).push(r);});return o;
+}
+// The five CanMEDS v2 reads, in one Promise.all so a half-populated page is impossible.
+// On ANY error nothing is populated and CANMEDS_ERR is set: an empty table and a failed read
+// look identical on screen, and the difference between them is "could not load" and
+// "38 residents failed". The KPI tab renders a banner off CANMEDS_ERR rather than zeros.
+async function loadCanmeds(){
+  const ay=CURRENT_ACADEMIC_YEAR;
+  const[rp,ad,cm,rr,cs]=await Promise.all([
+    // research_projects carries started_year, not academic_year, and publication is once per
+    // TRAINING rather than per year — so this read is deliberately not year-filtered.
+    fetchAllRows(()=>sb.from("research_projects").select("*").order("id",{ascending:true})),
+    fetchAllRows(()=>sb.from("advocacy_activities").select("*").eq("academic_year",ay).order("id",{ascending:true})),
+    fetchAllRows(()=>sb.from("committee_memberships").select("*").eq("academic_year",ay).order("id",{ascending:true})),
+    fetchAllRows(()=>sb.from("research_ramp").select("*").order("resident_id",{ascending:true})),
+    fetchAllRows(()=>sb.from("committee_summary").select("*").order("resident_id",{ascending:true}))
+  ]);
+  const bad=[rp,ad,cm,rr,cs].find(r=>r.error);
+  if(bad){
+    CANMEDS_ERR=bad.error.message;CANMEDS_LOADED=false;
+    console.warn("canmeds load error",bad.error.message);render();return;
+  }
+  CANMEDS_ERR=null;
+  RESEARCH_PROJECTS=canmedsByRes(rp.data);
+  ADVOCACY=canmedsByRes(ad.data);
+  COMMITTEES=canmedsByRes(cm.data);
+  RESEARCH_RAMP={};(rr.data||[]).forEach(r=>{RESEARCH_RAMP[r.resident_id]=r;});
+  // committee_summary aggregates every year, so committee_count / chair_count / committee_kpi_met
+  // are all-time. Anything that must be scoped to this year reads COMMITTEES instead.
+  COMMITTEE_SUM={};(cs.data||[]).forEach(r=>{COMMITTEE_SUM[r.resident_id]=r;});
+  CANMEDS_LOADED=true;
+  render();
+}
+// Re-read one resident after a write, including their research_ramp and committee_summary rows.
+// ramp_state is computed server-side; recomputing that six-state CASE in JS would express the
+// same rule in two languages and let them drift — it already changed once, when `behind` was added.
+async function refreshCanmedsFor(resId){
+  const ay=CURRENT_ACADEMIC_YEAR;
+  const[rp,ad,cm,rr,cs]=await Promise.all([
+    sb.from("research_projects").select("*").eq("resident_id",resId).order("id",{ascending:true}),
+    sb.from("advocacy_activities").select("*").eq("resident_id",resId).eq("academic_year",ay).order("id",{ascending:true}),
+    sb.from("committee_memberships").select("*").eq("resident_id",resId).eq("academic_year",ay).order("id",{ascending:true}),
+    sb.from("research_ramp").select("*").eq("resident_id",resId),
+    sb.from("committee_summary").select("*").eq("resident_id",resId)
+  ]);
+  const bad=[rp,ad,cm,rr,cs].find(r=>r.error);
+  if(bad){console.warn("canmeds refresh error",bad.error.message);showToast("Saved, but the page could not be refreshed: "+bad.error.message,"error");return false;}
+  RESEARCH_PROJECTS[resId]=rp.data||[];
+  ADVOCACY[resId]=ad.data||[];
+  COMMITTEES[resId]=cm.data||[];
+  if((rr.data||[])[0])RESEARCH_RAMP[resId]=rr.data[0];
+  if((cs.data||[])[0])COMMITTEE_SUM[resId]=cs.data[0];
+  return true;
+}
 async function loadCumulativeKpi(resId){
   if(CUMULATIVE_KPI_LOADING)return;
   CUMULATIVE_KPI_LOADING=true;
@@ -2153,7 +2216,7 @@ let STATE={
   quizSelRes:null,quizShowAdd:false,quizSelQuiz:null,
   leaveSelRes:null,leaveShowAdd:false,leaveShowAbsAdd:false,leaveShowReq:false,leaveTab:"overview",
   counselSelRes:1,counselShowForm:false,counselEditId:null,
-  kpiSelRes:1,kpiTab:"ongoing",rotTrackRes:1,
+  kpiSelRes:1,kpiTab:"kpi",rotTrackRes:1,
   mentorQ:null,
   rotaImportStep:1,rotaImportSheet:null,
   annShowForm:false,annEditId:null,annTargetType:"all",
@@ -2292,7 +2355,10 @@ async function loadCoreData(){
   });
   KPI_SCORES={};
   (kpisc||[]).forEach(k=>{
-    KPI_SCORES[k.resident_id]={commScore:k.committee_score||0,researchDone:!!k.research_participated,qiDone:!!k.qi_participated,bonusPublished:!!k.bonus_published,bonusOral:!!k.bonus_oral,bonusPoster:!!k.bonus_poster,awardsHonors:!!k.awards_honors,volunteering:!!k.volunteering};
+    // canmedsVerifiedAt is what separates "awaiting entry" from "not met" for every empty
+    // CanMEDS domain, so it has to survive this mapping. saveKpiScore enumerates its columns
+    // and omits both, so a committee-score edit cannot clear a verification.
+    KPI_SCORES[k.resident_id]={commScore:k.committee_score||0,researchDone:!!k.research_participated,qiDone:!!k.qi_participated,bonusPublished:!!k.bonus_published,bonusOral:!!k.bonus_oral,bonusPoster:!!k.bonus_poster,awardsHonors:!!k.awards_honors,volunteering:!!k.volunteering,canmedsVerifiedAt:k.canmeds_verified_at||null,canmedsVerifiedBy:k.canmeds_verified_by||null};
     COMM_SC[k.resident_id]=k.committee_score||0;
   });
   ensureResidentAuxData();
@@ -2681,6 +2747,23 @@ function canEditKPI(resId){
   if(u.role==="consultant"&&MENTORS[resId]===u.cid)return true;
   return false;
 }
+// Mirrors the RLS policy on research_projects / advocacy_activities / committee_memberships
+// exactly -- is_pd_or_chief() is pd, chief and deputy_pd, plus the resident's own assigned mentor.
+// Deliberately NOT canEditKPI, which also allows dio and ceo: those two are outside the policy, so
+// reusing it would show them buttons that answer with a bare 403.
+function canEditCanmeds(resId){
+  const u=STATE.user;if(!u)return false;
+  if(u.role==="pd"||u.role==="deputy_pd"||u.role==="chief")return true;
+  if(u.role==="consultant"&&MENTORS[resId]===u.cid)return true;
+  return false;
+}
+// Stricter than canEditCanmeds on purpose. Confirming completeness is the one control that turns
+// every neutral "awaiting entry" into a real "not met", so it is a governance act rather than data
+// entry. chief and mentors may add records; only the PD may declare the year finished.
+function canVerifyCanmeds(resId){
+  const r=STATE.user?.role;
+  return (r==="pd"||r==="deputy_pd")&&canEditCanmeds(resId);
+}
 function calcKPI(id){
   let mmAtt=0,mmTotal=0,mmScore=0;
   Object.values(MM_ATT).forEach(blk=>{Object.values(blk).forEach(day=>{const s=day[id];if(!s||s==='O')return;mmTotal++;if(s==='P'||s==='E'){mmAtt++;mmScore+=1;}else if(s==='L'){mmAtt++;mmScore+=0.5;}});});
@@ -2712,6 +2795,188 @@ function calcKPI(id){
   );
   return{mmPct,mmAtt,mmTotal,tPct,tAtt,tTotal,rotPct,qAvg,pres,presCount,commPct,
     qiPct,pubPct,oralPct,posterPct,oralPosterPct,awardsPct,volunteeringPct,overall};
+}
+
+// ═══ CanMEDS v2 — the binary KPI layer ══════════════════════════════════════
+// Sits beside calcKPI on purpose: the two models are read together, and calcKPI supplies the
+// attendance, quiz and presenter numbers that this one turns into verdicts.
+//
+// Five states. Only `met` and `not_met` enter the denominator; the other three are reported
+// separately, so a resident is never counted as failing something nobody has looked at yet.
+const CANMEDS_STATES={
+  met:        {label:"Met",            fg:"#26523A",            bg:"rgba(127,184,156,.22)"},
+  not_met:    {label:"Not met",        fg:"#9d4a2a",            bg:"rgba(201,106,74,.15)"},
+  in_progress:{label:"In progress",    fg:"#7a5a10",            bg:"rgba(164,122,40,.16)"},
+  awaiting:   {label:"Awaiting entry", fg:"rgba(31,26,18,.5)",  bg:"rgba(31,26,18,.06)"},
+  na:         {label:"Not applicable", fg:"rgba(31,26,18,.38)", bg:"rgba(31,26,18,.05)"}
+};
+// The single state->colour map. Everything that paints a verdict goes through here, so no
+// other call site can invent a red for something that is not a fail.
+function canmedsStateStyle(s){return CANMEDS_STATES[s]||CANMEDS_STATES.awaiting;}
+// The PD has confirmed this resident's year is completely recorded. Until then an empty
+// domain means "nobody has typed it in", not "the resident did not do it".
+function canmedsRecordComplete(id){return !!(KPI_SCORES[id]||{}).canmedsVerifiedAt;}
+// Circuit breaker: zero awareness campaigns exist programme-wide and the activity is opt-in,
+// so nobody has been offered one and nobody can have missed one. Delete this function and the
+// single branch that reads it once the first campaign is recorded.
+function canmedsNoCampaignsYet(){
+  return !Object.keys(ADVOCACY).some(function(rid){
+    return (ADVOCACY[rid]||[]).some(function(a){return a.kind==="awareness_campaign";});
+  });
+}
+// A role made of several legs is met only when every leg is met, and reports its weakest leg
+// otherwise. Unknown outranks not-yet-due, which outranks failed, so an unanswered question
+// is never presented as a failure.
+function canmedsComposite(legs){
+  var s=legs.map(function(l){return l.state;});
+  if(s.indexOf("awaiting")>=0)return"awaiting";
+  if(s.indexOf("in_progress")>=0)return"in_progress";
+  if(s.indexOf("not_met")>=0)return"not_met";
+  return"met";
+}
+function canmedsRampLabel(st){
+  return{met:"Published",on_track:"IRB approved",at_risk:"Registered",
+    behind:"Nothing registered",not_met:"Nothing on file",not_yet_due:"Not due yet"}[st]||st;
+}
+
+// Seven role verdicts, the counts, and the annual-only gradients.
+// opts.k accepts a pre-computed calcKPI result: the all-residents table already builds one per
+// row and must not build a second.
+// opts.assumeComplete answers "what would this look like if the PD confirmed the record now?"
+// without writing anything, so the confirmation dialog can name the exact number of domains that
+// would turn from Awaiting entry into Not met.
+function canmedsVerdicts(id,opts){
+  opts=opts||{};
+  var k=opts.k||calcKPI(id);
+  var ks=KPI_SCORES[id]||{};
+  var complete=opts.assumeComplete?true:canmedsRecordComplete(id);
+  var empty=complete?"not_met":"awaiting";   // what an empty domain means for this resident
+  var roles=[];
+
+  // -- Medical Expert --------------------------------------------------------
+  // calcKPI returns qAvg 0 (not null) when no published quiz has been sat, and 0% renders as a
+  // catastrophic failure rather than "no quiz yet". Recount the source instead of trusting it.
+  // Never gated on the verified flag: a quiz that was not sat cannot be entered by hand.
+  var quizzesSat=QUIZZES.filter(function(q){return q.published&&q.sc[id]!=null;}).length;
+  roles.push({key:"expert",role:"Medical Expert",
+    kpi:"Quiz average at least 60%",
+    state:quizzesSat?(k.qAvg>=60?"met":"not_met"):"awaiting",
+    value:quizzesSat?k.qAvg+"%":"No quiz sat",
+    note:quizzesSat?(quizzesSat+" published quiz"+(quizzesSat!==1?"zes":"")+" sat"):"No published quiz has been sat yet"});
+
+  // -- Communicator ----------------------------------------------------------
+  roles.push({key:"comm",role:"Communicator",
+    kpi:"Held in Mumaris",state:"na",value:"\u2014",
+    note:"The Mumaris ITER is the authoritative record. The portal does not duplicate it."});
+
+  // -- Collaborator ----------------------------------------------------------
+  // Membership only. Fair as a KPI because the PD guarantees every resident a seat.
+  var comms=COMMITTEES[id]||[];
+  roles.push({key:"collab",role:"Collaborator",
+    kpi:"Member of at least one committee",
+    state:comms.length?"met":empty,
+    value:comms.length?(comms.length+" committee"+(comms.length!==1?"s":"")):"None on file",
+    note:comms.length?comms.map(function(c){return c.committee_name;}).join(", "):null});
+
+  // -- Manager ---------------------------------------------------------------
+  var af=getApprovedFields(id);
+  var qi=!!(ks.qiDone||af.has("qi"));
+  roles.push({key:"manager",role:"Manager",roleAlt:"CanMEDS 2015: Leader",
+    kpi:"At least one QI project",
+    state:qi?"met":empty,
+    value:qi?"On file":"None on file",
+    note:"Chair roles are scarce, so they count as Performance only and never gate this."});
+
+  // -- Health Advocate -------------------------------------------------------
+  var adv=ADVOCACY[id]||[];
+  var camps=adv.filter(function(a){return a.kind==="awareness_campaign";});
+  var vols=adv.filter(function(a){return a.kind==="volunteering";});
+  var haState,haNote;
+  if(camps.length){haState="met";haNote=camps.map(function(a){return a.title;}).join(", ");}
+  else if(canmedsNoCampaignsYet()){haState="awaiting";haNote="No awareness campaign has been run this year.";}
+  else{haState=empty;haNote=null;}
+  roles.push({key:"advocate",role:"Health Advocate",
+    kpi:"At least one awareness campaign",
+    state:haState,
+    value:camps.length?(camps.length+" campaign"+(camps.length!==1?"s":"")):"None on file",
+    note:haNote});
+
+  // -- Scholar: composite, publication ramp AND at least one MM presentation --
+  var ramp=RESEARCH_RAMP[id];
+  var projects=RESEARCH_PROJECTS[id]||[];
+  var rampState,rampNote;
+  if(!ramp){rampState="awaiting";rampNote="No ramp row yet \u2014 the CanMEDS tables may still be loading.";}
+  else if(ramp.ramp_state==="met"){rampState="met";rampNote=ramp.published_count+" published";}
+  else if(ramp.ramp_state==="on_track"){rampState="in_progress";rampNote="IRB approval on file";}
+  else if(ramp.ramp_state==="at_risk"){rampState="in_progress";rampNote="Project registered, no IRB yet";}
+  else if(ramp.ramp_state==="not_yet_due"){rampState="in_progress";rampNote="R1 \u2014 nothing due yet";}
+  else if(ramp.ramp_state==="behind"){rampState="not_met";rampNote="R2 \u2014 a project should be identified by now";}
+  else if(ramp.ramp_state==="not_met"){rampState="not_met";rampNote="Nothing on file";}
+  // Deliberately not a catch-all pass or fail: an unrecognised state names itself on screen and
+  // stays out of the denominator, so a seventh state added to the view is never absorbed silently.
+  else{rampState="awaiting";rampNote="Unrecognised ramp state: "+ramp.ramp_state;}
+  // research_ramp is computed in SQL and cannot see canmeds_verified_at, so it returns not_met
+  // for every R2/R3/R4 whose research_projects rows have simply never been entered. Until the
+  // record is confirmed complete, "nothing on file" means nobody has typed it in yet.
+  if(rampState==="not_met"&&!projects.length&&!complete){
+    rampState="awaiting";rampNote="Nothing on file, and the year has not been confirmed complete.";
+  }
+  // An empty MM_SESSIONS means the schedule has not loaded, not that nobody presented.
+  // Presenting is a once-per-year target, so a zero part-way through the year is not a failure,
+  // it is simply not due yet. in_progress keeps it out of the met/applicable denominator until
+  // the year closes, and CURRENT_ACADEMIC_YEAR rolls over the moment it does.
+  // PD, 23 Aug 2026. From AY 2026-27 the target becomes two presentations per QUARTER, which is
+  // a per-quarter test and will need its own evaluation path rather than a larger number here.
+  var presLeg=MM_SESSIONS.length
+    ?(k.presCount>0
+      ?{state:"met",value:k.presCount+" session"+(k.presCount!==1?"s":""),note:"Presented or moderated this year"}
+      :{state:"in_progress",value:"None yet",note:"Due by the end of the academic year"})
+    :{state:"awaiting",value:"\u2014",note:"The Morning Meeting schedule has not loaded."};
+  var scholarLegs=[
+    {label:"Publication ramp",state:rampState,value:ramp?canmedsRampLabel(ramp.ramp_state):"\u2014",note:rampNote},
+    {label:"MM presenter",state:presLeg.state,value:presLeg.value,note:presLeg.note}
+  ];
+  roles.push({key:"scholar",role:"Scholar",
+    kpi:"Publication ramp, and at least one Morning Meeting presentation",
+    state:canmedsComposite(scholarLegs),legs:scholarLegs});
+
+  // -- Professional: composite, MM >=75% AND Academic Day >=75% --------------
+  // mmPct and tPct are null, not 0, when nothing is recorded. null>=75 is false, so comparing
+  // without the null test first silently fails a resident who has no sessions at all.
+  var mmLeg={label:"Morning Meeting",
+    state:k.mmPct==null?"awaiting":(k.mmPct>=75?"met":"not_met"),
+    value:k.mmPct==null?"\u2014":k.mmPct+"%",
+    note:k.mmPct==null?"No attendance recorded":(k.mmAtt+"/"+k.mmTotal+" sessions")};
+  var adLeg={label:"Academic Day",
+    state:k.tPct==null?"awaiting":(k.tPct>=75?"met":"not_met"),
+    value:k.tPct==null?"\u2014":k.tPct+"%",
+    note:k.tPct==null?"No attendance recorded":(k.tAtt+"/"+k.tTotal+" sessions")};
+  var profLegs=[mmLeg,adLeg];
+  roles.push({key:"prof",role:"Professional",
+    kpi:"Morning Meeting and Academic Day attendance both at least 75%",
+    state:canmedsComposite(profLegs),legs:profLegs});
+
+  function count(st){return roles.filter(function(r){return r.state===st;}).length;}
+  var met=count("met"),notMet=count("not_met");
+  return{
+    roles:roles,
+    met:met,notMet:notMet,applicable:met+notMet,
+    inProgress:count("in_progress"),awaiting:count("awaiting"),na:count("na"),
+    complete:complete,verifiedAt:ks.canmedsVerifiedAt||null,
+    // Annual-only gradients: the Performance column beside the verdicts. None of these has a
+    // block dimension, so the Performance tab shows them on the annual slice only.
+    gradients:{
+      publications:projects.filter(function(p){return p.status==="published";}).length,
+      activeProjects:projects.filter(function(p){return p.status!=="abandoned";}).length,
+      // A committee score of 0 does NOT mean "not a member" - it means nobody has scored them.
+      // null renders as "Not scored"; it must never render as a zero out of ten.
+      committeeScore:ks.commScore?ks.commScore:null,
+      committeeCount:comms.length,
+      chairCount:comms.filter(function(c){return c.is_chair;}).length,
+      campaigns:camps.length,
+      volunteering:vols.length
+    }
+  };
 }
 function pbar(pct,color){
   return el("div",{cls:"flex-gap",st:{width:"100%"}},
@@ -2835,6 +3100,7 @@ function renderLogin(){
     loadQuizzes().then(render);
     loadKpiQuarterly();
     loadKpiProposals();
+    loadCanmeds();
     loadOncallData();
     loadBestResident();
     render();
@@ -2917,7 +3183,7 @@ function renderSearchOverlay(){
   if(!q)return null;
   const results=[];
   RESIDENTS.filter(r=>r.name.toLowerCase().includes(q)).slice(0,8).forEach(r=>{
-    results.push({label:r.name,sub:r.level+" · Mentor: "+mentorName(r.id),icon:"",action:()=>set({mod:"kpi",kpiSelRes:r.id,searchQ:""})});
+    results.push({label:r.name,sub:r.level+" · Mentor: "+mentorName(r.id),icon:"",action:()=>set({mod:"kpi",kpiSelRes:r.id,kpiDrill:true,searchQ:""})});
   });
   QUIZZES.filter(q2=>q2.title.toLowerCase().includes(q)).slice(0,5).forEach(qz=>{
     results.push({label:qz.title,sub:"Quiz · "+fmtDate(qz.date)+" · Max: "+qz.max,icon:"",action:()=>set({mod:"quiz",quizSelQuiz:qz.id,searchQ:""})});
@@ -5551,7 +5817,7 @@ function calcKPIQ(id,qBlocks){
   const tPct=tTotal?Math.round(tScore/tTotal*100):null;
   const pubQ=QUIZZES.filter(q=>q.published&&q.sc[id]!=null&&qBlocks.includes(q.block));
   const qAvg=pubQ.length?Math.round(pubQ.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/pubQ.length):null;
-  const presCount=MM_SESSIONS.filter(s=>s.presenter_resident_id===id&&s.academic_year===CURRENT_ACADEMIC_YEAR&&qBlocks.includes(s.block_number)).length;
+  const presCount=MM_SESSIONS.filter(s=>(s.presenter_resident_id===id||s.moderator_resident_id===id)&&s.academic_year===CURRENT_ACADEMIC_YEAR&&qBlocks.includes(s.block_number)).length;
   return{mmPct,mmAtt,mmTotal,tPct,tAtt,tTotal,qAvg,quizCount:pubQ.length,presCount};
 }
 // Compact quarterly breakdown card — reused in resident KPI page and admin profile.
@@ -5618,7 +5884,7 @@ function renderMentorHome(){
           const kq=calcKPIQ(r.id,qBlocks);
           const k=calcKPI(r.id);
           return el("div",{st:{border:"1px solid #e2e8f0",borderRadius:"10px",padding:"12px 14px",marginBottom:"8px",cursor:"pointer"},
-            onClick:()=>set({mod:"kpi",kpiSelRes:r.id})},
+            onClick:()=>set({mod:"kpi",kpiSelRes:r.id,kpiDrill:true})},
             el("div",{cls:"flex-gap",st:{marginBottom:"6px"}},
               avEl(r),
               el("div",{st:{flex:"1"}},
@@ -5797,7 +6063,7 @@ function renderCumulativeKPI(){
         el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:".95rem",fontWeight:"700",color:"#A47A28"}},commScore),
         el("div",{st:{fontSize:".58rem",textTransform:"uppercase",letterSpacing:".05em",color:"rgba(31,26,18,.3)"}},"Comm.")
       ):null,
-      isCurrent?el("button",{cls:"sbtn ghost",st:{fontSize:".7rem",padding:"3px 9px",whiteSpace:"nowrap"},onClick:e=>{e.stopPropagation();set({mod:"kpi",kpiSelRes:res.id,kpiTab:"ongoing"})}},"Full KPI"):null,
+      isCurrent?el("button",{cls:"sbtn ghost",st:{fontSize:".7rem",padding:"3px 9px",whiteSpace:"nowrap"},onClick:e=>{e.stopPropagation();set({mod:"kpi",kpiSelRes:res.id,kpiDrill:true,kpiTab:"kpi"})}},"Full KPI"):null,
       el("div",{st:{color:"rgba(31,26,18,.3)",transform:isExpanded?"rotate(180deg)":"rotate(0deg)",transition:"transform .2s",marginLeft:"4px"}},svi('<polyline points="6 9 12 15 18 9"/>',14,14))
     );
     if(!isExpanded)return el("div",{st:{borderBottom:"1px solid rgba(31,26,18,.07)"}},hdr);
@@ -5850,16 +6116,733 @@ function renderCumulativeKPI(){
   );
 }
 // ─── KPI DASHBOARD ───────────────────────────────────────────────────────────
+// Hoisted out of renderKPI so the CanMEDS and Performance renderers can use it too.
+// Must stay createElementNS-based: el() is not namespace-aware, so el("svg",...) builds an
+// HTMLUnknownElement that renders nothing and reports no error.
+function svgIcon(paths,w,h){
+  w=w||15;h=h||15;
+  const ns="http://www.w3.org/2000/svg";
+  const svg=document.createElementNS(ns,"svg");
+  svg.setAttribute("width",String(w));svg.setAttribute("height",String(h));
+  svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("fill","none");
+  svg.setAttribute("stroke","currentColor");svg.setAttribute("stroke-width","2");
+  svg.setAttribute("stroke-linecap","round");svg.setAttribute("stroke-linejoin","round");
+  svg.style.display="inline-block";svg.style.verticalAlign="middle";svg.style.flexShrink="0";
+  svg.innerHTML=paths;
+  return svg;
+}
+
+// ═══ CanMEDS render layer ═══════════════════════════════════════════════════
+// Scoped stylesheet, same pattern as renderKPIExecutive's #kpix-css. It exists as a real
+// stylesheet rather than inline st:{} because two rules cannot be expressed inline: the
+// column rule is a ::before, and the narrow-screen collapse is a media query.
+function canmedsInjectCss(){
+  const old=document.getElementById("canmeds-css");
+  if(old)old.remove();
+  const s=document.createElement("style");
+  s.id="canmeds-css";
+  s.textContent=
+  "#cm-wrap .cm-hero{display:flex;align-items:flex-end;gap:34px;margin:2px 0 30px;padding-bottom:20px;border-bottom:1px solid rgba(31,26,18,.1);flex-wrap:wrap;}"+
+  "#cm-wrap .cm-hero .big{font-family:'Playfair Display',Georgia,serif;font-size:3.2rem;font-weight:700;line-height:.9;letter-spacing:-.03em;color:#26523A;}"+
+  "#cm-wrap .cm-hero .big i{font-style:normal;font-size:1.4rem;color:rgba(31,26,18,.25);margin-left:3px;}"+
+  "#cm-wrap .cm-cap{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:rgba(31,26,18,.35);margin-top:7px;}"+
+  "#cm-wrap .cm-side{display:flex;gap:26px;padding-bottom:5px;}"+
+  "#cm-wrap .cm-side .n{font-family:'Playfair Display',Georgia,serif;font-size:1.35rem;font-weight:700;line-height:1;}"+
+  "#cm-wrap .cm-side .l{font-size:.63rem;color:rgba(31,26,18,.4);margin-top:4px;font-weight:600;}"+
+  "#cm-wrap .cols{display:grid;grid-template-columns:1fr 1fr;column-gap:56px;position:relative;}"+
+  /* the rule is a background line, not a grid child, so it cannot disturb the alternating
+     left/right auto-placement of the role cells */
+  "#cm-wrap .cols::before{content:'';position:absolute;top:0;bottom:0;left:calc(50% - 1px);width:1px;background:rgba(31,26,18,.09);}"+
+  "#cm-wrap .colhd{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:rgba(31,26,18,.32);padding-bottom:9px;border-bottom:1px solid rgba(31,26,18,.09);margin-bottom:4px;}"+
+  "#cm-wrap .colhd em{font-style:normal;font-weight:500;letter-spacing:0;text-transform:none;font-size:.68rem;color:rgba(31,26,18,.3);margin-left:7px;}"+
+  "#cm-wrap .colhd.lc{grid-column:1;}#cm-wrap .colhd.rc{grid-column:2;}"+
+  "#cm-wrap .rl,#cm-wrap .rr{padding:15px 0;border-bottom:1px solid rgba(31,26,18,.055);}"+
+  "#cm-wrap .rl{grid-column:1;padding-right:6px;}#cm-wrap .rr{grid-column:2;}"+
+  "#cm-wrap .rname{font-size:.87rem;font-weight:600;letter-spacing:-.01em;}"+
+  "#cm-wrap .rname small{display:block;font-size:.62rem;font-weight:500;color:rgba(31,26,18,.3);margin-top:2px;letter-spacing:0;}"+
+  "#cm-wrap .rtop{display:flex;align-items:flex-start;gap:10px;margin-bottom:7px;}"+
+  "#cm-wrap .rtop .rname{flex:1;}"+
+  "#cm-wrap .crit{font-size:.71rem;color:rgba(31,26,18,.5);line-height:1.55;}"+
+  "#cm-wrap .crit b{font-weight:700;color:#1F1A12;font-variant-numeric:tabular-nums;}"+
+  "#cm-wrap .crit .why{color:rgba(31,26,18,.35);display:block;margin-top:2px;}"+
+  "#cm-wrap .leg{display:flex;align-items:baseline;gap:7px;font-size:.71rem;color:rgba(31,26,18,.5);padding:3px 0 0 11px;position:relative;}"+
+  "#cm-wrap .leg::before{content:'';position:absolute;left:1px;top:10px;width:5px;height:1px;background:rgba(31,26,18,.18);}"+
+  "#cm-wrap .leg b{font-weight:700;color:#1F1A12;font-variant-numeric:tabular-nums;}"+
+  "#cm-wrap .mini{font-size:.6rem;font-weight:700;padding:1px 6px;border-radius:9999px;white-space:nowrap;}"+
+  "#cm-wrap .off .rname,#cm-wrap .off .crit{color:rgba(31,26,18,.3);}"+
+  "#cm-wrap .off .rname{font-weight:500;}"+
+  "#cm-wrap .cpill{display:inline-flex;align-items:center;gap:5px;font-size:.63rem;font-weight:700;padding:3px 10px;border-radius:9999px;white-space:nowrap;letter-spacing:.02em;}"+
+  "#cm-wrap .cpill i{width:5px;height:5px;border-radius:50%;background:currentColor;flex:none;display:inline-block;}"+
+  "#cm-wrap .pf{display:flex;align-items:baseline;gap:9px;margin-bottom:6px;}"+
+  "#cm-wrap .pf .v{font-family:'Playfair Display',Georgia,serif;font-size:1.3rem;font-weight:700;line-height:1;letter-spacing:-.02em;}"+
+  "#cm-wrap .pf .u{font-size:.68rem;color:rgba(31,26,18,.42);}"+
+  "#cm-wrap .bar{height:3px;background:rgba(31,26,18,.07);border-radius:2px;overflow:hidden;margin:7px 0 6px;max-width:210px;}"+
+  "#cm-wrap .bar i{display:block;height:100%;border-radius:2px;}"+
+  "#cm-wrap .pfnote{font-size:.68rem;color:rgba(31,26,18,.38);line-height:1.5;}"+
+  "#cm-wrap .pfnone{font-size:.71rem;color:rgba(31,26,18,.28);font-style:italic;}"+
+  "#cm-wrap .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:3px;}"+
+  "#cm-wrap .cchip{font-size:.66rem;font-weight:600;padding:3px 9px;border-radius:6px;background:#F6EFE2;color:rgba(31,26,18,.6);}"+
+  "#cm-wrap .cchip.gold{background:rgba(203,161,85,.2);color:#7a5a10;}"+
+  "#cm-wrap .fn{margin-top:26px;font-size:.68rem;color:rgba(31,26,18,.35);line-height:1.65;border-top:1px solid rgba(31,26,18,.08);padding-top:14px;}"+
+  "#cm-wrap .fn b{color:rgba(31,26,18,.5);font-weight:600;}"+
+  "#cm-wrap .seg{display:inline-flex;background:rgba(31,26,18,.05);border-radius:9px;padding:3px;gap:2px;}"+
+  "#cm-wrap .seg button{border:none;background:transparent;font-size:.74rem;font-weight:600;color:rgba(31,26,18,.42);padding:6px 17px;border-radius:7px;cursor:pointer;transition:all .15s;font-family:inherit;}"+
+  "#cm-wrap .seg button.on{background:#FEFBF3;color:#1F1A12;box-shadow:0 1px 3px rgba(31,26,18,.1);}"+
+  "#cm-wrap .periodrow{display:flex;align-items:center;gap:16px;margin:2px 0 6px;flex-wrap:wrap;}"+
+  "#cm-wrap .pchips{display:flex;gap:3px;flex-wrap:wrap;}"+
+  "#cm-wrap .pchip{font-size:.68rem;font-weight:600;padding:5px 11px;border-radius:7px;background:transparent;color:rgba(31,26,18,.4);cursor:pointer;border:1px solid transparent;transition:all .14s;font-family:inherit;}"+
+  "#cm-wrap .pchip:hover{background:rgba(31,26,18,.04);}"+
+  "#cm-wrap .pchip.on{background:rgba(201,106,74,.14);color:#9d4a2a;border-color:rgba(201,106,74,.3);}"+
+  "#cm-wrap .pcap{font-size:.7rem;color:rgba(31,26,18,.4);}"+
+  "#cm-wrap .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:28px 0 4px;}"+
+  "#cm-wrap .mt{padding:0 22px;border-left:1px solid rgba(31,26,18,.08);}"+
+  "#cm-wrap .mt:first-child{padding-left:0;border-left:none;}"+
+  "#cm-wrap .mt .lbl{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:rgba(31,26,18,.35);}"+
+  "#cm-wrap .mt .val{font-family:'Playfair Display',Georgia,serif;font-size:2.4rem;font-weight:700;line-height:1;letter-spacing:-.03em;margin:9px 0 3px;}"+
+  "#cm-wrap .mt .val u{text-decoration:none;font-size:.95rem;color:rgba(31,26,18,.22);margin-left:1px;}"+
+  "#cm-wrap .mt .sub{font-size:.68rem;color:rgba(31,26,18,.4);}"+
+  "#cm-wrap .mt .delta{font-size:.66rem;font-weight:600;margin-top:6px;}"+
+  "#cm-wrap .up{color:#26523A;}#cm-wrap .down{color:#c96a4a;}#cm-wrap .flat{color:rgba(31,26,18,.3);}"+
+  "#cm-wrap .strip{margin-top:34px;}"+
+  "#cm-wrap .striphd{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap;}"+
+  "#cm-wrap .striphd .t{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:rgba(31,26,18,.32);}"+
+  "#cm-wrap .striphd .k{display:flex;gap:14px;margin-left:auto;font-size:.66rem;color:rgba(31,26,18,.42);}"+
+  "#cm-wrap .striphd .k i{display:inline-block;width:9px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle;}"+
+  "#cm-wrap .chart{position:relative;height:170px;border-bottom:1px solid rgba(31,26,18,.12);}"+
+  "#cm-wrap .thrline{position:absolute;left:0;right:0;border-top:1px dashed rgba(31,26,18,.18);}"+
+  "#cm-wrap .thrline b{position:absolute;right:0;top:-8px;background:#FEFBF3;padding-left:7px;font-size:.6rem;font-weight:600;color:rgba(31,26,18,.35);}"+
+  "#cm-wrap .xax{display:grid;margin-top:7px;}"+
+  "#cm-wrap .xax div{font-size:.63rem;color:rgba(31,26,18,.35);text-align:center;font-weight:600;}"+
+  "#cm-wrap .xax div.cur{color:#9d4a2a;}"+
+  "#cm-wrap .qsep{position:absolute;top:0;bottom:0;width:1px;background:rgba(31,26,18,.07);}"+
+  "#cm-wrap .qlab{position:absolute;top:-1px;font-size:.6rem;font-weight:700;letter-spacing:.08em;color:rgba(31,26,18,.22);text-transform:uppercase;}"+
+  "#cm-wrap .annualonly{margin-top:36px;padding-top:16px;border-top:1px solid rgba(31,26,18,.09);}"+
+  "#cm-wrap .ao-grid{display:flex;gap:34px;flex-wrap:wrap;margin-top:12px;}"+
+  "#cm-wrap .ao{min-width:112px;}"+
+  "#cm-wrap .ao .v{font-family:'Playfair Display',Georgia,serif;font-size:1.5rem;font-weight:700;line-height:1;}"+
+  "#cm-wrap .ao .l{font-size:.66rem;color:rgba(31,26,18,.42);margin-top:5px;}"+
+  "#cm-wrap .annualonly.dim .ao .v{color:rgba(31,26,18,.2)!important;}"+
+  "#cm-wrap .annualonly.dim .ao .l{color:rgba(31,26,18,.25);}"+
+  "#cm-wrap .aonote{font-size:.68rem;color:rgba(31,26,18,.38);margin-top:11px;font-style:italic;}"+
+  "#cm-wrap .csect{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:rgba(31,26,18,.32);display:flex;align-items:center;gap:11px;margin-bottom:2px;}"+
+  "#cm-wrap .csect::after{content:'';flex:1;height:1px;background:rgba(31,26,18,.09);}"+
+  "#cm-wrap .recs{margin-top:34px;padding-top:18px;border-top:1px solid rgba(31,26,18,.09);}"+
+  "#cm-wrap .rechd{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}"+
+  "#cm-wrap .rechd .t{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:rgba(31,26,18,.32);}"+
+  "#cm-wrap .vstate{margin-left:auto;display:flex;align-items:center;gap:11px;font-size:.68rem;color:rgba(31,26,18,.4);}"+
+  "#cm-wrap .recgrp{margin-top:19px;}"+
+  "#cm-wrap .recgrp .gh{display:flex;align-items:center;gap:10px;padding-bottom:5px;border-bottom:1px solid rgba(31,26,18,.09);}"+
+  "#cm-wrap .recgrp .gh .n{font-size:.77rem;font-weight:600;flex:1;}"+
+  "#cm-wrap .recrow{display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid rgba(31,26,18,.05);}"+
+  "#cm-wrap .recrow .m{flex:1;min-width:0;}"+
+  "#cm-wrap .recrow .m b{display:block;font-size:.77rem;font-weight:600;}"+
+  "#cm-wrap .recrow .m span{font-size:.68rem;color:rgba(31,26,18,.4);}"+
+  "#cm-wrap .recempty{font-size:.71rem;color:rgba(31,26,18,.28);font-style:italic;padding:8px 0;}"+
+  "#cm-wrap .needs{font-size:.6rem;font-weight:700;padding:2px 8px;border-radius:9999px;background:rgba(164,122,40,.16);color:#7a5a10;white-space:nowrap;flex:none;}"+
+  "#cm-wrap .lnk{background:none;border:none;font-family:inherit;font-size:.7rem;font-weight:600;color:#c96a4a;cursor:pointer;padding:2px 3px;flex:none;}"+
+  "#cm-wrap .lnk:hover{text-decoration:underline;}"+
+  "#cm-wrap .lnk.del{color:rgba(31,26,18,.32);}"+
+  "#cm-wrap .lnk.del:hover{color:#b52040;}"+
+  "@media(max-width:760px){"+
+    "#cm-wrap .cols{grid-template-columns:1fr;column-gap:0;}"+
+    "#cm-wrap .cols::before{display:none;}"+
+    "#cm-wrap .rl,#cm-wrap .rr{grid-column:1;}"+
+    "#cm-wrap .rl{border-bottom:none;padding-bottom:4px;}"+
+    "#cm-wrap .colhd.rc{display:none;}"+
+    "#cm-wrap .metrics{grid-template-columns:repeat(2,1fr);row-gap:22px;}"+
+    "#cm-wrap .mt:nth-child(3){padding-left:0;border-left:none;}"+
+  "}";
+  document.head.appendChild(s);
+}
+// Every verdict pill in the build comes from here, so no call site can invent a red for
+// something that is not a fail.
+function canmedsPill(state){
+  const st=canmedsStateStyle(state);
+  return el("span",{cls:"cpill",st:{background:st.bg,color:st.fg}},
+    state==="na"?null:el("i",null),st.label);
+}
+function cmTone(v,threshold){
+  if(v==null)return"rgba(31,26,18,.25)";
+  if(v>=80)return"#26523A";
+  if(v>=(threshold||60))return"#A47A28";
+  return"#c96a4a";
+}
+
+// ── KPI tab: the seven roles, verdict left, the number that produced it right ──
+function renderCanmedsView(resId){
+  if(CANMEDS_ERR)return el("div",{cls:"alert-red",st:{margin:"8px 0"}},
+    "CanMEDS records could not be loaded (",CANMEDS_ERR,"). Nothing is shown rather than showing everyone as unrecorded.");
+  if(!CANMEDS_LOADED)return el("div",{st:{padding:"48px 0",textAlign:"center",fontSize:".8rem",color:"rgba(31,26,18,.35)"}},"Loading CanMEDS records...");
+
+  const k=calcKPI(resId);
+  const cv=canmedsVerdicts(resId,{k:k});
+  const g=cv.gradients;
+  const projects=RESEARCH_PROJECTS[resId]||[];
+  const adv=ADVOCACY[resId]||[];
+  const comms=COMMITTEES[resId]||[];
+  const ramp=RESEARCH_RAMP[resId];
+
+  const pf=(val,unit,note)=>el("div",{cls:"pf"},
+    el("div",{cls:"v",st:{color:note&&note.color?note.color:"#1F1A12"}},String(val),
+      unit?el("span",{st:{fontSize:".8rem",color:"rgba(31,26,18,.25)"}},unit):null),
+    note&&note.text?el("div",{cls:"u"},note.text):null);
+  const bar=(pct,color)=>el("div",{cls:"bar"},el("i",{st:{width:Math.max(0,Math.min(100,pct))+"%",background:color}}));
+  const chips=(arr)=>arr.length?el("div",{cls:"chips"},...arr.map(c=>el("span",{cls:"cchip"+(c.gold?" gold":"")},c.label))):null;
+
+  // Right column, one cell per role. Every cell is a gradient (how well), never a verdict.
+  function perfCell(key){
+    if(key==="expert"){
+      const qz=QUIZZES.filter(q=>q.published&&q.sc[resId]!=null);
+      if(!qz.length)return[el("div",{cls:"pfnone"},"No published quiz has been sat yet.")];
+      const pcts=qz.map(q=>Math.round(q.sc[resId]/q.max*100));
+      return[pf(k.qAvg,"%",{color:cmTone(k.qAvg,60),text:"across "+qz.length+" published quiz"+(qz.length!==1?"zes":"")}),
+        bar(k.qAvg,cmTone(k.qAvg,60)),
+        el("div",{cls:"pfnote"},"Best "+Math.max(...pcts)+"% \u00b7 weakest "+Math.min(...pcts)+"%")];
+    }
+    if(key==="comm")return[el("div",{cls:"pfnote",st:{color:"rgba(31,26,18,.32)"}},
+      "Mentor check-in, quarterly. Formative only, and never gates a KPI.")];
+    if(key==="collab"){
+      const out=[];
+      if(g.committeeScore!=null){
+        out.push(pf(g.committeeScore,"/10",{color:cmTone(g.committeeScore*10,60),text:"committee score"}));
+        out.push(bar(g.committeeScore*10,cmTone(g.committeeScore*10,60)));
+      }else{
+        out.push(el("div",{cls:"pfnote"},"Committee score \u2014 not scored yet."));
+      }
+      const cc=chips(comms.map(c=>({label:c.committee_name+(c.is_chair?" (chair)":""),gold:!!c.is_chair})));
+      if(cc)out.push(cc);
+      return out;
+    }
+    if(key==="manager"){
+      const out=[];
+      const af=getApprovedFields(resId);
+      const qi=!!((KPI_SCORES[resId]||{}).qiDone||af.has("qi"));
+      if(qi)out.push(pf(1,null,{color:"#26523A",text:"QI project on file"}));
+      else out.push(el("div",{cls:"pfnone"},"No QI project recorded."));
+      if(g.chairCount>0)out.push(el("div",{cls:"chips"},el("span",{cls:"cchip gold"},g.chairCount+" chair role"+(g.chairCount!==1?"s":""))));
+      return out;
+    }
+    if(key==="advocate"){
+      const vols=adv.filter(a=>a.kind==="volunteering");
+      const out=[];
+      if(vols.length){
+        out.push(pf(vols.length,null,{color:"#26523A",text:"volunteering activit"+(vols.length!==1?"ies":"y")}));
+        const vc=chips(vols.map(v=>({label:v.title})));
+        if(vc)out.push(vc);
+      }else out.push(el("div",{cls:"pfnone"},"No volunteering recorded."));
+      return out;
+    }
+    if(key==="scholar"){
+      const active=g.activeProjects;
+      const out=[pf(g.publications,null,{color:g.publications?"#26523A":"#c96a4a",
+        text:"published \u00b7 "+active+" project"+(active!==1?"s":"")+" active"})];
+      const pc=chips(projects.slice(0,4).map(p=>({label:p.title||"Untitled project"})));
+      if(pc)out.push(pc);
+      out.push(el("div",{cls:"pfnote",st:{marginTop:"6px"}},k.presCount+" Morning Meeting session"+(k.presCount!==1?"s":"")+" presented or moderated"));
+      return out;
+    }
+    if(key==="prof"){
+      const out=[];
+      if(k.mmPct==null)out.push(el("div",{cls:"pfnone"},"No Morning Meeting attendance recorded."));
+      else{out.push(pf(k.mmPct,"%",{color:cmTone(k.mmPct,75),text:"MM \u00b7 "+k.mmAtt+" of "+k.mmTotal+" sessions"}));
+        out.push(bar(k.mmPct,cmTone(k.mmPct,75)));}
+      if(k.tPct==null)out.push(el("div",{cls:"pfnone"},"No Academic Day attendance recorded."));
+      else{out.push(el("div",{cls:"pf",st:{marginTop:"9px"}},
+          el("div",{cls:"v",st:{color:cmTone(k.tPct,75)}},String(k.tPct),el("span",{st:{fontSize:".8rem",color:"rgba(31,26,18,.25)"}},"%")),
+          el("div",{cls:"u"},"Academic Day \u00b7 "+k.tAtt+" of "+k.tTotal)));
+        out.push(bar(k.tPct,cmTone(k.tPct,75)));}
+      return out;
+    }
+    return[];
+  }
+
+  const cells=[];
+  cv.roles.forEach((r,i)=>{
+    const last=i===cv.roles.length-1;
+    const lastSt=last?{borderBottom:"none"}:{};
+    const body=[];
+    if(r.legs){
+      r.legs.forEach(l=>{
+        const ls=canmedsStateStyle(l.state);
+        body.push(el("div",{cls:"leg"},
+          el("span",{cls:"mini",st:{background:ls.bg,color:ls.fg}},ls.label),
+          el("span",null,l.label+" ",el("b",null,l.value),l.note?" \u00b7 "+l.note:"")));
+      });
+    }else if(r.state==="na"){
+      body.push(el("div",{cls:"crit"},r.note));
+    }else{
+      body.push(el("div",{cls:"crit"},
+        el("b",null,r.value)," \u00b7 ",r.kpi,
+        r.note?el("span",{cls:"why"},r.note):null,
+        r.state==="awaiting"?el("span",{cls:"why"},"Not counted as a miss \u2014 this resident's record has not been confirmed complete."):null));
+    }
+    cells.push(el("div",{cls:"rl"+(r.state==="na"?" off":""),st:lastSt},
+      el("div",{cls:"rtop"},
+        el("div",{cls:"rname"},r.role,r.roleAlt?el("small",null,r.roleAlt):null),
+        canmedsPill(r.state)),
+      ...body));
+    const pcell=perfCell(r.key);
+    cells.push(el("div",{cls:"rr",st:lastSt},
+      pcell.length?pcell:el("div",{cls:"pfnone"},"Nothing recorded.")));
+  });
+
+  return el("div",null,
+    el("div",{cls:"cm-hero"},
+      el("div",null,
+        el("div",{cls:"big"},
+          String(cv.met),el("i",null,"\u2009of\u2009"+cv.applicable)),
+        el("div",{cls:"cm-cap"},"KPI standards met")),
+      el("div",{cls:"cm-side"},
+        el("div",null,el("div",{cls:"n",st:{color:"#7a5a10"}},String(cv.inProgress)),el("div",{cls:"l"},"In progress")),
+        el("div",null,el("div",{cls:"n",st:{color:"rgba(31,26,18,.4)"}},String(cv.awaiting)),el("div",{cls:"l"},"Awaiting entry")),
+        el("div",null,el("div",{cls:"n",st:{color:"rgba(31,26,18,.25)"}},String(cv.na)),el("div",{cls:"l"},"Not applicable")))
+    ),
+    el("div",{cls:"cols"},
+      el("div",{cls:"colhd lc"},"KPI",el("em",null,"\u2014 met the standard?")),
+      el("div",{cls:"colhd rc"},"Performance",el("em",null,"\u2014 how well?")),
+      ...cells),
+    el("div",{cls:"fn"},
+      el("b",null,"Denominator. "),
+      "The headline counts only roles with a decided verdict \u2014 met or not met. In-progress, awaiting-entry and not-applicable roles sit outside it, so a resident is never marked down for a record nobody has filled in yet.",
+      el("br",null),
+      el("b",null,"Awaiting entry"),
+      cv.complete
+        ?" becomes Not met once the record is confirmed complete. This resident's record was confirmed on "+String(cv.verifiedAt||"").slice(0,10)+"."
+        :" becomes Not met only once the PD confirms this resident's record is complete. It has not been confirmed yet."),
+    renderCanmedsRecords(resId)
+  );
+}
+
+// ── Performance tab: the same calcKPIQ engine, read at three grains ──
+// Block n is [n], quarter q is QUARTER_BLOCKS[q], annual is all 13 blocks. No new aggregation
+// is defined here on purpose, so these numbers cannot drift from the quarterly card.
+function renderPerformanceView(resId){
+  const allBlocks=rotaPeriods(CURRENT_ACADEMIC_YEAR).map((_,i)=>i+1);
+  const grain=STATE.perfGrain||"block";
+  const periods=grain==="block"?allBlocks:grain==="quarter"?[1,2,3,4]:[0];
+  let sel=STATE.perfPeriod;
+  if(grain==="annual")sel=0;
+  else if(periods.indexOf(sel)<0)sel=grain==="block"?CURRENT_PERIOD:currentQuarter();
+  const blocksFor=p=>grain==="block"?[p]:grain==="quarter"?(QUARTER_BLOCKS[p]||[]):allBlocks;
+  const selBlocks=blocksFor(sel);
+  const kq=calcKPIQ(resId,selBlocks);
+  const idx=periods.indexOf(sel);
+  const prev=idx>0?calcKPIQ(resId,blocksFor(periods[idx-1])):null;
+  const series=allBlocks.map(b=>calcKPIQ(resId,[b]));
+  const cv=CANMEDS_LOADED?canmedsVerdicts(resId):null;
+
+  const seg=el("div",{cls:"seg"},
+    ...[["block","Block"],["quarter","Quarter"],["annual","Annual"]].map(gg=>
+      el("button",{cls:grain===gg[0]?"on":"",onClick:()=>set({perfGrain:gg[0]})},gg[1])));
+  const chipRow=grain==="annual"
+    ?el("div",{cls:"pcap"},"All "+allBlocks.length+" blocks \u00b7 AY "+CURRENT_ACADEMIC_YEAR+"\u2013"+(CURRENT_ACADEMIC_YEAR+1))
+    :el("div",{cls:"pchips"},...periods.map(p=>el("button",{cls:"pchip"+(p===sel?" on":""),
+        onClick:()=>set({perfPeriod:p})},grain==="block"?("B"+p):("Q"+p))));
+  const periodCap=grain==="block"
+    ?el("div",{cls:"pcap"},"Block "+sel+" \u00b7 "+rotaPeriods(CURRENT_ACADEMIC_YEAR)[sel-1])
+    :grain==="quarter"?el("div",{cls:"pcap"},QUARTER_LABELS[sel]+" \u00b7 blocks "+selBlocks.join(", ")):null;
+
+  function delta(cur,pv,noun){
+    if(cur==null||pv==null)return el("div",{cls:"delta flat"},"\u2014");
+    const d=cur-pv,a=Math.abs(d);
+    return el("div",{cls:"delta "+(d>0?"up":d<0?"down":"flat")},
+      (d>0?"\u25b2 +":d<0?"\u25bc ":"\u2014 ")+(d?a+" "+noun+(a!==1?"s":"")+" vs previous":"no change vs previous"));
+  }
+  function tile(lbl,val,unit,sub,pv,color,noun){
+    return el("div",{cls:"mt"},
+      el("div",{cls:"lbl"},lbl),
+      el("div",{cls:"val",st:{color:val==null?"rgba(31,26,18,.2)":color}},
+        val==null?"\u2014":String(val),val==null||!unit?null:el("u",null,unit)),
+      el("div",{cls:"sub"},sub),
+      delta(val,pv,noun||"pt"));
+  }
+  const nb=selBlocks.length;
+  const metrics=el("div",{cls:"metrics"},
+    tile("Morning Meeting",kq.mmPct,"%",kq.mmPct==null?"no sessions recorded":(kq.mmAtt+" of "+kq.mmTotal+" sessions"),prev&&prev.mmPct,cmTone(kq.mmPct,75)),
+    tile("Academic Day",kq.tPct,"%",kq.tPct==null?"no sessions recorded":(kq.tAtt+" of "+kq.tTotal+" sessions"),prev&&prev.tPct,cmTone(kq.tPct,75)),
+    tile("Quiz average",kq.qAvg,"%",kq.quizCount?(kq.quizCount+" quiz"+(kq.quizCount!==1?"zes":"")+" sat"):"none sat",prev&&prev.qAvg,cmTone(kq.qAvg,60)),
+    tile("MM presenter",kq.presCount,"","session"+(kq.presCount!==1?"s":"")+" over "+nb+" block"+(nb!==1?"s":""),prev&&prev.presCount,"#7a5a10","session"));
+
+  // Trend strip. All 13 blocks stay on screen at every grain, with the selected period banded,
+  // so reading one period never hides the shape of the year.
+  const hasSeries=series.some(s=>s.mmPct!=null||s.tPct!=null||s.qAvg!=null);
+  const n=allBlocks.length,H=170;
+  const chart=el("div",{cls:"chart"});
+  if(hasSeries){
+    chart.appendChild(el("div",{cls:"thrline",st:{top:(H-H*0.75)+"px"}},el("b",null,"75% threshold")));
+    [3,6,9].forEach(bi=>chart.appendChild(el("div",{cls:"qsep",st:{left:(bi/n*100)+"%"}})));
+    [[0,"Q1"],[3,"Q2"],[6,"Q3"],[9,"Q4"]].forEach(q=>
+      chart.appendChild(el("div",{cls:"qlab",st:{left:(q[0]/n*100+1)+"%"}},q[1])));
+    if(grain!=="annual"&&selBlocks.length)chart.appendChild(el("div",{st:{position:"absolute",top:"0",bottom:"0",
+      background:"rgba(201,106,74,.07)",left:((selBlocks[0]-1)/n*100)+"%",width:(selBlocks.length/n*100)+"%"}}));
+    const NS="http://www.w3.org/2000/svg";
+    const svg=document.createElementNS(NS,"svg");
+    svg.setAttribute("viewBox","0 0 "+(n*40)+" "+H);
+    svg.setAttribute("preserveAspectRatio","none");
+    svg.style.cssText="position:absolute;inset:0;width:100%;height:100%;overflow:visible";
+    [["mmPct","#c96a4a"],["tPct","#A47A28"],["qAvg","#26523A"]].forEach(m=>{
+      const pts=[];
+      series.forEach((s,ix)=>{if(s[m[0]]==null)return;pts.push([ix*40+20,H-H*(s[m[0]]/100)]);});
+      if(!pts.length)return;
+      const path=document.createElementNS(NS,"path");
+      path.setAttribute("d",pts.map((p,ix)=>(ix?"L":"M")+p[0]+" "+p[1]).join(" "));
+      path.setAttribute("fill","none");path.setAttribute("stroke",m[1]);
+      path.setAttribute("stroke-width","2");path.setAttribute("stroke-linejoin","round");
+      path.setAttribute("vector-effect","non-scaling-stroke");
+      svg.appendChild(path);
+      pts.forEach(p=>{const c=document.createElementNS(NS,"circle");
+        c.setAttribute("cx",p[0]);c.setAttribute("cy",p[1]);c.setAttribute("r","3");
+        c.setAttribute("fill",m[1]);c.setAttribute("vector-effect","non-scaling-stroke");svg.appendChild(c);});
+    });
+    chart.appendChild(svg);
+  }
+  const xax=el("div",{cls:"xax",st:{gridTemplateColumns:"repeat("+n+",1fr)"}},
+    ...allBlocks.map(b=>el("div",{cls:(grain!=="annual"&&selBlocks.indexOf(b)>=0)?"cur":""},String(b))));
+  const strip=el("div",{cls:"strip"},
+    el("div",{cls:"striphd"},
+      el("div",{cls:"t"},grain==="annual"?"Every block across the year":"Every block \u00b7 "+(grain==="block"?("Block "+sel):QUARTER_LABELS[sel])+" highlighted"),
+      el("div",{cls:"k"},
+        el("span",null,el("i",{st:{background:"#c96a4a"}}),"Morning Meeting"),
+        el("span",null,el("i",{st:{background:"#A47A28"}}),"Academic Day"),
+        el("span",null,el("i",{st:{background:"#26523A"}}),"Quiz"))),
+    hasSeries?chart:el("div",{cls:"pfnone",st:{padding:"28px 0"}},"No attendance or quiz data recorded for this academic year yet."),
+    hasSeries?xax:null);
+
+  // Gradients with no block dimension. Shown live on the annual slice and dimmed with a reason
+  // elsewhere -- rendering them as zero on a single block would be a lie.
+  const g=cv?cv.gradients:null;
+  const aoItem=(v,l,color)=>el("div",{cls:"ao"},
+    el("div",{cls:"v",st:{color:color}},v),el("div",{cls:"l"},l));
+  const annualOnly=el("div",{cls:"annualonly"+(grain==="annual"?"":" dim")},
+    el("div",{cls:"csect"},"Annual only"),
+    g?el("div",{cls:"ao-grid"},
+      aoItem(String(g.publications),"Publications",g.publications?"#26523A":"rgba(31,26,18,.25)"),
+      el("div",{cls:"ao"},
+        el("div",{cls:"v",st:{color:g.committeeScore!=null?"#26523A":"rgba(31,26,18,.25)"}},
+          g.committeeScore!=null?String(g.committeeScore):"\u2014",
+          g.committeeScore!=null?el("span",{st:{fontSize:".85rem",color:"rgba(31,26,18,.25)"}},"/10"):null),
+        el("div",{cls:"l"},g.committeeScore!=null?"Committee score":"Committee \u2014 not scored")),
+      aoItem(String(g.campaigns),"Awareness campaigns",g.campaigns?"#26523A":"rgba(31,26,18,.25)"),
+      aoItem(String(g.volunteering),"Volunteering",g.volunteering?"#26523A":"rgba(31,26,18,.25)"),
+      aoItem(String(g.chairCount),"Chair roles",g.chairCount?"#7a5a10":"rgba(31,26,18,.25)")
+    ):el("div",{cls:"pfnote",st:{marginTop:"12px"}},"CanMEDS records have not loaded."),
+    grain==="annual"?null:el("div",{cls:"aonote"},"These have no block dimension \u2014 they are counted once per year. Switch to Annual to read them."));
+
+  return el("div",null,
+    el("div",{cls:"periodrow"},seg,chipRow,periodCap),
+    metrics,strip,annualOnly);
+}
+// ═══ CanMEDS entry layer ════════════════════════════════════════════════════
+// Three tables, one modal. The forms are declared rather than hand-written so the validation,
+// the draft round-trip and the insert/update payload all read from a single field list and
+// cannot drift apart -- a column added to the list is automatically saved and re-loaded.
+function cmNull(v){v=(v==null?"":String(v)).trim();return v?v:null;}
+const CANMEDS_RP_STATUS={registered:"Registered",irb_approved:"IRB approved",submitted:"Submitted",published:"Published",abandoned:"Abandoned"};
+const CANMEDS_FORMS={
+  research:{
+    table:"research_projects",label:"Research project",addLabel:"Add project",
+    fields:[
+      {k:"title",l:"Title",t:"text",ph:"e.g. Sepsis bundle compliance in the medical ward"},
+      // started_year, NOT academic_year: its two sibling tables use academic_year, and a project
+      // spans years, so this is the year it was registered and never the year it was published.
+      {k:"started_year",l:"Academic year registered",t:"number",hint:"Cycle start year -- 2025 means AY 2025-26. This is when the project began, not when it was published."},
+      {k:"status",l:"Status",t:"select",opts:[["registered","Registered"],["irb_approved","IRB approved"],["submitted","Submitted"],["published","Published"],["abandoned","Abandoned"]]},
+      {k:"irb_number",l:"IRB number",t:"text"},
+      // All three dates are always on the form, including when the status only requires one.
+      // An update sends every column, so a hidden date field would be written back as null and
+      // silently erase a date the record already had.
+      {k:"irb_approved_at",l:"IRB approved on",t:"date"},
+      {k:"submitted_at",l:"Submitted on",t:"date"},
+      {k:"published_at",l:"Published on",t:"date"},
+      {k:"journal",l:"Journal or publisher",t:"text"},
+      {k:"citation",l:"Citation",t:"text"},
+      {k:"role",l:"Role",t:"text",ph:"principal investigator, co-investigator, co-author..."},
+      {k:"evidence_url",l:"Evidence link",t:"text",ph:"https://"},
+      {k:"notes",l:"Notes",t:"textarea"}
+    ],
+    blank:function(){return{title:"",started_year:String(CURRENT_ACADEMIC_YEAR),status:"registered",
+      irb_number:"",irb_approved_at:"",submitted_at:"",published_at:"",journal:"",citation:"",role:"",evidence_url:"",notes:""};},
+    validate:function(d){
+      if(!String(d.title||"").trim())return"A title is required.";
+      var y=parseInt(d.started_year,10);
+      if(!(y>=2000&&y<=2100))return"Academic year must be a four-digit cycle start year, such as 2025.";
+      // research_projects_status_dates_ck, enforced here so it can never reach the user as a raw
+      // Postgres constraint name.
+      var need={published:["published_at","a publication date"],submitted:["submitted_at","a submission date"],irb_approved:["irb_approved_at","an IRB approval date"]}[d.status];
+      if(need&&!d[need[0]])return"Status \""+CANMEDS_RP_STATUS[d.status]+"\" requires "+need[1]+".";
+      return null;
+    },
+    build:function(resId,d){return{resident_id:resId,title:String(d.title).trim(),started_year:parseInt(d.started_year,10),
+      status:d.status,irb_number:cmNull(d.irb_number),irb_approved_at:cmNull(d.irb_approved_at),
+      submitted_at:cmNull(d.submitted_at),published_at:cmNull(d.published_at),journal:cmNull(d.journal),
+      citation:cmNull(d.citation),role:cmNull(d.role),evidence_url:cmNull(d.evidence_url),notes:cmNull(d.notes)};},
+    name:function(r){return r.title;},
+    line:function(r){return(CANMEDS_RP_STATUS[r.status]||r.status)+" \u00b7 registered "+r.started_year+
+      (r.published_at?" \u00b7 published "+String(r.published_at).slice(0,10):"");}
+  },
+  advocacy:{
+    table:"advocacy_activities",label:"Advocacy activity",addLabel:"Add activity",
+    fields:[
+      {k:"kind",l:"Kind",t:"select",opts:[["awareness_campaign","Awareness campaign"],["volunteering","Volunteering"]],
+       hint:"Only awareness campaigns count towards the Health Advocate standard. Volunteering is Performance."},
+      {k:"title",l:"Title",t:"text",ph:"e.g. World Diabetes Day screening"},
+      {k:"activity_date",l:"Date",t:"date"},
+      {k:"role",l:"Role",t:"text",ph:"organiser, presenter, participant..."},
+      {k:"hours",l:"Hours",t:"number",step:"0.5"},
+      {k:"evidence_url",l:"Evidence link",t:"text",ph:"https://"},
+      {k:"notes",l:"Notes",t:"textarea"}
+    ],
+    blank:function(){return{kind:"awareness_campaign",title:"",activity_date:"",role:"",hours:"",evidence_url:"",notes:""};},
+    validate:function(d){
+      if(!String(d.title||"").trim())return"A title is required.";
+      if(String(d.hours||"").trim()!==""){
+        var h=Number(d.hours);
+        // numeric(5,1): anything at or above 10000 is rejected by the column, not by a check.
+        if(!isFinite(h)||h<0||h>9999.9)return"Hours must be a number between 0 and 9999.9.";
+      }
+      return null;
+    },
+    build:function(resId,d){return{resident_id:resId,academic_year:CURRENT_ACADEMIC_YEAR,kind:d.kind,
+      title:String(d.title).trim(),activity_date:cmNull(d.activity_date),role:cmNull(d.role),
+      hours:String(d.hours||"").trim()===""?null:Number(d.hours),
+      evidence_url:cmNull(d.evidence_url),notes:cmNull(d.notes)};},
+    name:function(r){return r.title;},
+    line:function(r){return(r.kind==="awareness_campaign"?"Awareness campaign":"Volunteering")+
+      (r.activity_date?" \u00b7 "+String(r.activity_date).slice(0,10):"")+(r.hours!=null?" \u00b7 "+r.hours+"h":"");}
+  },
+  committee:{
+    table:"committee_memberships",label:"Committee membership",addLabel:"Add committee",
+    fields:[
+      {k:"committee_name",l:"Committee",t:"text",ph:"e.g. Curriculum Committee"},
+      {k:"is_chair",l:"Chairs this committee",t:"checkbox",
+       hint:"Performance only. Chair seats are scarce and awarded by someone else, so this never gates a KPI."},
+      {k:"appointed_at",l:"Appointed on",t:"date"},
+      {k:"notes",l:"Notes",t:"textarea"}
+    ],
+    blank:function(){return{committee_name:"",is_chair:false,appointed_at:"",notes:""};},
+    validate:function(d){return String(d.committee_name||"").trim()?null:"A committee name is required.";},
+    build:function(resId,d){return{resident_id:resId,academic_year:CURRENT_ACADEMIC_YEAR,
+      committee_name:String(d.committee_name).trim(),is_chair:!!d.is_chair,
+      appointed_at:cmNull(d.appointed_at),notes:cmNull(d.notes)};},
+    name:function(r){return r.committee_name;},
+    line:function(r){return(r.is_chair?"Chair":"Member")+" \u00b7 AY "+r.academic_year+"-"+String(r.academic_year+1).slice(2);}
+  }
+};
+// v2c inserted placeholder rows for everything the old boolean columns could still prove. They
+// carry real evidence but a fake title, so they are badged rather than shown as finished records.
+function canmedsPlaceholder(row){return /^Auto-migrated/.test(row.notes||"");}
+// Translate the three unique indexes and the status/date check into something a PD can act on.
+// Without this the toast reads "duplicate key value violates unique constraint
+// research_projects_res_year_title_ux", which tells the reader nothing they can fix.
+function canmedsErrMsg(e){
+  const m=(e&&e.message)||String(e);
+  if(e&&e.code==="23505"){
+    if(m.indexOf("research_projects_res_year_title_ux")>=0)return"This resident already has a project with that title registered in that academic year.";
+    if(m.indexOf("advocacy_activities_res_year_kind_title_ux")>=0)return"This resident already has an activity of that kind with that title this year.";
+    if(m.indexOf("committee_memberships_res_year_name_ux")>=0)return"This resident is already recorded on that committee this year.";
+    return"A record like this already exists for this resident.";
+  }
+  if(m.indexOf("research_projects_status_dates_ck")>=0)return"The status and the dates disagree. Published needs a publication date, Submitted needs a submission date, and IRB approved needs an approval date.";
+  if(e&&(e.code==="42501"||m.indexOf("row-level security")>=0))return"You do not have permission to change this resident's record.";
+  return m;
+}
+// Live draft. render() rebuilds the whole DOM, so an input that wrote to STATE would lose the
+// caret on every keystroke -- same reason _kpiPropLive exists. The opener fills this BEFORE set().
+let _canmedsDraft={};
+function openCanmedsModal(kind,resId,row){
+  const spec=CANMEDS_FORMS[kind];
+  const d=spec.blank();
+  if(row)spec.fields.forEach(function(f){
+    const v=row[f.k];
+    d[f.k]=f.t==="checkbox"?!!v:(v==null?"":(f.t==="date"?String(v).slice(0,10):String(v)));
+  });
+  _canmedsDraft=d;
+  set({cmModal:{kind:kind,resId:resId,id:row?row.id:null,focus:row&&canmedsPlaceholder(row)?spec.fields[0].k:null},cmSaving:false});
+}
+function closeCanmedsModal(){_canmedsDraft={};set({cmModal:null,cmSaving:false});}
+
+// Any new evidence makes an earlier completeness tick stale. Clearing it here stops the flag
+// drifting into meaning "somebody checked this at some point", which is not a claim the UI makes.
+async function clearCanmedsVerified(resId){
+  const ks=KPI_SCORES[resId]||{};
+  if(!ks.canmedsVerifiedAt)return;
+  const{error}=await sb.from("kpi_scores").update({canmeds_verified_at:null,canmeds_verified_by:null})
+    .eq("resident_id",resId).eq("academic_year",CURRENT_ACADEMIC_YEAR);
+  if(error){console.warn("clearCanmedsVerified error",error.message);return;}
+  KPI_SCORES[resId]={...ks,canmedsVerifiedAt:null,canmedsVerifiedBy:null};
+}
+async function saveCanmedsRow(){
+  const s=STATE.cmModal;if(!s)return;
+  const spec=CANMEDS_FORMS[s.kind];
+  const bad=spec.validate(_canmedsDraft);
+  if(bad){showToast(bad,"warning");return;}
+  set({cmSaving:true});
+  const row=spec.build(s.resId,_canmedsDraft);
+  row.updated_by=STATE.user?.profileId||null;
+  row.updated_at=new Date().toISOString();
+  const{error}=s.id?await sb.from(spec.table).update(row).eq("id",s.id)
+                   :await sb.from(spec.table).insert(row);
+  if(error){showToast(canmedsErrMsg(error),"error");set({cmSaving:false});return;}
+  await clearCanmedsVerified(s.resId);
+  await refreshCanmedsFor(s.resId);
+  logActivity("canmeds_save",spec.table,s.resId,{resident_name:(resById(s.resId)||{}).name||s.resId,kind:s.kind,edited:!!s.id});
+  showToast(spec.label+(s.id?" updated.":" added."),"success");
+  closeCanmedsModal();
+}
+function deleteCanmedsRow(kind,resId,row){
+  const spec=CANMEDS_FORMS[kind];
+  showConfirm("Delete \""+spec.name(row)+"\"? The record is removed permanently.",async function(){
+    const{error}=await sb.from(spec.table).delete().eq("id",row.id);
+    if(error){showToast(canmedsErrMsg(error),"error");return;}
+    await clearCanmedsVerified(resId);
+    await refreshCanmedsFor(resId);
+    logActivity("canmeds_delete",spec.table,resId,{resident_name:(resById(resId)||{}).name||resId,kind:kind});
+    showToast(spec.label+" deleted.","success");
+    render();
+  },"Delete","danger");
+}
+// The only control in the build that converts neutral states into failures, so the dialog counts
+// them out loud instead of asking a vague "are you sure?". assumeComplete runs the same verdict
+// function against a hypothetical tick, so the number quoted is the number that will appear.
+function toggleCanmedsVerified(resId){
+  const res=resById(resId)||{};
+  const who=res.name||"this resident";
+  if(canmedsRecordComplete(resId)){
+    showConfirm("Reopen "+who+"'s record? Every domain now reading Not met only because the record was confirmed complete goes back to Awaiting entry.",
+      function(){return writeCanmedsVerified(resId,false);},"Reopen record","warn");
+    return;
+  }
+  const n=canmedsVerdicts(resId,{assumeComplete:true}).notMet-canmedsVerdicts(resId,{}).notMet;
+  const msg=n>0
+    ?"Confirming completeness changes "+n+" empty domain"+(n!==1?"s":"")+" from \"Awaiting entry\" to \"Not met\" for "+who+"."
+    :"Nothing changes state for "+who+" right now. Every domain still awaiting is waiting on something the portal cannot confirm by hand, such as a quiz that was never sat.";
+  showConfirm(msg,function(){return writeCanmedsVerified(resId,true);},"Confirm record complete","primary");
+}
+async function writeCanmedsVerified(resId,on){
+  const stamp=on?new Date().toISOString():null;
+  const by=on?(STATE.user?.profileId||null):null;
+  // Upsert, not update: most residents have no kpi_scores row at all, and every other column on
+  // that table has a default, so inserting one here cannot overwrite a score that exists.
+  const{error}=await sb.from("kpi_scores").upsert({
+    resident_id:resId,academic_year:CURRENT_ACADEMIC_YEAR,
+    canmeds_verified_at:stamp,canmeds_verified_by:by
+  },{onConflict:"resident_id,academic_year"});
+  if(error){showToast(canmedsErrMsg(error),"error");return;}
+  KPI_SCORES[resId]={...(KPI_SCORES[resId]||{}),canmedsVerifiedAt:stamp,canmedsVerifiedBy:by};
+  logActivity(on?"canmeds_verified":"canmeds_reopened","kpi_scores",resId,{resident_name:(resById(resId)||{}).name||resId});
+  showToast(on?"Record confirmed complete.":"Record reopened.","success");
+  render();
+}
+
+function renderCanmedsModal(){
+  const s=STATE.cmModal;if(!s)return null;
+  const spec=CANMEDS_FORMS[s.kind];
+  const saving=STATE.cmSaving||false;
+  const res=resById(s.resId)||{};
+  const lbl={display:"block",fontSize:".78rem",fontWeight:"600",marginBottom:"3px"};
+  const box={width:"100%",padding:"7px 10px",border:"1px solid rgba(31,26,18,.16)",borderRadius:"7px",
+    fontSize:".85rem",fontFamily:"inherit",background:"#FEFBF3",color:"#1F1A12"};
+  const hint={fontSize:".68rem",color:"rgba(31,26,18,.38)",marginTop:"3px",lineHeight:"1.45"};
+
+  function field(f){
+    const val=_canmedsDraft[f.k];
+    let input;
+    if(f.t==="select"){
+      input=el("select",{cls:"cm-f",id:"cmf-"+f.k,st:box,onChange:function(e){_canmedsDraft[f.k]=e.target.value;}},
+        ...f.opts.map(function(o){return el("option",Object.assign({value:o[0]},String(val)===o[0]?{selected:true}:{}),o[1]);}));
+    }else if(f.t==="checkbox"){
+      return el("label",{st:{display:"flex",alignItems:"flex-start",gap:"8px",marginBottom:"11px",cursor:"pointer"}},
+        el("input",Object.assign({type:"checkbox",id:"cmf-"+f.k,st:{marginTop:"2px"},
+          onChange:function(e){_canmedsDraft[f.k]=e.target.checked;}},val?{checked:true}:{})),
+        el("span",null,el("span",{st:{fontSize:".78rem",fontWeight:"600"}},f.l),
+          f.hint?el("div",{st:hint},f.hint):null));
+    }else if(f.t==="textarea"){
+      input=el("textarea",{cls:"cm-f",id:"cmf-"+f.k,rows:"2",st:Object.assign({resize:"vertical"},box),
+        onInput:function(e){_canmedsDraft[f.k]=e.target.value;}},val||"");
+    }else{
+      input=el("input",Object.assign({type:f.t,id:"cmf-"+f.k,value:val==null?"":val,placeholder:f.ph||"",st:box,
+        onInput:function(e){_canmedsDraft[f.k]=e.target.value;}},f.step?{step:f.step}:{}));
+    }
+    return el("div",{st:{marginBottom:"11px"}},
+      el("label",{st:lbl,for:"cmf-"+f.k},f.l),input,f.hint?el("div",{st:hint},f.hint):null);
+  }
+
+  const card=el("div",{cls:"modal-card",st:{width:"520px",maxWidth:"100%",maxHeight:"90vh",overflowY:"auto"}},
+    el("div",{st:{display:"flex",alignItems:"flex-start",gap:"10px",marginBottom:"14px"}},
+      el("div",{st:{flex:"1"}},
+        el("h3",null,(s.id?"Edit ":"Add ")+spec.label.toLowerCase()),
+        el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.4)",marginTop:"2px"}},res.name||("Resident "+s.resId))),
+      el("button",{cls:"sbtn ghost small",onClick:closeCanmedsModal},"Close")),
+    ...spec.fields.map(field),
+    el("div",{st:{fontSize:".68rem",color:"rgba(31,26,18,.38)",lineHeight:"1.55",margin:"4px 0 14px"}},
+      "Saving reopens this resident's record, so any domain that was Not met only because the year had been confirmed complete returns to Awaiting entry."),
+    el("div",{st:{display:"flex",gap:"8px"}},
+      el("button",{cls:"sbtn primary",st:{flex:"1"},disabled:saving,onClick:saveCanmedsRow},saving?"Saving...":(s.id?"Save changes":"Add record")),
+      el("button",{cls:"sbtn ghost",disabled:saving,onClick:closeCanmedsModal},"Cancel")));
+
+  // A placeholder row is opened straight onto its unusable title, which is the only field the
+  // migration could not recover and the only reason the row is badged.
+  if(s.focus)setTimeout(function(){const n=document.getElementById("cmf-"+s.focus);if(n){n.focus();n.select&&n.select();}},0);
+  return el("div",{cls:"modal-overlay",onClick:function(e){if(e.target===e.currentTarget)closeCanmedsModal();}},card);
+}
+
+// Entry lives below the two columns rather than inside them: the KPI/Performance grid is a
+// reading surface, and threading buttons through it would put an edit control beside a verdict.
+// Hidden entirely for anyone RLS would refuse, so nobody meets a 403 by pressing a button.
+function renderCanmedsRecords(resId){
+  if(!canEditCanmeds(resId))return null;
+  const complete=canmedsRecordComplete(resId);
+  const ks=KPI_SCORES[resId]||{};
+  const groups=[
+    {kind:"research",title:"Research projects",rows:RESEARCH_PROJECTS[resId]||[]},
+    {kind:"advocacy",title:"Advocacy",rows:ADVOCACY[resId]||[]},
+    {kind:"committee",title:"Committees",rows:COMMITTEES[resId]||[]}
+  ];
+  return el("div",{cls:"recs"},
+    el("div",{cls:"rechd"},
+      el("div",{cls:"t"},"Records"),
+      el("div",{cls:"vstate"},
+        complete
+          ?el("span",null,"Confirmed complete "+String(ks.canmedsVerifiedAt||"").slice(0,10))
+          :el("span",null,"Not yet confirmed complete"),
+        canVerifyCanmeds(resId)
+          ?el("button",{cls:"sbtn small "+(complete?"ghost":"primary"),onClick:function(){toggleCanmedsVerified(resId);}},
+             complete?"Reopen record":"Confirm record complete")
+          :null)),
+    ...groups.map(function(g){
+      const spec=CANMEDS_FORMS[g.kind];
+      return el("div",{cls:"recgrp"},
+        el("div",{cls:"gh"},
+          el("div",{cls:"n"},g.title),
+          el("button",{cls:"lnk",onClick:function(){openCanmedsModal(g.kind,resId,null);}},"+ "+spec.addLabel)),
+        g.rows.length
+          ?el("div",null,...g.rows.map(function(r){
+              return el("div",{cls:"recrow"},
+                el("div",{cls:"m"},
+                  el("b",null,spec.name(r)||"Untitled"),
+                  el("span",null,spec.line(r))),
+                canmedsPlaceholder(r)?el("span",{cls:"needs"},"Needs title"):null,
+                el("button",{cls:"lnk",onClick:function(){openCanmedsModal(g.kind,resId,r);}},"Edit"),
+                el("button",{cls:"lnk del",onClick:function(){deleteCanmedsRow(g.kind,resId,r);}},"Delete"));
+            }))
+          : el("div",{cls:"recempty"},"Nothing on file."));
+    }));
+}
+
 function renderKPI(){
   const vr=visRes();
   const u=STATE.user;
-  if(isConsultant())return renderMentorHome();
+  // Mentors land on their own home, but must be able to open a mentee's KPI page --
+  // renderMentorHome's own cards link into it, so an unconditional bounce made them dead.
+  if(isConsultant()&&!STATE.kpiDrill)return renderMentorHome();
   let selId=isResident()?u.rid:(STATE.kpiSelRes||vr[0]?.id);
   const res=resById(selId)||vr[0];
   if(!res)return el("div",null,"No residents");
   const k=calcKPI(res.id);
   const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
-  const tab=STATE.kpiTab||"ongoing";
+  const tab=STATE.kpiTab||"kpi";
+  canmedsInjectCss();
+  const cvHead=CANMEDS_LOADED?canmedsVerdicts(res.id,{k:k}):null;
   const canEdit_=canEditKPI(res.id);
   const isMyRes=isResident()&&u.rid===res.id;
   const isMentor=isConsultant()&&MENTORS[res.id]===u.cid;
@@ -6027,49 +7010,12 @@ function renderKPI(){
   }
 
   // ── Score totals ──────────────────────────────────────────────
-  const ongoingRaw=k.qAvg*KPI_W.quiz/100+k.mmPct*KPI_W.mm/100+k.tPct*KPI_W.teach/100+(k.pres?KPI_W.pres:0);
   const yearlyRaw=k.commPct*KPI_W.comm/100+k.qiPct*KPI_W.qi/100+k.pubPct*KPI_W.pub/100+k.oralPosterPct*KPI_W.oral/100+k.awardsPct*KPI_W.awards/100+k.volunteeringPct*KPI_W.volunteering/100;
-  const ongoingScore=Math.round(ongoingRaw);
   const yearlyScore=Math.round(yearlyRaw);
-
-  // SVG icon helpers
-  function svgIcon(paths,w,h){
-    w=w||15;h=h||15;
-    const ns="http://www.w3.org/2000/svg";
-    const svg=document.createElementNS(ns,"svg");
-    svg.setAttribute("width",String(w));svg.setAttribute("height",String(h));
-    svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("fill","none");
-    svg.setAttribute("stroke","currentColor");svg.setAttribute("stroke-width","2");
-    svg.setAttribute("stroke-linecap","round");svg.setAttribute("stroke-linejoin","round");
-    svg.style.display="inline-block";svg.style.verticalAlign="middle";svg.style.flexShrink="0";
-    svg.innerHTML=paths;
-    return svg;
-  }
 
   // SVG tab icon
   function tabIcon(paths){return svgIcon(paths,12,12);}
 
-  // Metric row (no-box style)
-  function kpiMetricRow(label,iconPaths,val,valLabel,weight,color,detail,isLast,isRight){
-    const borderR=isRight?"":"1px solid rgba(31,26,18,.07)";
-    const borderB=isLast?"none":"1px solid rgba(31,26,18,.07)";
-    const noData=val==null;
-    if(noData){valLabel="N/A";color="#9ca3af";}
-    return el("div",{st:{padding:"18px 0",borderBottom:borderB,borderRight:borderR,paddingRight:isRight?"0":"28px",paddingLeft:isRight?"28px":"0"}},
-      el("div",{st:{display:"flex",alignItems:"center",gap:"5px",marginBottom:"8px",fontSize:".68rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.35)"}},
-        svgIcon(iconPaths,11,11),
-        label
-      ),
-      el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"2.1rem",fontWeight:"700",lineHeight:"1",marginBottom:"8px",color:color}},
-        valLabel||val,
-        valLabel?null:el("span",{st:{fontSize:"1rem",fontWeight:"400",color:"rgba(31,26,18,.22)",marginLeft:"1px"}},"%")
-      ),
-      el("div",{st:{height:"3px",background:"rgba(31,26,18,.08)",borderRadius:"99px",overflow:"hidden",marginBottom:"5px"}},
-        el("div",{st:{height:"100%",borderRadius:"99px",background:color,width:Math.min(val||0,100)+"%",transition:"width .6s cubic-bezier(.4,0,.2,1)"}})
-      ),
-      el("div",{st:{fontSize:".66rem",color:"rgba(31,26,18,.35)"}},(noData?"No attendance data yet":detail)+" · "+weight+"% weight")
-    );
-  }
 
   // Achievement list row (no-box style)
   function achRow(fieldKey,iconPaths,label,weight,isApproved,note){
@@ -6119,12 +7065,12 @@ function renderKPI(){
 
   // ── Hero band ─────────────────────────────────────────────────
   const circumference=2*Math.PI*26;
-  const dashOffset=circumference*(1-Math.min(k.overall,100)/100);
+  const dashOffset=circumference*(1-((cvHead&&cvHead.applicable)?cvHead.met/cvHead.applicable:0));
   const hero=el("div",{st:{background:"linear-gradient(135deg,#7c3a20 0%,#c96a4a 55%,#e8956d 100%)",padding:"28px 28px 52px",position:"relative",overflow:"hidden"}},
     el("div",{st:{position:"absolute",right:"-40px",top:"-50px",width:"220px",height:"220px",borderRadius:"50%",background:"rgba(255,255,255,.05)"}}),
     el("div",{st:{position:"absolute",right:"60px",bottom:"-60px",width:"140px",height:"140px",borderRadius:"50%",background:"rgba(255,255,255,.04)"}}),
     el("div",{st:{display:"flex",alignItems:"center",gap:"16px",position:"relative",zIndex:"1"}},
-      !isResident()?el("select",{st:{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",color:"#FEFBF3",borderRadius:"8px",padding:"4px 8px",fontSize:".76rem",cursor:"pointer"},onChange:e=>set({kpiSelRes:parseInt(e.target.value),kpiTab:"ongoing"})},
+      !isResident()?el("select",{st:{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.25)",color:"#FEFBF3",borderRadius:"8px",padding:"4px 8px",fontSize:".76rem",cursor:"pointer"},onChange:e=>set({kpiSelRes:parseInt(e.target.value),kpiTab:"kpi"})},
         ...vr.map(r=>el("option",{value:r.id,...(r.id===selId?{selected:""}:{})},dname(r.name)+" ("+r.level+")"))
       ):null,
       el("div",{st:{width:"48px",height:"48px",borderRadius:"50%",background:"rgba(255,255,255,.18)",border:"2px solid rgba(255,255,255,.35)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:"700",fontSize:".95rem",color:"#FEFBF3",flexShrink:"0"}},
@@ -6152,9 +7098,9 @@ function renderKPI(){
             svg.appendChild(track);svg.appendChild(fill);
             return svg;
           })(),
-          el("div",{st:{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",fontSize:".82rem",fontWeight:"800",color:"#FEFBF3",fontFamily:"'Inter',sans-serif"}},k.overall+"%")
+          el("div",{st:{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",fontSize:".82rem",fontWeight:"800",color:"#FEFBF3",fontFamily:"'Inter',sans-serif"}},cvHead&&cvHead.applicable?(cvHead.met+"/"+cvHead.applicable):"\u2014")
         ),
-        el("div",{st:{fontSize:".6rem",color:"rgba(254,251,243,.6)",fontWeight:"600",textTransform:"uppercase",letterSpacing:".06em",marginTop:"4px"}},"Overall KPI")
+        el("div",{st:{fontSize:".6rem",color:"rgba(254,251,243,.6)",fontWeight:"600",textTransform:"uppercase",letterSpacing:".06em",marginTop:"4px"}},"KPI met")
       ),
       el("button",{st:{marginLeft:"8px",display:"flex",alignItems:"center",gap:"5px",padding:"7px 14px",borderRadius:"9999px",border:"1px solid rgba(255,255,255,.25)",background:"rgba(255,255,255,.1)",fontSize:".74rem",fontWeight:"600",color:"rgba(254,251,243,.8)",cursor:"pointer",transition:"all .15s"},onClick:()=>exportKpiPDF(res,k)},
         svgIcon('<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',13,13), "PDF" )
@@ -6163,13 +7109,20 @@ function renderKPI(){
 
   // ── Floating tiles ────────────────────────────────────────────
   const tiles=el("div",{st:{padding:"0 28px",marginTop:"-24px",position:"relative",zIndex:"2"}},
-    el("div",{st:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"10px"}},
-      el("div",{st:{background:"#FEFBF3",borderRadius:"16px",padding:"16px 14px",textAlign:"center",cursor:"pointer",boxShadow:"0 4px 20px rgba(31,26,18,.10)",border:"2px solid "+(tab==="ongoing"?"#c96a4a":"transparent"),transition:"border-color .2s"},onClick:()=>set({kpiTab:"ongoing"})},
-        el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1.5rem",fontWeight:"700",lineHeight:"1",marginBottom:"4px",color:"#c96a4a"}},
-          ongoingScore,el("span",{st:{fontSize:".85rem",fontWeight:"400",color:"rgba(31,26,18,.3)",fontFamily:"'Inter',sans-serif"}},"/50")
+    el("div",{st:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"10px"}},
+      el("div",{st:{background:"#FEFBF3",borderRadius:"16px",padding:"16px 14px",textAlign:"center",cursor:"pointer",boxShadow:"0 4px 20px rgba(31,26,18,.10)",border:"2px solid "+(tab==="kpi"?"#26523A":"transparent"),transition:"border-color .2s"},onClick:()=>set({kpiTab:"kpi"})},
+        el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1.5rem",fontWeight:"700",lineHeight:"1",marginBottom:"4px",color:"#26523A"}},
+          cvHead?String(cvHead.met):"\u2014",el("span",{st:{fontSize:".85rem",fontWeight:"400",color:"rgba(31,26,18,.3)",fontFamily:"'Inter',sans-serif"}},cvHead?" of "+cvHead.applicable:"")
         ),
         el("div",{st:{fontSize:".65rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.35)",display:"flex",alignItems:"center",justifyContent:"center",gap:"4px"}},
-          svgIcon('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',10,10),"Ongoing" )
+          svgIcon('<polyline points="20 6 9 17 4 12"/>',10,10),"KPI" )
+      ),
+      el("div",{st:{background:"#FEFBF3",borderRadius:"16px",padding:"16px 14px",textAlign:"center",cursor:"pointer",boxShadow:"0 4px 20px rgba(31,26,18,.10)",border:"2px solid "+(tab==="perf"?"#c96a4a":"transparent"),transition:"border-color .2s"},onClick:()=>set({kpiTab:"perf"})},
+        el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1.5rem",fontWeight:"700",lineHeight:"1",marginBottom:"4px",color:"#c96a4a"}},
+          (STATE.perfGrain||"block")==="annual"?"Year":(STATE.perfGrain||"block")==="quarter"?("Q"+(STATE.perfPeriod||currentQuarter())):("B"+(STATE.perfPeriod||CURRENT_PERIOD))
+        ),
+        el("div",{st:{fontSize:".65rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.35)",display:"flex",alignItems:"center",justifyContent:"center",gap:"4px"}},
+          svgIcon('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',10,10),"Performance" )
       ),
       el("div",{st:{background:"#FEFBF3",borderRadius:"16px",padding:"16px 14px",textAlign:"center",cursor:"pointer",boxShadow:"0 4px 20px rgba(31,26,18,.10)",border:"2px solid "+(tab==="quarterly"?"#7c3aed":"transparent"),transition:"border-color .2s"},onClick:()=>set({kpiTab:"quarterly"})},
         el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1.5rem",fontWeight:"700",lineHeight:"1",marginBottom:"4px",color:"#7c3aed"}}, "Q"+(STATE.mentorQ||currentQuarter())
@@ -6189,63 +7142,17 @@ function renderKPI(){
 
   // ── Underline tabs ────────────────────────────────────────────
   const tabBar=el("div",{st:{display:"flex",gap:"0",borderBottom:"1px solid rgba(31,26,18,.08)",margin:"0 0 24px"}},
-    el("div",{st:{padding:"8px 16px 12px",fontSize:".8rem",fontWeight:"600",color:tab==="ongoing"?"#c96a4a":"rgba(31,26,18,.35)",cursor:"pointer",borderBottom:"2px solid "+(tab==="ongoing"?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s",display:"flex",alignItems:"center",gap:"6px"},onClick:()=>set({kpiTab:"ongoing"})},
-      svgIcon('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',12,12),"Ongoing" ),
+    el("div",{st:{padding:"8px 16px 12px",fontSize:".8rem",fontWeight:"600",color:tab==="kpi"?"#26523A":"rgba(31,26,18,.35)",cursor:"pointer",borderBottom:"2px solid "+(tab==="kpi"?"#26523A":"transparent"),marginBottom:"-1px",transition:"all .15s",display:"flex",alignItems:"center",gap:"6px"},onClick:()=>set({kpiTab:"kpi"})},
+      svgIcon('<polyline points="20 6 9 17 4 12"/>',12,12),"KPI" ),
+    el("div",{st:{padding:"8px 16px 12px",fontSize:".8rem",fontWeight:"600",color:tab==="perf"?"#c96a4a":"rgba(31,26,18,.35)",cursor:"pointer",borderBottom:"2px solid "+(tab==="perf"?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s",display:"flex",alignItems:"center",gap:"6px"},onClick:()=>set({kpiTab:"perf"})},
+      svgIcon('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',12,12),"Performance" ),
     el("div",{st:{padding:"8px 16px 12px",fontSize:".8rem",fontWeight:"600",color:tab==="quarterly"?"#7c3aed":"rgba(31,26,18,.35)",cursor:"pointer",borderBottom:"2px solid "+(tab==="quarterly"?"#7c3aed":"transparent"),marginBottom:"-1px",transition:"all .15s",display:"flex",alignItems:"center",gap:"6px"},onClick:()=>set({kpiTab:"quarterly"})},
       svgIcon('<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',12,12),"Quarterly" ),
     el("div",{st:{padding:"8px 16px 12px",fontSize:".8rem",fontWeight:"600",color:tab==="yearly"?"#A47A28":"rgba(31,26,18,.35)",cursor:"pointer",borderBottom:"2px solid "+(tab==="yearly"?"#A47A28":"transparent"),marginBottom:"-1px",transition:"all .15s",display:"flex",alignItems:"center",gap:"6px"},onClick:()=>set({kpiTab:"yearly"})},
       svgIcon('<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>',12,12),"Yearly" )
   );
 
-  // ── Tab content ───────────────────────────────────────────────
-  function renderOngoingNew(){
-    const sectionLbl=(txt)=>el("div",{st:{fontSize:".68rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".08em",color:"rgba(31,26,18,.3)",marginBottom:"20px",display:"flex",alignItems:"center",gap:"8px"}},
-      txt,el("div",{st:{flex:"1",height:"1px",background:"rgba(31,26,18,.08)"}})
-    );
-    return el("div",null,
-      sectionLbl("Ongoing Performance · 50% of total"),
-      el("div",{st:{display:"grid",gridTemplateColumns:"1fr 1fr",marginBottom:"32px"}},
-        kpiMetricRow("Quiz Average",'<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>',k.qAvg,null,KPI_W.quiz,kpiColor(k.qAvg),QUIZZES.filter(q=>q.published&&q.sc[res.id]!=null).length+" quizzes",false,false),
-        kpiMetricRow("Morning Meeting",'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',k.mmPct,null,KPI_W.mm,kpiColor(k.mmPct),k.mmAtt+"/"+k.mmTotal+" sessions",false,true),
-        kpiMetricRow("Academic Day Sessions",'<path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>',k.tPct,null,KPI_W.teach,kpiColor(k.tPct),k.tAtt+"/"+k.tTotal+" sessions",true,false),
-        kpiMetricRow("Presenter / Moderator",'<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',k.pres?100:0,k.pres?el("div",null,svgIcon('<polyline points="20 6 9 17 4 12"/>',28,28)):el("span",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"2.1rem",fontWeight:"700",color:"#DC2626"}},"—"),KPI_W.pres,k.pres?"#059669":"#DC2626",k.presCount+" session"+(k.presCount!==1?"s":""),true,true)
-      ),
-      // ── Attendance trend by block ──────────────────────────────────────────
-      (()=>{
-        const trendData=ROTA_PERIODS.map((_,i)=>{
-          const blk=i+1;
-          let mmS=0,mmT=0,tS=0,tT=0;
-          Object.values(MM_ATT[blk]||{}).forEach(day=>{const s=day[res.id];if(!s)return;mmT++;if(s==="P"||s==="E"||s==="O"){mmS+=1;}else if(s==="L")mmS+=0.5;});
-          Object.values(TEACH_ATT[blk]||{}).forEach(day=>{const s=day[res.id];if(!s)return;tT++;if(s==="P"||s==="E"||s==="O"){tS+=1;}else if(s==="L")tS+=0.5;});
-          return{blk,mmPct:mmT?Math.round(mmS/mmT*100):null,tPct:tT?Math.round(tS/tT*100):null};
-        }).filter(d=>d.mmPct!==null||d.tPct!==null);
-        if(!trendData.length)return null;
-        const bc=v=>v===null?"rgba(31,26,18,.1)":v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
-        return el("div",{st:{marginBottom:"28px"}},
-          el("div",{st:{fontSize:".68rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".08em",color:"rgba(31,26,18,.3)",marginBottom:"14px",display:"flex",alignItems:"center",gap:"8px"}},"Attendance Trend by Block",el("div",{st:{flex:"1",height:"1px",background:"rgba(31,26,18,.08)"}})),
-          el("div",{st:{overflowX:"auto",paddingBottom:"4px"}},
-            el("div",{st:{display:"flex",gap:"6px",minWidth:"fit-content"}},
-              ...trendData.map(d=>el("div",{st:{display:"flex",flexDirection:"column",alignItems:"center",gap:"4px",minWidth:"36px"}},
-                el("div",{st:{display:"flex",flexDirection:"column-reverse",gap:"2px",height:"56px",justifyContent:"flex-start"}},
-                  d.mmPct!==null?el("div",{title:"MM "+d.mmPct+"%",st:{width:"14px",height:Math.max(3,Math.round(d.mmPct*0.56))+"px",background:bc(d.mmPct),borderRadius:"3px 3px 0 0",alignSelf:"flex-end",margin:"0 1px"}}):null,
-                  d.tPct!==null?el("div",{title:"Academic Day "+d.tPct+"%",st:{width:"14px",height:Math.max(3,Math.round(d.tPct*0.56))+"px",background:bc(d.tPct),borderRadius:"3px 3px 0 0",opacity:".65",margin:"0 1px"}}):null
-                ),
-                el("div",{st:{fontSize:".6rem",color:"rgba(31,26,18,.4)",fontWeight:"600"}},"B"+d.blk)
-              ))
-            )
-          ),
-          el("div",{st:{display:"flex",gap:"14px",marginTop:"8px",flexWrap:"wrap"}},
-            el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.45)"}},el("div",{st:{width:"10px",height:"10px",background:"rgba(31,26,18,.15)",borderRadius:"2px"}}), "Solid = MM, Faded = Academic Day"),
-            el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.45)"}},el("div",{st:{width:"10px",height:"10px",background:"#26523A",borderRadius:"2px"}}),"≥80%"),
-            el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.45)"}},el("div",{st:{width:"10px",height:"10px",background:"#A47A28",borderRadius:"2px"}}),"60–79%"),
-            el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.45)"}},el("div",{st:{width:"10px",height:"10px",background:"#dc2626",borderRadius:"2px"}}),"<60%")
-          )
-        );
-      })(),
-      renderQuarterlyKPICard(res.id)
-    );
-  }
-
+  // ── Tab content ─────────────────────────────
   function renderYearlyNew(){
     const pendingCount=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.quarter==null&&p.status==="pending").length;
     const sectionLbl=(txt)=>el("div",{st:{fontSize:".68rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".08em",color:"rgba(31,26,18,.3)",marginBottom:"16px",display:"flex",alignItems:"center",gap:"8px"}},
@@ -6289,15 +7196,18 @@ function renderKPI(){
             el("th",{st:{textAlign:"center"}},"Teach"),el("th",{st:{textAlign:"center"}},"Pres"),
             el("th",{st:{textAlign:"center"}},"Comm."),
             el("th",{st:{textAlign:"center"}},"Achiev."),
-            el("th",{st:{textAlign:"center"}},"Overall")
+            el("th",{st:{textAlign:"center"}},"KPI")
           )
         ),
         el("tbody",null,
           ...vr.map(r=>{
             const kk=calcKPI(r.id);
+            // canmedsVerdicts is handed the calcKPI result this row already built,
+            // so the whole table costs one pass per resident, not two.
+            const cvr=CANMEDS_LOADED?canmedsVerdicts(r.id,{k:kk}):null;
             const achCount=[kk.qiPct,kk.pubPct,kk.oralPosterPct,kk.awardsPct,kk.volunteeringPct].filter(v=>v>0).length;
             const pendRes=KPI_PROPOSALS.filter(p=>p.resident_id===r.id&&p.status==="pending").length;
-            return el("tr",{st:{cursor:"pointer"},onClick:()=>set({kpiSelRes:r.id,kpiTab:"ongoing"})},
+            return el("tr",{st:{cursor:"pointer"},onClick:()=>set({kpiSelRes:r.id,kpiTab:"kpi"})},
               el("td",null,el("div",{cls:"flex-gap"},avEl(r),el("span",{cls:"name",st:{fontSize:".82rem"}},r.name),chiefBadge(r.id))),
               el("td",null,levelBadge(r.level)),
               el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:"rgba(5,150,105,.1)",color:"#059669"}},kk.qAvg+"%")),
@@ -6309,7 +7219,10 @@ function renderKPI(){
                 el("span",{cls:"bdg",st:{background:achCount>0?"rgba(164,122,40,.12)":"rgba(31,26,18,.06)",color:achCount>0?"#7a5a10":"rgba(31,26,18,.35)"}},achCount+"/5"),
                 pendRes?el("span",{st:{background:"rgba(203,161,85,.18)",color:"#7a5a10",borderRadius:"6px",padding:"1px 5px",fontSize:".65rem",marginLeft:"3px",fontWeight:"700"}},pendRes+" pending"):null
               ),
-              el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:kpiColor(kk.overall),color:"#fff"}},kk.overall+"%"))
+              el("td",{st:{textAlign:"center"}},
+                cvr&&cvr.applicable
+                  ?el("span",{cls:"bdg",st:{background:cvr.met===cvr.applicable?"rgba(127,184,156,.22)":"rgba(201,106,74,.16)",color:cvr.met===cvr.applicable?"#26523A":"#9d4a2a"}},cvr.met+" of "+cvr.applicable)
+                  :el("span",{cls:"bdg",st:{background:"rgba(31,26,18,.06)",color:"rgba(31,26,18,.4)"}},"Awaiting"))
             );
           })
         )
@@ -6318,11 +7231,18 @@ function renderKPI(){
   ):null;
 
   return el("div",{st:{background:"#FEFBF3",minHeight:"100%"}},
+    isConsultant()?el("div",{st:{padding:"14px 28px 0"}},
+      el("span",{st:{fontSize:".78rem",fontWeight:"600",color:"#c96a4a",cursor:"pointer"},
+        onClick:()=>set({kpiDrill:false})},"\u2190 Back to my mentees")):null,
     hero,
     tiles,
     el("div",{st:{padding:"28px 28px 40px"}},
       tabBar,
-      tab==="ongoing"?renderOngoingNew():tab==="quarterly"?renderQuarterlyTab():renderYearlyNew(),
+      el("div",{id:"cm-wrap"},
+        tab==="kpi"?renderCanmedsView(res.id)
+        :tab==="perf"?renderPerformanceView(res.id)
+        :tab==="quarterly"?renderQuarterlyTab()
+        :renderYearlyNew()),
       allResTable
     )
   );
@@ -7836,7 +8756,7 @@ function renderAccountRow(row){
       ),
       row.profile?el("span",{cls:"bdg",st:{background:"#dcfce7",color:"#166534"}},"Login Active"):
         el("span",{cls:"bdg",st:{background:"#fef9c3",color:"#854d0e"}},"No Login Yet"),
-      row.kind==="resident"?el("button",{cls:"sbtn ghost",st:{fontSize:".75rem"},onClick:()=>set({mod:"kpi",kpiSelRes:row.id})}," KPI"):null,
+      row.kind==="resident"?el("button",{cls:"sbtn ghost",st:{fontSize:".75rem"},onClick:()=>set({mod:"kpi",kpiSelRes:row.id,kpiDrill:true})}," KPI"):null,
       row.profile?el("button",{cls:"sbtn ghost",st:{fontSize:".75rem"},onClick:()=>set({adminPrivFor:open?null:row.profile.id})},open?"Hide Privileges":"Privileges"):null
     ),
     tags.length?el("div",{cls:"flex-wrap",st:{marginTop:"6px",gap:"4px"}},
@@ -12318,6 +13238,7 @@ function render(){
   app.appendChild(layout);
   if(STATE.showMobileNav)app.appendChild(el("div",{cls:"mob-backdrop mob-open",onClick:()=>set({showMobileNav:false})}));
   if(STATE.kpiPropModal)app.appendChild(renderKpiProposalModal());
+  if(STATE.cmModal)app.appendChild(renderCanmedsModal());
   if(STATE.oncallEditDate)app.appendChild(renderOncallEditModal());
   if(STATE.showPromoModal&&isPD())app.appendChild(renderPromoModal());
   if(STATE.showBroadcast)(isPD()||STATE.user?.role==="chief")&&app.appendChild(renderBroadcastModal());
@@ -12526,6 +13447,7 @@ function renderCalModal(){
         loadCalendarEvents();
         loadKpiQuarterly();
         loadKpiProposals();
+        loadCanmeds();
         loadOncallData();
         loadBestResident();
         loadLeavePlan();
