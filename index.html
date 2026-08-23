@@ -2773,7 +2773,11 @@ function calcKPI(id){
   const tPct=tTotal?Math.round(tScore/tTotal*100):null;
   const rotPct=Math.round(((ROT_H[id]||[]).length/MANDATORY.length)*100);
   const pubQ=QUIZZES.filter(q=>q.published&&q.sc[id]!=null);
-  const qAvg=pubQ.length?Math.round(pubQ.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/pubQ.length):0;
+  // null, not 0, when no published quiz has been sat -- 0% is a real score and renders red, which
+  // accuses a resident of failing an exam nobody gave them. Matches mmPct/tPct, which already
+  // return null for no data, so every "val==null -> N/A" branch downstream now covers quiz too.
+  // The overall sum below is unaffected: null*weight/100 is 0, exactly as it was.
+  const qAvg=pubQ.length?Math.round(pubQ.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/pubQ.length):null;
   const presSessions=MM_SESSIONS.filter(m=>m.academic_year===CURRENT_ACADEMIC_YEAR);
   const pres=presSessions.some(m=>m.presenter_resident_id===id)||presSessions.some(m=>m.moderator_resident_id===id);
   const presCount=presSessions.filter(m=>m.presenter_resident_id===id||m.moderator_resident_id===id).length;
@@ -2854,9 +2858,9 @@ function canmedsVerdicts(id,opts){
   var roles=[];
 
   // -- Medical Expert --------------------------------------------------------
-  // calcKPI returns qAvg 0 (not null) when no published quiz has been sat, and 0% renders as a
-  // catastrophic failure rather than "no quiz yet". Recount the source instead of trusting it.
-  // Never gated on the verified flag: a quiz that was not sat cannot be entered by hand.
+  // Counted from QUIZZES rather than inferred from k.qAvg being null, because the count is also
+  // what the note reports. Never gated on the verified flag: a quiz that was not sat cannot be
+  // entered by hand later, so waiting for the PD to confirm the record would strand it forever.
   var quizzesSat=QUIZZES.filter(function(q){return q.published&&q.sc[id]!=null;}).length;
   roles.push({key:"expert",role:"Medical Expert",
     kpi:"Quiz average at least 60%",
@@ -7210,7 +7214,7 @@ function renderKPI(){
             return el("tr",{st:{cursor:"pointer"},onClick:()=>set({kpiSelRes:r.id,kpiTab:"kpi"})},
               el("td",null,el("div",{cls:"flex-gap"},avEl(r),el("span",{cls:"name",st:{fontSize:".82rem"}},r.name),chiefBadge(r.id))),
               el("td",null,levelBadge(r.level)),
-              el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:"rgba(5,150,105,.1)",color:"#059669"}},kk.qAvg+"%")),
+              el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:kk.qAvg==null?"rgba(156,163,175,.12)":"rgba(5,150,105,.1)",color:kk.qAvg==null?"#9ca3af":"#059669"}},kk.qAvg==null?"N/A":kk.qAvg+"%")),
               el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:kk.mmPct==null?"rgba(156,163,175,.12)":"rgba(5,150,105,.1)",color:kk.mmPct==null?"#9ca3af":"#059669"}},kk.mmPct==null?"N/A":kk.mmPct+"%")),
               el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:kk.tPct==null?"rgba(156,163,175,.12)":"rgba(217,119,6,.1)",color:kk.tPct==null?"#9ca3af":"#D97706"}},kk.tPct==null?"N/A":kk.tPct+"%")),
               el("td",{st:{textAlign:"center"}},el("span",{cls:"bdg",st:{background:kk.pres?"rgba(5,150,105,.1)":"rgba(220,38,38,.08)",color:kk.pres?"#059669":"#DC2626"}},kk.presCount+"x")),
@@ -9116,7 +9120,7 @@ function renderProfileKPI(res){
       ),
       el("div",{cls:"grid-3",st:{gap:"8px",marginBottom:"14px"}},
         el("div",{cls:"card",st:{background:"#f0f9ff",border:"1px solid #bae6fd",padding:"10px",textAlign:"center"}},
-          el("div",{st:{fontWeight:"800",color:kpiColor(k.qAvg)}},k.qAvg+"%"),
+          el("div",{st:{fontWeight:"800",color:k.qAvg==null?"#9ca3af":kpiColor(k.qAvg)}},k.qAvg==null?"N/A":k.qAvg+"%"),
           el("div",{cls:"sh",st:{fontSize:".72rem"}}," Quiz")
         ),
         el("div",{cls:"card",st:{background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"10px",textAlign:"center"}},
@@ -11538,7 +11542,11 @@ function renderKPIExecutive(){
   const tScored=scored.filter(r=>r.k.tPct!=null);
   const avgMM=mmScored.length?Math.round(mmScored.reduce((s,r)=>s+r.k.mmPct,0)/mmScored.length):0;
   const avgTeach=tScored.length?Math.round(tScored.reduce((s,r)=>s+r.k.tPct,0)/tScored.length):0;
-  const avgQuiz=Math.round(scored.reduce((s,r)=>s+r.k.qAvg,0)/total);
+  // Divide by the residents who actually sat a quiz, not by everyone. Counting a no-quiz resident
+  // as a zero drags the cohort average down and understates the programme. Same treatment the two
+  // attendance averages above already get.
+  const qScored=scored.filter(r=>r.k.qAvg!=null);
+  const avgQuiz=qScored.length?Math.round(qScored.reduce((s,r)=>s+r.k.qAvg,0)/qScored.length):0;
   const avgComm=Math.round(scored.reduce((s,r)=>{const ks=KPI_SCORES[r.id]||{};return s+(ks.commScore||0);},0)/total);
   function achCount(field){
     return active.filter(r=>{

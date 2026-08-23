@@ -172,11 +172,17 @@ nearly empty, so a naive build accuses most of the programme of failing. Six gua
 2. `research_ramp` is computed in SQL and **cannot see `canmeds_verified_at`** — it returns
    `not_met` for any R2/R3/R4 with nothing on file. Downgraded to `awaiting` client-side when the
    resident has no projects and is unverified.
-3. **Quiz is never gated on the verified flag** — `calcKPI` returns `qAvg = 0`, not null, when no
-   published quiz has been sat, and 0% reads as catastrophic failure. `QUIZZES` is recounted;
-   zero sat → `awaiting` unconditionally.
-4. **`mmPct`/`tPct` are `null`, not 0**, for no data. `null >= 75` is `false`, so `== null` is
-   tested first or a resident with no sessions silently fails.
+3. **Quiz is never gated on the verified flag** — a quiz that was not sat cannot be entered by
+   hand later, so waiting on the PD would strand it forever. `QUIZZES` is recounted; zero
+   published-and-sat → `awaiting` unconditionally.
+4. **`qAvg`/`mmPct`/`tPct` are all `null`, not 0**, for no data. `null >= 75` is `false`, so
+   `== null` must be tested first or a resident with no sessions silently fails.
+   ⚠️ `qAvg` **used to return `0`** and was corrected 23 Aug 2026 (`calcKPI`, ~line 2780) — a 0%
+   quiz is a real score and rendered red, accusing residents of failing an exam nobody gave them.
+   All three now flow through the same `val == null → grey "N/A"` branches. The `overall` sum is
+   unaffected because `null * weight / 100` is `0`. **Do not "simplify" any of these back to 0.**
+   The same fix corrected the Performance Report's cohort quiz average, which was dividing by all
+   residents instead of only those who sat a quiz (`qScored`, ~line 11548).
 5. **Awareness-campaign circuit breaker** — `canmedsNoCampaignsYet()`. Zero campaign rows exist
    programme-wide and the activity is opt-in, so nobody has been offered one. Delete that function
    and its single branch once the first campaign is recorded.
