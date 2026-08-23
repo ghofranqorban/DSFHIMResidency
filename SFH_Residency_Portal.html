@@ -1710,6 +1710,10 @@ async function chiefUnpublishResults(){
 // ─── R4 ROTATION PREFERENCES ─────────────────────────────────────────────────
 let R4_PREFS={};
 let R4_PREFS_STATUS=null;
+// The first elective and the first clinic are pinned to the front half of the year so a
+// resident cannot stack all four picks into the last six blocks, which would leave the
+// service months bare. The second elective and clinic are free to sit anywhere.
+const R4_EARLY_MAX=7;
 function r4PrefsIsOpen(){
   if(!R4_PREFS_STATUS||!R4_PREFS_STATUS.is_open)return false;
   if(R4_PREFS_STATUS.deadline){const dl=new Date(R4_PREFS_STATUS.deadline);if(dl<new Date())return false;}
@@ -1764,6 +1768,8 @@ async function saveR4Prefs(status){
     if(!row.elective2_block||!row.elective2_subspecialty){showToast("Please select Block and Subspecialty for Elective 2","error");return;}
     if(!row.clinic1_block){showToast("Please select a block for Clinic 1","error");return;}
     if(!row.clinic2_block){showToast("Please select a block for Clinic 2","error");return;}
+    if(row.elective1_block>R4_EARLY_MAX){showToast("Elective 1 must be in Blocks 1\u2013"+R4_EARLY_MAX,"error");return;}
+    if(row.clinic1_block>R4_EARLY_MAX){showToast("Clinic 1 must be in Blocks 1\u2013"+R4_EARLY_MAX,"error");return;}
     const blocks=[row.elective1_block,row.elective2_block,row.clinic1_block,row.clinic2_block].filter(Boolean);
     if(new Set(blocks).size!==4){showToast("Each rotation must be in a different block","error");return;}
   }
@@ -9343,8 +9349,12 @@ function renderLeavePlan(){
           const pref=R4_PREFS[r.id];
           const status=pref?.status==="submitted"?"SUBMITTED":pref?"DRAFT":"NOT STARTED";
           const sc=status==="SUBMITTED"?{bg:"#e6f4ea",c:"#1e7a43"}:status==="DRAFT"?{bg:"#fef3d6",c:"#92680a"}:{bg:"rgba(31,26,18,.06)",c:"rgba(31,26,18,.4)"};
+          // Anything submitted before the Blocks 1–7 rule existed still reads as SUBMITTED,
+          // so it is called out here — otherwise there is no way to know who to chase.
+          const late=pref?[pref.elective1_block>R4_EARLY_MAX?"E1":null,pref.clinic1_block>R4_EARLY_MAX?"C1":null].filter(Boolean):[];
           const row=el("div",{st:{display:"flex",alignItems:"center",gap:"12px",padding:"10px 16px",borderBottom:"1px solid rgba(31,26,18,.06)"}},
             el("div",{st:{flex:"1",fontWeight:"500",fontSize:".85rem",color:"#1F1A12"}},dname(r.name)),
+            late.length?el("span",{st:{fontSize:".6rem",fontWeight:"700",padding:"3px 10px",borderRadius:"9999px",background:"#fdecef",color:"#8f1730"}},late.join(" + ")+" TOO LATE"):null,
             el("span",{st:{fontSize:".6rem",fontWeight:"700",padding:"3px 10px",borderRadius:"9999px",background:sc.bg,color:sc.c}},status));
           if(pref?.status==="submitted"){
             const detail=el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.45)",marginTop:"2px"}});
@@ -9375,21 +9385,30 @@ function renderLeavePlan(){
       sec.appendChild(el("div",{st:{display:"inline-block",background:"rgba(164,122,40,.1)",color:"#A47A28",fontSize:".78rem",fontWeight:"600",padding:"6px 14px",borderRadius:"9999px",marginBottom:"14px"}},
         "As next year's R4 — select 2 Elective and 2 Clinic blocks."));
       sec.appendChild(el("div",{st:{background:"#fef9ec",border:"1px solid #f0d98a",borderRadius:"10px",padding:"12px 16px",fontSize:".8rem",color:"#92680a",lineHeight:"1.5",marginBottom:"20px"}},
-        "This is only a suggested plan to help build the master rota to your best interest — it is not guaranteed nor final."));
+        el("div",null,"This is only a suggested plan to help build the master rota to your best interest — it is not guaranteed nor final."),
+        el("div",{st:{marginTop:"6px"}},"Spread them across the year: ",el("b",null,"Elective 1")," and ",el("b",null,"Clinic 1"),
+          " must sit in Blocks 1\u2013"+R4_EARLY_MAX+". Elective 2 and Clinic 2 may go in any block. All four must be in different blocks.")));
       const allSelected=[STATE.r4e1Block,STATE.r4e2Block,STATE.r4c1Block,STATE.r4c2Block].filter(Boolean);
-      function blockPicker(label,stateKey,color){
+      function blockPicker(label,stateKey,color,early){
         const cur=STATE[stateKey];
         const others=allSelected.filter(b=>b!==cur);
         const grid=el("div",{st:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(80px,1fr))",gap:"8px",marginBottom:"8px"}});
         for(let b=1;b<=13;b++){
-          const taken=others.includes(b);
+          const out=!!early&&b>R4_EARLY_MAX;
+          const taken=!out&&others.includes(b);
           const isSel=cur===b;
-          grid.appendChild(el("div",{st:{borderRadius:"8px",padding:"10px 6px",textAlign:"center",fontSize:".75rem",fontWeight:"600",border:"2px solid "+(isSel?color:"rgba(31,26,18,.1)"),background:taken?"rgba(31,26,18,.05)":isSel?color:"#FEFBF3",color:taken?"rgba(31,26,18,.3)":isSel?"#FEFBF3":"#1F1A12",cursor:taken?"not-allowed":"pointer",transition:"all .15s",opacity:taken?.5:1},
-            onClick:()=>{if(taken)return;set({[stateKey]:isSel?null:b});}},
-            "Block "+b,taken&&!isSel?el("div",{st:{fontSize:".55rem",marginTop:"2px",fontWeight:"500"}},"Used"):null));
+          // A draft saved before this rule existed can still hold an out-of-range block, so
+          // that one tile stays clickable — in red — or the resident could never clear it.
+          const bad=out&&isSel;
+          const dead=(out&&!isSel)||taken;
+          grid.appendChild(el("div",{st:{borderRadius:"8px",padding:"10px 6px",textAlign:"center",fontSize:".75rem",fontWeight:"600",border:"2px "+(out&&!isSel?"dashed":"solid")+" "+(bad?"#b52040":isSel?color:out?"rgba(31,26,18,.06)":"rgba(31,26,18,.1)"),background:bad?"#fdecef":out?"repeating-linear-gradient(45deg,rgba(31,26,18,.03),rgba(31,26,18,.03) 4px,transparent 4px,transparent 8px)":taken?"rgba(31,26,18,.05)":isSel?color:"#FEFBF3",color:bad?"#8f1730":out?"rgba(31,26,18,.25)":taken?"rgba(31,26,18,.3)":isSel?"#FEFBF3":"#1F1A12",cursor:dead?"not-allowed":"pointer",transition:"all .15s",opacity:taken?.5:1},
+            onClick:()=>{if(dead)return;set({[stateKey]:isSel?null:b});}},
+            "Block "+b,taken&&!isSel?el("div",{st:{fontSize:".55rem",marginTop:"2px",fontWeight:"500"}},"Used"):bad?el("div",{st:{fontSize:".55rem",marginTop:"2px",fontWeight:"500"}},"Too late"):null));
         }
         return el("div",{st:{marginBottom:"20px"}},
-          el("div",{st:{fontSize:".72rem",fontWeight:"700",letterSpacing:".07em",textTransform:"uppercase",color:color,marginBottom:"8px"}},label+(cur?" — Block "+cur:"")),
+          el("div",{st:{fontSize:".72rem",fontWeight:"700",letterSpacing:".07em",textTransform:"uppercase",color:color,marginBottom:"8px"}},
+            label+(cur?" — Block "+cur:""),
+            early?el("span",{st:{display:"inline-block",fontSize:".66rem",fontWeight:"700",letterSpacing:".05em",padding:"3px 10px",borderRadius:"9999px",marginLeft:"8px",background:color+"1f",color:color}},"Blocks 1\u2013"+R4_EARLY_MAX):null),
           grid);
       }
       function textRow(label,stateKey,placeholder){
@@ -9401,7 +9420,7 @@ function renderLeavePlan(){
       }
       sec.appendChild(el("div",{st:{border:"1px solid rgba(31,26,18,.08)",borderRadius:"14px",padding:"20px",marginBottom:"16px"}},
         el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",fontWeight:"600",color:"#1F1A12",marginBottom:"14px"}},"Elective 1"),
-        blockPicker("Select Block","r4e1Block","#c96a4a"),
+        blockPicker("Select Block","r4e1Block","#c96a4a",true),
         textRow("Subspecialty","r4e1Sub","e.g. Cardiology, Pulmonology"),
         textRow("Location / Where Applying","r4e1Loc","e.g. King Faisal Specialist Hospital")));
       sec.appendChild(el("div",{st:{border:"1px solid rgba(31,26,18,.08)",borderRadius:"14px",padding:"20px",marginBottom:"16px"}},
@@ -9411,17 +9430,23 @@ function renderLeavePlan(){
         textRow("Location / Where Applying","r4e2Loc","e.g. KFSH, NGHA")));
       sec.appendChild(el("div",{st:{border:"1px solid rgba(31,26,18,.08)",borderRadius:"14px",padding:"20px",marginBottom:"16px"}},
         el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",fontWeight:"600",color:"#1F1A12",marginBottom:"14px"}},"Clinic 1"),
-        blockPicker("Select Block","r4c1Block","#26523A")));
+        blockPicker("Select Block","r4c1Block","#26523A",true)));
       sec.appendChild(el("div",{st:{border:"1px solid rgba(31,26,18,.08)",borderRadius:"14px",padding:"20px",marginBottom:"16px"}},
         el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",fontWeight:"600",color:"#1F1A12",marginBottom:"14px"}},"Clinic 2"),
         blockPicker("Select Block","r4c2Block","#26523A")));
       const allFilled=STATE.r4e1Block&&STATE.r4e1Sub&&STATE.r4e2Block&&STATE.r4e2Sub&&STATE.r4c1Block&&STATE.r4c2Block;
+      const late=[];
+      if(STATE.r4e1Block>R4_EARLY_MAX)late.push("Elective 1");
+      if(STATE.r4c1Block>R4_EARLY_MAX)late.push("Clinic 1");
+      const canSubmit=!!allFilled&&!late.length;
+      if(late.length)sec.appendChild(el("div",{st:{background:"#fdecef",border:"1px solid #f0a8b8",borderRadius:"10px",padding:"12px 16px",fontSize:".8rem",color:"#8f1730",lineHeight:"1.5",marginBottom:"12px"}},
+        late.join(" and ")+(late.length>1?" are":" is")+" in a block that is no longer allowed. Pick a block in 1\u2013"+R4_EARLY_MAX+" before submitting."));
       sec.appendChild(el("div",{st:{display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px"}},
         el("button",{st:{background:"#F6EFE2",color:"#1F1A12",border:"none",borderRadius:"9999px",padding:"10px 22px",fontFamily:"Inter,sans-serif",fontWeight:"500",fontSize:".85rem",cursor:"pointer"},
           async onClick(){await saveR4Prefs("draft");}},"Save Draft"),
-        el("button",{st:{background:allFilled?"#A47A28":"rgba(31,26,18,.12)",color:allFilled?"#FEFBF3":"rgba(31,26,18,.35)",border:"none",borderRadius:"9999px",padding:"10px 28px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".85rem",cursor:allFilled?"pointer":"not-allowed"},
-          disabled:!allFilled,
-          async onClick(){if(allFilled)await saveR4Prefs("submitted");}},r4Submitted?"Update Preferences":"Submit Preferences")));
+        el("button",{st:{background:canSubmit?"#A47A28":"rgba(31,26,18,.12)",color:canSubmit?"#FEFBF3":"rgba(31,26,18,.35)",border:"none",borderRadius:"9999px",padding:"10px 28px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".85rem",cursor:canSubmit?"pointer":"not-allowed"},
+          disabled:!canSubmit,
+          async onClick(){if(canSubmit)await saveR4Prefs("submitted");}},r4Submitted?"Update Preferences":"Submit Preferences")));
     }else if(isR3&&!r4Open&&!canSetup){
       sec.appendChild(el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)",fontStyle:"italic"}},"R4 rotation preferences will open soon — date to be announced."));
     }
