@@ -484,6 +484,22 @@ th.ov-th{text-align:center;}
 .rb-sw::after{content:'';position:absolute;top:3px;left:21px;width:16px;height:16px;border-radius:50%;background:#FEFBF3;transition:left .15s;}
 .rb-sw.off{background:rgba(31,26,18,.16);}
 .rb-sw.off::after{left:3px;}
+.rb-pfov{position:fixed;inset:0;background:rgba(26,20,16,.55);display:flex;align-items:center;justify-content:center;z-index:9500;padding:16px;}
+.rb-pf{background:#fff;border-radius:16px;padding:28px 24px;max-width:470px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.2);}
+.rb-pf .ct{font-weight:800;font-size:1rem;color:#1c1410;margin-bottom:10px;}
+.rb-pf .cb{color:#4a3828;font-size:.88rem;line-height:1.55;margin:0 0 18px;}
+.rb-pf .tally{border:1px solid #ede5d8;border-radius:10px;overflow:hidden;}
+.rb-pf .ck{display:flex;align-items:center;gap:11px;padding:11px 13px;font-size:.82rem;color:#4a3828;cursor:pointer;}
+.rb-pf .ck+.ck{border-top:1px solid #f2ece2;}
+.rb-pf .ck input{width:15px;height:15px;accent-color:#c96a4a;cursor:pointer;flex:none;}
+.rb-pf .ck .lb{flex:1;}
+.rb-pf .ck .sub{display:block;font-size:.71rem;color:rgba(31,26,18,.45);margin-top:1px;}
+.rb-pf .ck .n{font-weight:800;font-variant-numeric:tabular-nums;}
+.rb-pf .sum{display:flex;align-items:baseline;gap:9px;margin:16px 0 4px;}
+.rb-pf .sum .big{font-family:'Playfair Display',serif;font-size:2rem;line-height:1;}
+.rb-pf .sum .lbl{font-size:.8rem;color:rgba(31,26,18,.55);}
+.rb-pf .foot{font-size:.74rem;color:rgba(31,26,18,.5);line-height:1.5;margin-top:14px;}
+.rb-pf .cbtns{display:flex;gap:10px;justify-content:flex-end;margin-top:22px;}
 .rb-note{font-size:.71rem;color:rgba(31,26,18,.5);margin-top:7px;}
 .rb-lv{background:rgba(254,251,243,.66);border:1px solid rgba(31,26,18,.07);border-radius:9px;padding:8px 10px;margin-top:7px;cursor:pointer;transition:border-color .15s,background .15s;}
 .rb-lv:hover{border-color:rgba(201,106,74,.45);background:#FEFBF3;}
@@ -9478,6 +9494,111 @@ function rbApprovedLeave(rid,blk){
 // A leave period is two weeks and never stretches to fill a longer block — the rotation
 // side absorbs any extra week. bw-1 keeps at least one week of rotation to hang it on.
 function rbLeaveWeeks(mode,bw){return(mode==="start"||mode==="end")?Math.min(2,bw-1):0;}
+function rbPrefillR4(rid,blk){
+  const p=R4_PREFS[rid];
+  if(!p||p.status!=="submitted")return null;
+  if(p.elective1_block===blk||p.elective2_block===blk)return{rot:"Elective",src:"elective"};
+  if(p.clinic1_block===blk||p.clinic2_block===blk)return{rot:"Outpatient Clinic",src:"clinic"};
+  return null;
+}
+function rbPlanRoster(){return allRoster().filter(r=>planLevel(r));}
+// Works out every cell the prefill would write without touching the database, so the
+// confirm dialog can show real counts and the save can replay the identical result.
+// Approved leave is binding and the R4 picks are only preferences, so leave always wins
+// where the two collide — and a block holding approved leave is left untouched entirely
+// when leave is not being imported, rather than having a rotation written across it.
+function rbPrefillPlan(src){
+  const fills=[],counts={leave:0,elective:0,clinic:0};
+  const skip={planned:0,locked:0,displaced:0,leaveHold:0};
+  let shared=0;
+  rbPlanRoster().forEach(r=>{
+    rotaPeriods(PLAN_AY).forEach((_,i)=>{
+      const blk=i+1;
+      const lv=rbApprovedLeave(r.id,blk);
+      const r4=rbPrefillR4(r.id,blk);
+      const pick=(r4&&src[r4.src])?r4:null;
+      if(lv&&!src.leave){if(pick)skip.leaveHold++;return;}
+      if(!lv&&!pick)return;
+      if(((ROTA_PLAN[r.id]||{})[String(blk)]||[]).length){skip.planned++;return;}
+      if(!planBlockEditable(blk)){skip.locked++;return;}
+      const bw=blockWeeks(blk,PLAN_AY),lw=rbLeaveWeeks(lv?lv.mode:"none",bw);
+      let segs;
+      if(lv&&lv.mode==="whole"){
+        segs=[{weekStart:1,weeks:bw,rot:"Annual Leave"}];
+        counts.leave++;if(pick)skip.displaced++;
+      }else if(lv&&pick){
+        segs=lv.mode==="start"
+          ?[{weekStart:1,weeks:lw,rot:"Annual Leave"},{weekStart:lw+1,weeks:bw-lw,rot:pick.rot}]
+          :[{weekStart:1,weeks:bw-lw,rot:pick.rot},{weekStart:bw-lw+1,weeks:lw,rot:"Annual Leave"}];
+        counts.leave++;counts[pick.src]++;shared++;
+      }else if(lv){
+        // A bare half-block leave has no rotation to hang leave_weeks on — savePlanCell drops
+        // any segment without one — so it is written as a two-week Annual Leave segment and
+        // the other half is left open for the chief to fill.
+        segs=[{weekStart:lv.mode==="start"?1:bw-lw+1,weeks:lw,rot:"Annual Leave"}];
+        counts.leave++;
+      }else{
+        segs=[{weekStart:1,weeks:bw,rot:pick.rot}];
+        counts[pick.src]++;
+      }
+      fills.push({rid:r.id,blk,segs});
+    });
+  });
+  return{fills,counts,skip,shared};
+}
+async function rbRunPrefill(){
+  const{fills}=rbPrefillPlan(STATE.rbPfSrc||{leave:true,elective:true,clinic:true});
+  const rows=[];
+  fills.forEach(f=>f.segs.forEach((s,i)=>rows.push({
+    resident_id:f.rid,academic_year:PLAN_AY,block_number:f.blk,
+    segment:i+1,week_start:s.weekStart,weeks:s.weeks,
+    rotation_name:s.rot,leave_weeks:0,leave_position:"none",
+    updated_by:STATE.user?.profileId||null,updated_at:new Date().toISOString()
+  })));
+  if(!rows.length)return;
+  // Every cell here was empty, so there is nothing to delete first and the whole prefill
+  // goes in as one insert rather than one round trip per cell.
+  const{error}=await sb.from("rota_plan").insert(rows);
+  if(error){showToast("Could not prefill: "+error.message,"error");return;}
+  STATE.rbPrefill=false;
+  await loadRotaPlan();
+  showToast("Filled "+fills.length+" cell"+(fills.length===1?"":"s"),"success");
+}
+function rbPrefillModal(){
+  const src=STATE.rbPfSrc||{leave:true,elective:true,clinic:true};
+  const{fills,counts,skip,shared}=rbPrefillPlan(src);
+  const rowDef=[
+    ["leave","Approved annual leave","Only leave the PD has approved — a suggested one is left alone."],
+    ["elective","R4 electives → Elective","From submitted R4 preferences."],
+    ["clinic","R4 clinics → Outpatient Clinic","From submitted R4 preferences."]];
+  const tally=el("div",{cls:"tally"});
+  rowDef.forEach(([k,lb,sub])=>{
+    tally.appendChild(el("label",{cls:"ck"},
+      el("input",{type:"checkbox",checked:!!src[k],
+        onChange:()=>set({rbPfSrc:Object.assign({},src,{[k]:!src[k]})})}),
+      el("span",{cls:"lb"},lb,el("span",{cls:"sub"},sub)),
+      el("span",{cls:"n"},String(counts[k]))));
+  });
+  const notes=[],s=n=>n===1?"":"s";
+  if(skip.planned)notes.push(skip.planned+" cell"+s(skip.planned)+" skipped — already planned.");
+  if(skip.locked)notes.push(skip.locked+" skipped — the block is no longer editable.");
+  if(skip.leaveHold)notes.push(skip.leaveHold+" R4 pick"+s(skip.leaveHold)+" held back — that block has approved leave.");
+  if(skip.displaced)notes.push(skip.displaced+" R4 pick"+s(skip.displaced)+" dropped — the whole block is leave.");
+  if(shared)notes.push(shared+" cell"+s(shared)+(shared===1?" takes":" take")+" leave and an R4 pick together, so the counts above overlap.");
+  return el("div",{cls:"rb-pfov",onClick:e=>{if(e.target.classList.contains("rb-pfov"))set({rbPrefill:false});}},
+    el("div",{cls:"rb-pf"},
+      el("div",{cls:"ct"},"Prefill the grid"),
+      el("p",{cls:"cb"},"Fills empty cells in the ",ayLabel(PLAN_AY)," draft from plans that are already ",
+        el("b",null,"approved"),". Cells you have already planned are never overwritten."),
+      tally,
+      el("div",{cls:"sum"},el("span",{cls:"big"},String(fills.length)),
+        el("span",{cls:"lbl"},"cell"+(fills.length===1?"":"s")+" will be filled")),
+      notes.length?el("div",{cls:"foot"},notes.join(" ")):null,
+      el("div",{cls:"cbtns"},
+        el("button",{cls:"sbtn ghost",onClick:()=>set({rbPrefill:false})},"Cancel"),
+        el("button",{cls:"sbtn primary",disabled:!fills.length,onClick:rbRunPrefill},
+          fills.length?"Prefill "+fills.length+" cell"+(fills.length===1?"":"s"):"Nothing to fill"))));
+}
 function rbOpenCell(rid,blk){
   const segs=(ROTA_PLAN[rid]||{})[String(blk)]||[];
   const bw=blockWeeks(blk,PLAN_AY);
@@ -9485,14 +9606,22 @@ function rbOpenCell(rid,blk){
   // Only an unplanned cell takes the leave plan's default, so switching the leave off
   // and saving sticks instead of springing back every time the cell is reopened.
   const appr=segs.length?null:rbApprovedLeave(rid,blk);
-  set({rbCell:{rid,blk},
-    // Boundary = how many weeks the first rotation runs. Equal to the block length
-    // means the block is not split at all.
-    rbBound:segs.length>1?segs[0].weeks:bw,
-    rbSeg:0,
-    // Whole-block leave is carried as the rotation itself, not as leave weeks — the DB
-    // write drops any segment with no rotation name, so bare leave has nothing to sit on.
-    rbRots:[appr&&appr.mode==="whole"?"Annual Leave":(segs[0]?.rot||""),segs[1]?.rot||""],
+  // Boundary = how many weeks the first rotation runs; equal to the block length means the
+  // block is not split at all. Whole-block leave is carried as the rotation itself, not as
+  // leave weeks — the DB write drops any segment with no rotation name, so bare leave has
+  // nothing to sit on.
+  let bound=bw;
+  const rots=[appr&&appr.mode==="whole"?"Annual Leave":(segs[0]?.rot||""),segs[1]?.rot||""];
+  if(segs.length>1)bound=segs[0].weeks;
+  else if(segs.length===1){
+    // A lone segment covering only part of the block — one half filled in on its own, which
+    // is what a prefilled leave looks like — has to keep the half it was saved in. Reading
+    // it as a whole-block rotation would stretch it over the empty half on the next save.
+    const s=segs[0],span=s.weeks+(s.leaveWeeks||0);
+    if(s.weekStart>1){bound=s.weekStart-1;rots[0]="";rots[1]=s.rot;}
+    else if(span<bw)bound=span;
+  }
+  set({rbCell:{rid,blk},rbBound:bound,rbSeg:0,rbRots:rots,
     rbLv:savedLv?savedLv.leavePos:(appr&&appr.mode!=="whole"?appr.mode:"none")});
 }
 function rbSegments(){
@@ -9612,7 +9741,9 @@ function renderRotaBuilder(){
       el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.55)"}},
         "Double-click any cell to assign. A corner flag means that rotation is still below its minimum cap — ",
         el("b",{st:{color:"#A47A28"}},"amber")," for R1, ",el("b",{st:{color:"#b52040"}},"red")," for R2 and above.")),
-    pills));
+    el("div",{st:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"10px"}},
+      canBuildRota()?el("button",{cls:"sbtn ghost",onClick:()=>set({rbPrefill:true})},"Prefill from approved plans"):null,
+      pills)));
   if(loading){
     secB.appendChild(el("div",{st:{padding:"40px 0",textAlign:"center",color:"rgba(31,26,18,.4)",fontSize:".85rem"}},"Loading the plan and training history…"));
   }else{
@@ -9631,7 +9762,9 @@ function renderRotaBuilder(){
         const flag=flagsFor(r.id,b);
         const editable=planBlockEditable(b);
         const kids=[];
-        const plain=segs.length===1&&!segs[0].leaveWeeks;
+        // "Plain" is the solid one-rotation-all-block cell. A lone segment that only covers
+        // part of the block is not that, and has to show its week range like a split does.
+        const plain=segs.length===1&&!segs[0].leaveWeeks&&segs[0].weeks>=blockWeeks(b,PLAN_AY);
         if(!segs.length){
           kids.push(el("b",{st:{color:"rgba(31,26,18,.2)",fontWeight:"400"}},"—"));
         }else if(plain){
@@ -9667,6 +9800,7 @@ function renderRotaBuilder(){
   }
   wrap.appendChild(secB);
   if(STATE.rbCell)wrap.appendChild(rbCellPanel());
+  if(STATE.rbPrefill)wrap.appendChild(rbPrefillModal());
   return wrap;
 }
 const RB_MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
