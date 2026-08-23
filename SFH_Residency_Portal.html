@@ -1222,7 +1222,8 @@ let CUMULATIVE_KPI={}; // {resId: {year: {scores:{...}, quarterly:{q:{...}}}}}
 let CUMULATIVE_KPI_LOADING=false;
 // LEAVE PLAN (AY 2026-27 planning — separate from leave_records)
 const LP_AY=2026;
-const LP_CAP=4;
+// Counted per half-block period, so a whole block can absorb up to 2x this.
+const LP_CAP=5;
 let LP_DEADLINE=new Date("2026-07-18T23:59:59"); // fallback until loadLpStatus() resolves the DB value
 let LP_STATUS=null; // {academic_year,deadline} — loaded from leave_plan_status, PD/plan_rota-controlled
 function lpDeadlineShort(){return LP_DEADLINE.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
@@ -1327,6 +1328,93 @@ async function lpDecideApprove(residentId,which){
   const resProfile=PROFILE_BY_RESIDENT[residentId];
   if(resProfile)createNotification(resProfile.id,"success","Your "+(which==="first"?"First":"Second")+" Leave suggestion was approved by the Program Director.","leave_plan",null);
   showToast("Suggestion approved","success");
+  render();
+}
+function lpPeriodCounts(){
+  const counts={};
+  LP_PERIODS.forEach(p=>{counts[p.key]=0;});
+  RESIDENTS.forEach(r=>{
+    const plan=LEAVE_PLAN[r.id];
+    if(!plan||plan.status!=="submitted")return;
+    if(plan.first_leave_key)counts[plan.first_leave_key]=(counts[plan.first_leave_key]||0)+1;
+    if(plan.second_leave_key)counts[plan.second_leave_key]=(counts[plan.second_leave_key]||0)+1;
+  });
+  return counts;
+}
+function lpOverCapDetail(counts){
+  const c=counts||lpPeriodCounts();
+  const out=[];
+  LP_PERIODS.forEach(p=>{
+    const cap=lpCapFor(p),n=c[p.key]||0;
+    if(n<=cap)return;
+    const picks=[];
+    sortByLevel(RESIDENTS).forEach(r=>{
+      const plan=LEAVE_PLAN[r.id];
+      if(!plan||plan.status!=="submitted")return;
+      ["first","second"].forEach(w=>{
+        if(plan[w+"_leave_key"]!==p.key)return;
+        picks.push({res:r,which:w,approved:!!plan[w+"_leave_approved"],altKey:plan[w+"_leave_alt_key"]||null});
+      });
+    });
+    out.push({period:p,count:n,cap,picks});
+  });
+  return out;
+}
+// Every pick sitting in an over-cap period is skipped wholesale — there is no fair way to
+// pick who keeps the slot, so the chief chases those residents instead.
+function lpBulkApprovable(){
+  const counts=lpPeriodCounts();
+  const over=new Set(LP_PERIODS.filter(p=>(counts[p.key]||0)>lpCapFor(p)).map(p=>p.key));
+  const pending=[];
+  sortByLevel(RESIDENTS).forEach(r=>{
+    const plan=LEAVE_PLAN[r.id];
+    if(!plan||plan.status!=="submitted")return;
+    const which=["first","second"].filter(w=>{
+      const k=plan[w+"_leave_key"];
+      return k&&!over.has(k)&&!plan[w+"_leave_approved"];
+    });
+    if(which.length)pending.push({res:r,plan,which});
+  });
+  return{counts,over,pending};
+}
+async function lpBulkApproveWithinCap(){
+  const{counts,over,pending}=lpBulkApprovable();
+  if(!pending.length){
+    showToast(over.size?"Nothing within cap to approve — the remaining suggestions are all in over-cap periods":"Nothing to approve — every suggestion is already approved","info");
+    return;
+  }
+  const stamp=new Date().toISOString();
+  // Identical key shape on every object — PostgREST silently breaks on ragged bulk payloads.
+  const rows=pending.map(x=>({
+    resident_id:Number(x.res.id),
+    academic_year:LP_AY,
+    first_leave_approved:x.which.includes("first")?true:(x.plan.first_leave_approved??null),
+    second_leave_approved:x.which.includes("second")?true:(x.plan.second_leave_approved??null),
+    updated_at:stamp,
+  }));
+  const{error}=await sb.from("leave_plan").upsert(rows,{onConflict:"resident_id,academic_year"});
+  if(error){showToast("Bulk approve failed: "+error.message,"error");return;}
+  rows.forEach(row=>{
+    const plan=LEAVE_PLAN[row.resident_id];
+    if(!plan)return;
+    plan.first_leave_approved=row.first_leave_approved;
+    plan.second_leave_approved=row.second_leave_approved;
+    plan.updated_at=row.updated_at;
+  });
+  const notifRows=pending.map(x=>{
+    const prof=PROFILE_BY_RESIDENT[x.res.id];
+    if(!prof)return null;
+    const msg=x.which.length===2
+      ?"Both of your AY 2026-27 Leave suggestions were approved by the Program Director."
+      :"Your "+(x.which[0]==="first"?"First":"Second")+" Leave suggestion for AY 2026-27 was approved by the Program Director.";
+    return{profile_id:prof.id,type:"success",message:msg,link_mod:"leave_plan",link_param:null,read:false};
+  }).filter(Boolean);
+  if(notifRows.length){
+    const{error:nerr}=await sb.from("notifications").insert(notifRows);
+    if(nerr)console.warn("bulk approve notifications failed",nerr.message);
+  }
+  const nLeaves=pending.reduce((s,x)=>s+x.which.length,0);
+  showToast("Approved "+nLeaves+" suggestion"+(nLeaves===1?"":"s")+" across "+pending.length+" resident"+(pending.length===1?"":"s"),"success");
   render();
 }
 async function lpDecideDecline(residentId,which){
@@ -8566,15 +8654,10 @@ function renderLeavePlan(){
     const allRes=sortByLevel(RESIDENTS);
     const subRes=allRes.filter(r=>LEAVE_PLAN[r.id]?.status==="submitted");
     const missing=allRes.filter(r=>!LEAVE_PLAN[r.id]||LEAVE_PLAN[r.id].status!=="submitted");
-    const counts={};
-    LP_PERIODS.forEach(p=>{counts[p.key]=0;});
-    allRes.forEach(r=>{
-      const plan=LEAVE_PLAN[r.id];
-      if(!plan||plan.status!=="submitted")return;
-      if(plan.first_leave_key)counts[plan.first_leave_key]=(counts[plan.first_leave_key]||0)+1;
-      if(plan.second_leave_key)counts[plan.second_leave_key]=(counts[plan.second_leave_key]||0)+1;
-    });
+    const counts=lpPeriodCounts();
     const overCap=LP_PERIODS.filter(p=>counts[p.key]>lpCapFor(p)).length;
+    const bulkPending=lpBulkApprovable().pending;
+    const bulkLeaves=bulkPending.reduce((s,x)=>s+x.which.length,0);
     const gimEligible=allRes.filter(r=>r.level!=="R4");
     const gimSubRes=gimEligible.filter(r=>GIM_PREFS[r.id]?.status==="submitted");
     const sumStrip=el("div",{st:{display:"flex",border:"1px solid rgba(31,26,18,.08)",borderRadius:"14px",overflow:"hidden",marginBottom:"24px"}},
@@ -8693,10 +8776,39 @@ function renderLeavePlan(){
       );
     }
 
+    function overCapPanel(){
+      const rep=lpOverCapDetail(counts);
+      if(!rep.length)return null;
+      const total=rep.reduce((s,x)=>s+x.picks.length,0);
+      return el("div",{st:{border:"1px solid rgba(181,32,64,.28)",background:"#fdf4f4",borderRadius:"14px",padding:"20px 22px",marginBottom:"24px"}},
+        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",fontWeight:"600",color:"#b52040",marginBottom:"4px"}},rep.length+" period"+(rep.length===1?"":"s")+" over cap — needs follow-up"),
+        el("p",{st:{fontSize:".8rem",color:"rgba(31,26,18,.55)",margin:"0 0 16px",lineHeight:"1.5"}},"All "+total+" suggestion"+(total===1?"":"s")+" in these periods stay pending — Approve All Within Cap skips them and nothing is auto-declined. Contact the residents below to move to another period, or open a pick to reassign it."),
+        ...rep.map(g=>el("div",{st:{borderTop:"1px solid rgba(181,32,64,.14)",padding:"12px 0 4px"}},
+          el("div",{st:{display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px",flexWrap:"wrap"}},
+            el("span",{st:{fontWeight:"600",fontSize:".85rem",color:"#1F1A12"}},g.period.label.replace(" - "," — ")),
+            el("span",{st:{fontSize:".68rem",color:"rgba(31,26,18,.4)"}},g.period.disp),
+            el("span",{st:{background:"#fde8e8",color:"#b52040",borderRadius:"9999px",padding:"2px 9px",fontSize:".62rem",fontWeight:"700"}},g.count+" / "+g.cap+" — "+(g.count-g.cap)+" over")
+          ),
+          el("div",{st:{display:"flex",gap:"7px",flexWrap:"wrap"}},
+            ...g.picks.map(pk=>el("span",{title:"Click to manage this pick",
+              onClick:()=>set({lpDecision:{residentId:pk.res.id,which:pk.which},lpDecisionEditKey:undefined}),
+              st:{display:"inline-flex",alignItems:"center",gap:"6px",background:"#fff",border:"1px solid rgba(31,26,18,.12)",borderRadius:"9999px",padding:"4px 11px 4px 6px",fontSize:".76rem",color:"#1F1A12",cursor:"pointer"}},
+              el("span",{st:{display:"inline-block",fontSize:".56rem",fontWeight:"700",padding:"2px 6px",borderRadius:"9999px",background:lvlColors[pk.res.level]||"#eee",color:lvlText[pk.res.level]||"#555"}},pk.res.level),
+              dname(pk.res.name),
+              el("span",{st:{display:"inline-block",width:"7px",height:"7px",borderRadius:"50%",background:pk.which==="first"?"#c96a4a":"#26523A"}}),
+              pk.approved?el("span",{st:{fontSize:".58rem",fontWeight:"700",color:"#1e7a43"}},"APPROVED"):null,
+              pk.altKey?el("span",{st:{fontSize:".58rem",fontWeight:"700",color:"rgba(31,26,18,.4)"}},"2ND PREF"):null
+            ))
+          )
+        ))
+      );
+    }
+
     return el("div",null,
       lpDeadlinePanel(),
       gimControlPanel(),
       sumStrip,
+      overCapPanel(),
       el("div",{st:{display:"flex",alignItems:"center",gap:"14px",marginBottom:"16px",flexWrap:"wrap"}},
         el("div",{st:{display:"flex",gap:"14px",flexWrap:"wrap"}},
           el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.5)"}},el("span",{st:{display:"inline-block",width:"10px",height:"10px",borderRadius:"50%",background:"#c96a4a"}}),"First Leave"),
@@ -8720,6 +8832,8 @@ function renderLeavePlan(){
               if(sent===0)showToast("Failed to send notifications — check console","error");
               else showToast("Reminder sent to "+sent+" resident"+(sent===1?"":"s"),"success");
             }},"Send Reminder ("+missing.length+")"):null,
+          bulkLeaves?el("button",{st:{background:"#1e7a43",color:"#FEFBF3",border:"none",borderRadius:"9999px",padding:"8px 18px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".78rem",cursor:"pointer"},
+            onClick:()=>showConfirm("Approve "+bulkLeaves+" leave suggestion"+(bulkLeaves===1?"":"s")+" across "+bulkPending.length+" resident"+(bulkPending.length===1?"":"s")+"?"+(overCap?" The "+overCap+" over-cap period"+(overCap===1?"":"s")+" will be skipped entirely and listed for follow-up.":""),async()=>{await lpBulkApproveWithinCap();},"Approve All","success")},"Approve All Within Cap ("+bulkLeaves+")"):null,
           el("button",{st:{background:"rgba(31,26,18,.07)",color:"rgba(31,26,18,.35)",border:"none",borderRadius:"9999px",padding:"8px 20px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".78rem",cursor:"default",userSelect:"none"}},"Push to Rota — available Oct 2026")
         )
       ),
