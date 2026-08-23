@@ -9494,6 +9494,9 @@ function rbApprovedLeave(rid,blk){
 // A leave period is two weeks and never stretches to fill a longer block — the rotation
 // side absorbs any extra week. bw-1 keeps at least one week of rotation to hang it on.
 function rbLeaveWeeks(mode,bw){return(mode==="start"||mode==="end")?Math.min(2,bw-1):0;}
+// The R4 picks name a block each, so they map straight onto a cell. Both rotation names
+// already exist in RB_EXTRA; the subspecialty and location stay in the rail as reference,
+// since a rota cell can only carry a rotation name.
 function rbPrefillR4(rid,blk){
   const p=R4_PREFS[rid];
   if(!p||p.status!=="submitted")return null;
