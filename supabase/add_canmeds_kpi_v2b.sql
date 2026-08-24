@@ -103,7 +103,12 @@ select
   count(c.id)                                     as committee_count,
   count(c.id) filter (where c.is_chair)           as chair_count,
   -- KPI layer (binary). Seat is guaranteed, so this is clearable by everyone.
-  (count(c.id) > 0)                               as committee_kpi_met
+  -- The Chief and Co-Chief hold no committee seat at all (enforced by
+  -- committee_membership_guard in add_committees.sql), so they would otherwise
+  -- fail a KPI they are structurally barred from meeting. The chief role itself
+  -- clears it. Deliberately binary: no committee_count or chair_count credit, so
+  -- the Manager gradient stays winnable by residents who actually lead one.
+  (count(c.id) > 0 or r.chief_role is not null)   as committee_kpi_met
 from residents r
 left join committee_memberships c on c.resident_id = r.id
 where r.active and r.archived_at is null

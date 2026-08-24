@@ -602,6 +602,83 @@ th.ov-th{text-align:center;}
 .cl-pr i{font-style:normal;font-size:.6rem;font-weight:700;letter-spacing:.04em;color:rgba(31,26,18,.35);background:rgba(31,26,18,.06);border-radius:9999px;padding:2px 7px;flex:none;}
 .cl-pr input{accent-color:#c96a4a;flex:none;width:auto;}
 @media(max-width:720px){.cl-cell{min-height:76px;}.cl-tiles{grid-template-columns:1fr;}}
+/* ── Committees ── */
+.cte-band{display:flex;gap:34px;padding:26px 0;border-bottom:1px solid rgba(31,26,18,.07);align-items:flex-start;cursor:pointer;transition:background .14s;}
+.cte-band:last-child{border-bottom:none;}
+.cte-band:hover{background:rgba(31,26,18,.014);}
+.cte-band-l{width:236px;flex-shrink:0;padding-left:14px;position:relative;}
+.cte-spine{position:absolute;left:0;top:4px;bottom:4px;width:3px;border-radius:2px;}
+.cte-band-name{font-family:'Playfair Display',Georgia,serif;font-size:1.12rem;font-weight:600;line-height:1.25;margin-bottom:6px;}
+.cte-band-meta{font-size:.72rem;color:rgba(31,26,18,.42);line-height:1.5;}
+.cte-band-r{flex:1;min-width:0;}
+.cte-leads{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+.cte-lead{display:flex;align-items:center;gap:9px;padding:9px 17px 9px 9px;border-radius:32px;background:rgba(31,26,18,.04);}
+.cte-rl{font-size:.6rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;line-height:1;}
+.cte-nm{font-size:.84rem;font-weight:600;margin-top:3px;line-height:1;}
+.cte-vacant{background:repeating-linear-gradient(45deg,rgba(181,32,64,.05),rgba(181,32,64,.05) 5px,transparent 5px,transparent 10px);border:1px dashed rgba(181,32,64,.35);}
+.cte-nm-vac{color:#b52040;font-style:italic;font-weight:500;}
+.cte-fac{background:#1F1A12;}
+.cte-fac-rl{color:#CBA155;}
+.cte-fac-nm{color:#FEFBF3;}
+.cte-fac-av{background:#CBA155;color:#1F1A12;}
+.cte-fac-sel{width:auto;padding:6px 12px;border-radius:32px;font-size:.76rem;font-weight:600;color:rgba(31,26,18,.5);}
+.cte-av-sm{width:30px;height:30px;font-size:.64rem;}
+.cte-mem-lbl{font-size:.63rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:rgba(31,26,18,.32);margin-bottom:10px;}
+.cte-mems{display:flex;flex-wrap:wrap;gap:7px;}
+.cte-mem{display:flex;align-items:center;gap:7px;padding:4px 12px 4px 4px;border-radius:24px;background:rgba(31,26,18,.035);font-size:.78rem;}
+.cte-mem .av{width:24px;height:24px;font-size:.56rem;}
+.cte-back{font-size:.76rem;color:rgba(31,26,18,.42);padding:0 0 16px;cursor:pointer;}
+.cte-back:hover{color:#c96a4a;}
+.cte-sec{padding:26px 0;border-bottom:1px solid rgba(31,26,18,.07);}
+.cte-sec:last-child{border-bottom:none;}
+.cte-h2{font-family:'Playfair Display',Georgia,serif;font-size:1.05rem;font-weight:600;margin-bottom:14px;}
+.cte-cols{display:grid;grid-template-columns:1fr 1fr;gap:44px;}
+.cte-next{border-radius:12px;padding:18px 20px;border-left:3px solid #c96a4a;}
+.cte-next-when{font-family:'Playfair Display',Georgia,serif;font-size:1.35rem;margin-bottom:3px;}
+.cte-next-meta{font-size:.75rem;color:rgba(31,26,18,.5);margin-bottom:12px;}
+.cte-next-ag{font-size:.8rem;line-height:1.65;color:rgba(31,26,18,.72);}
+.cte-cal-note{font-size:.71rem;color:#2a7a5a;margin-top:13px;font-weight:600;}
+.cte-empty{font-size:.79rem;color:rgba(31,26,18,.36);font-style:italic;padding:14px 0;}
+.cte-ach{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid rgba(31,26,18,.06);align-items:flex-start;}
+.cte-ach:last-child{border-bottom:none;}
+.cte-ach-i{width:22px;height:22px;border-radius:50%;background:#7FB89C;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0;margin-top:1px;}
+.cte-ach-t{font-size:.83rem;font-weight:600;line-height:1.4;}
+.cte-ach-d{font-size:.73rem;color:rgba(31,26,18,.45);margin-top:2px;line-height:1.5;}
+.cte-x{font-size:.78rem;color:rgba(31,26,18,.3);cursor:pointer;padding:0 5px;flex-shrink:0;}
+.cte-x:hover{color:#b52040;}
+.cte-fac .cte-x{color:rgba(254,251,243,.5);}
+.cte-fac .cte-x:hover{color:#FEFBF3;}
+.cte-pm{border-bottom:1px solid rgba(31,26,18,.06);}
+.cte-pm:last-child{border-bottom:none;}
+.cte-pm-h{display:flex;align-items:center;gap:12px;padding:13px 0;cursor:pointer;}
+.cte-pm-date{font-size:.79rem;font-weight:700;width:104px;flex-shrink:0;}
+.cte-pm-ti{font-size:.79rem;color:rgba(31,26,18,.62);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cte-chev{color:rgba(31,26,18,.3);font-size:.7rem;}
+.cte-pm-b{font-size:.79rem;line-height:1.75;color:rgba(31,26,18,.68);padding:0 0 16px 116px;white-space:pre-line;}
+.cte-rules{background:rgba(201,106,74,.07);border-radius:10px;padding:15px 18px;margin:22px 0;font-size:.77rem;line-height:1.8;color:rgba(31,26,18,.7);}
+.cte-rules b{color:#1F1A12;}
+.cte-arow{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid rgba(31,26,18,.055);}
+.cte-arow:last-child{border-bottom:none;}
+.cte-arow-nm{font-size:.82rem;font-weight:500;flex:1;min-width:0;}
+.cte-seats{font-size:.68rem;color:rgba(31,26,18,.34);margin-left:8px;font-weight:400;}
+.cte-why{font-size:.7rem;color:#b52040;width:186px;text-align:right;flex-shrink:0;}
+.cte-roles{display:flex;gap:5px;flex-shrink:0;}
+.cte-rb{padding:4px 12px;border-radius:20px;font-size:.71rem;font-weight:600;border:1px solid rgba(31,26,18,.13);background:transparent;color:rgba(31,26,18,.45);cursor:pointer;width:auto;}
+.cte-rb.off{opacity:.32;cursor:not-allowed;text-decoration:line-through;}
+.cte-mh{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px;}
+.cte-mt{font-family:'Playfair Display',Georgia,serif;font-size:1.15rem;font-weight:700;color:#1F1A12;}
+.cte-mx{width:auto;padding:0 4px;background:transparent;border:none;font-size:1.15rem;line-height:1;color:rgba(31,26,18,.35);cursor:pointer;}
+.cte-mx:hover{color:#b52040;}
+.cte-mb{margin-bottom:20px;}
+.cte-mf{display:flex;gap:8px;justify-content:flex-end;align-items:center;}
+@media(max-width:860px){
+  .cte-cols{grid-template-columns:1fr;gap:26px;}
+  .cte-band{flex-direction:column;gap:16px;}
+  .cte-band-l{width:100%;}
+  .cte-arow{flex-wrap:wrap;}
+  .cte-why{width:auto;text-align:left;}
+  .cte-pm-b{padding-left:0;}
+}
 </style>
 </head>
 <body>
@@ -3155,6 +3232,7 @@ function modIcon(id,sz){
     kpi_exec:[["rect",{x:"2",y:"3",width:"20",height:"14",rx:"2"}],["path",{d:"M8 21h8M12 17v4"}],["polyline",{points:"7 10 10 7 13 10 17 6"}]],
     best_resident:[["polygon",{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"}]],
     leave_plan:[["rect",{x:"3",y:"4",width:"18",height:"18",rx:"2"}],["line",{x1:"16",y1:"2",x2:"16",y2:"6"}],["line",{x1:"8",y1:"2",x2:"8",y2:"6"}],["line",{x1:"3",y1:"10",x2:"21",y2:"10"}],["path",{d:"M9 16l2 2 4-4"}]],
+    committees:[["path",{d:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"}],["circle",{cx:"9",cy:"7",r:"4"}],["path",{d:"M23 21v-2a4 4 0 00-3-3.87"}],["path",{d:"M16 3.13a4 4 0 010 7.75"}]],
     home:[["path",{d:"M12 2.5l9.5 8v11a1 1 0 01-1 1h-6v-8h-5v8h-6a1 1 0 01-1-1v-11z",fill:"currentColor",stroke:"none"}]],
     trophy:[["path",{d:"M8 21h8M12 17v4M17 3H7v5a5 5 0 0010 0V3z"}],["path",{d:"M7 5H3v2a4 4 0 004 4"}],["path",{d:"M17 5h4v2a4 4 0 01-4 4"}]],
     account:[["path",{d:"M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"}],["circle",{cx:"12",cy:"7",r:"4"}]],
@@ -3181,6 +3259,7 @@ const MODS=[
   {id:"cumulative_kpi",label:"Training Record",icon:"",desc:"Full academic history — yearly achievements & quarterly milestones per year",color:"#26523A",roles:["pd","deputy_pd","chief"]},
   {id:"best_resident",label:"Best Resident",icon:"",desc:"Quarterly voting, live KPI rankings & Hall of Fame",color:"#B8860B",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"leave_plan",label:"AY Plan 26-27",icon:"",desc:"Suggested leave & GIM rotation preferences for AY 2026-27",color:"#2a6a8a",roles:["pd","deputy_pd","chief","consultant","resident"]},
+  {id:"committees",label:"Committees",icon:"",desc:"Standing committees — leaders, co-leaders, members, meetings & achievements",color:"#8a4a5a",roles:["pd","deputy_pd","chief","consultant","resident"]},
 ];
 function renderSearchOverlay(){
   const q=(STATE.searchQ||"").trim().toLowerCase();
@@ -10980,6 +11059,611 @@ function rbCellPanel(){
   return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)set({rbCell:null});}},panel);
 }
 
+// ─── COMMITTEES MODULE ────────────────────────────────────────────────────────
+// Standing committees for one academic year: who leads, who co-leads, who sits,
+// plus each committee's own meetings, minutes and achievements.
+//
+// Membership lives in committee_memberships -- the SAME table the CanMEDS
+// Collaborator KPI reads. There is deliberately no second membership table, so a
+// seat recorded here is a seat the KPI counts.
+let CTE_DEFS=[];   // committees catalogue, sorted
+let CTE_MEMB=[];   // committee_memberships for CTE_AY (mapped rows only)
+let CTE_FAC=[];    // committee_faculty for CTE_AY
+let CTE_MTG=[];    // committee_meetings for CTE_AY
+let CTE_ACH=[];    // committee_achievements for CTE_AY
+let CTE_AY=null;   // the year currently held in the arrays above
+let CTE_LOADING=false;
+let CTE_ERR=null;  // last load failure, shown inline rather than retried forever
+
+function cteAY(){return STATE.cteAY==null?CURRENT_ACADEMIC_YEAR:STATE.cteAY;}
+function cteAYLabel(y){return "AY "+y+"\u2013"+String(y+1).slice(2);}
+function cteDef(id){return CTE_DEFS.find(c=>c.id==id)||null;}
+
+// Mirrors is_pd_or_chief() in the database exactly. dio and ceo are NOT in that
+// function, so they read committees but cannot edit them -- widening this here
+// without widening the SQL would show them controls every write would reject.
+function canManageCommittees(){
+  const r=STATE.user&&STATE.user.role;
+  return r==="pd"||r==="deputy_pd"||r==="chief";
+}
+// A committee's own leader or co-leader runs its meetings and achievements.
+// Mirrors is_committee_lead() in add_committees.sql.
+function cteIsLead(cid){
+  const rid=STATE.user&&STATE.user.rid;
+  if(!rid)return false;
+  return CTE_MEMB.some(m=>m.committee_id==cid&&m.resident_id==rid&&(m.role==="leader"||m.role==="co_leader"));
+}
+function canEditCommittee(cid){return canManageCommittees()||cteIsLead(cid);}
+
+function cteMembers(cid){return CTE_MEMB.filter(m=>m.committee_id==cid);}
+function cteLeader(cid){return cteMembers(cid).find(m=>m.role==="leader")||null;}
+function cteCoLeader(cid){return cteMembers(cid).find(m=>m.role==="co_leader")||null;}
+function ctePlain(cid){return cteMembers(cid).filter(m=>m.role==="member");}
+function cteFacultyOf(cid){return CTE_FAC.filter(f=>f.committee_id==cid);}
+function cteMeetings(cid){return CTE_MTG.filter(m=>m.committee_id==cid);}
+function cteAchievements(cid){return CTE_ACH.filter(a=>a.committee_id==cid);}
+function cteSeatCount(rid){return CTE_MEMB.filter(m=>m.resident_id==rid).length;}
+function cteLeadsElsewhere(rid,cid){return CTE_MEMB.some(m=>m.resident_id==rid&&m.role==="leader"&&m.committee_id!=cid);}
+// Chief and Co-Chief hold no committee seat -- the chief role is scored on its own.
+function cteBlockedReason(r,cid){
+  if(r.chiefRole==="chief")return"Chief Resident \u2014 monitors only";
+  if(r.chiefRole==="cochief")return"Co-Chief \u2014 monitors only";
+  if(cteLeadsElsewhere(r.id,cid)){
+    const other=CTE_MEMB.find(m=>m.resident_id==r.id&&m.role==="leader");
+    const d=other?cteDef(other.committee_id):null;
+    return"Leads "+(d?d.name.replace(/ Committee$/,""):"another committee");
+  }
+  if(r.level==="R1")return"R1 \u2014 may co-lead, not lead";
+  return"";
+}
+
+async function loadCommitteesAY(ay){
+  const[d,m,f,g,a]=await Promise.all([
+    fetchAllRows(()=>sb.from("committees").select("*").order("sort_order",{ascending:true}).order("id",{ascending:true})),
+    fetchAllRows(()=>sb.from("committee_memberships").select("*").eq("academic_year",ay).order("id",{ascending:true})),
+    fetchAllRows(()=>sb.from("committee_faculty").select("*").eq("academic_year",ay).order("id",{ascending:true})),
+    fetchAllRows(()=>sb.from("committee_meetings").select("*").eq("academic_year",ay).order("meeting_date",{ascending:false}).order("id",{ascending:true})),
+    fetchAllRows(()=>sb.from("committee_achievements").select("*").eq("academic_year",ay).order("achieved_on",{ascending:false}).order("id",{ascending:true}))
+  ]);
+  // CTE_AY is claimed either way. renderCommittees() reloads whenever CTE_AY !== ay,
+  // so leaving it unset after a failure would spin: fail, re-render, fail again.
+  CTE_AY=ay;
+  const bad=[d,m,f,g,a].find(x=>x.error);
+  if(bad){
+    CTE_ERR=bad.error.message;
+    CTE_DEFS=[];CTE_MEMB=[];CTE_FAC=[];CTE_MTG=[];CTE_ACH=[];
+    return false;
+  }
+  CTE_ERR=null;
+  CTE_DEFS=(d.data||[]).filter(c=>c.active!==false);
+  // Legacy free-text rows carry no committee_id and belong to the CanMEDS page,
+  // not here. add_committees.sql section 6 maps them.
+  CTE_MEMB=(m.data||[]).filter(x=>x.committee_id!=null);
+  CTE_FAC=f.data||[];CTE_MTG=g.data||[];CTE_ACH=a.data||[];
+  return true;
+}
+
+function cteErrMsg(e){
+  const m=(e&&e.message)||String(e);
+  if(e&&e.code==="23505"){
+    if(m.indexOf("one_leader_ux")>=0)return"This committee already has a leader for "+cteAYLabel(cteAY())+".";
+    if(m.indexOf("one_coleader_ux")>=0)return"This committee already has a co-leader for "+cteAYLabel(cteAY())+".";
+    if(m.indexOf("one_lead_per_res_ux")>=0)return"That resident already leads another committee this year. They may co-lead a second, but not lead two.";
+    if(m.indexOf("res_year_cte_ux")>=0)return"That resident is already on this committee this year.";
+    // The pre-existing index on lower(committee_name) still guards the legacy
+    // free-text rows the CanMEDS page wrote. Until section 6 of add_committees.sql
+    // maps them, an unmapped row with the same name blocks the new one.
+    if(m.indexOf("res_year_name_ux")>=0)return"That resident already has an older, unmapped committee record with this name. Run section 6 of add_committees.sql to map the legacy rows first.";
+    return"A record like this already exists.";
+  }
+  if(e&&(e.code==="42501"||m.indexOf("row-level security")>=0))return"You do not have permission to change this committee.";
+  return m;
+}
+
+async function cteSetRole(cid,rid,role){
+  const ay=cteAY();
+  const existing=CTE_MEMB.find(m=>m.committee_id==cid&&m.resident_id==rid);
+  let error=null;
+  if(role==="none"){
+    if(!existing)return;
+    ({error}=await sb.from("committee_memberships").delete().eq("id",existing.id));
+  }else if(existing){
+    if(existing.role===role)return;
+    ({error}=await sb.from("committee_memberships").update({role:role}).eq("id",existing.id));
+  }else{
+    const def=cteDef(cid);
+    ({error}=await sb.from("committee_memberships").insert({
+      resident_id:rid,academic_year:ay,committee_id:cid,role:role,
+      committee_name:def?def.name:"",appointed_at:new Date().toISOString().slice(0,10)
+    }));
+  }
+  if(error){showToast(cteErrMsg(error));return;}
+  await loadCommitteesAY(ay);
+  render();
+}
+
+async function cteAddFaculty(cid,consultantId){
+  const ay=cteAY();
+  const{error}=await sb.from("committee_faculty").insert({committee_id:cid,academic_year:ay,consultant_id:consultantId});
+  if(error){showToast(cteErrMsg(error));return;}
+  await loadCommitteesAY(ay);render();
+}
+async function cteRemoveFaculty(id){
+  const{error}=await sb.from("committee_faculty").delete().eq("id",id);
+  if(error){showToast(cteErrMsg(error));return;}
+  await loadCommitteesAY(cteAY());render();
+}
+
+// Meetings are mirrored into calendar_events targeted at the committee's members,
+// exactly like a manually added event. That is what puts them on the month grid
+// and into the iCal feed; committee_meetings alone would reach neither.
+async function cteSaveMeeting(d){
+  const ay=cteAY(),cid=d.committee_id,def=cteDef(cid);
+  if(!d.meeting_date){showToast("Pick a meeting date.");return;}
+  if((d.start_time?1:0)!==(d.end_time?1:0)){showToast("Give both a start and an end time, or neither.");return;}
+  if(d.start_time&&d.end_time&&d.end_time<=d.start_time){showToast("The end time must be after the start time.");return;}
+  const members=cteMembers(cid).map(m=>m.resident_id);
+  // committee_id is what the cal_ev_committee_lead policy keys off; without it a
+  // resident leader's insert is rejected by cal_ev_all, which is PD/chief only.
+  const ev={academic_year:ay,event_date:d.meeting_date,title:(def?def.name:"Committee")+" meeting",
+    all_day:!d.start_time,start_time:d.start_time||null,end_time:d.end_time||null,
+    color:def?def.color:"#c96a4a",target_all:false,target_resident_ids:members,
+    committee_id:cid,created_by:STATE.user.profileId};
+  let evId=d.calendar_event_id||null;
+  if(evId){
+    const{error}=await sb.from("calendar_events").update(ev).eq("id",evId);
+    if(error){showToast("Meeting saved but the calendar entry failed: "+cteErrMsg(error));}
+  }else{
+    const{data,error}=await sb.from("calendar_events").insert(ev).select("id").maybeSingle();
+    if(error){showToast("Could not put this on the calendar: "+cteErrMsg(error));return;}
+    evId=data?data.id:null;
+  }
+  const row={committee_id:cid,academic_year:ay,meeting_date:d.meeting_date,
+    start_time:d.start_time||null,end_time:d.end_time||null,
+    location:(d.location||"").trim()||null,agenda:(d.agenda||"").trim()||null,
+    minutes:(d.minutes||"").trim()||null,held:!!d.held,calendar_event_id:evId,
+    created_by:STATE.user.profileId};
+  const{error}=d.id
+    ?await sb.from("committee_meetings").update(row).eq("id",d.id)
+    :await sb.from("committee_meetings").insert(row);
+  if(error){showToast(cteErrMsg(error));return;}
+  await loadCommitteesAY(ay);
+  await loadCalendarEvents();
+  set({cteMtg:null});
+}
+async function cteDeleteMeeting(m){
+  if(!confirm("Delete this meeting? It will also come off the members' calendars."))return;
+  const{error}=await sb.from("committee_meetings").delete().eq("id",m.id);
+  if(error){showToast(cteErrMsg(error));return;}
+  if(m.calendar_event_id)await sb.from("calendar_events").delete().eq("id",m.calendar_event_id);
+  await loadCommitteesAY(cteAY());
+  await loadCalendarEvents();
+  set({cteMtg:null});
+}
+async function cteSaveAchievement(d){
+  const ay=cteAY();
+  if(!String(d.title||"").trim()){showToast("Give the achievement a title.");return;}
+  const row={committee_id:d.committee_id,academic_year:ay,title:String(d.title).trim(),
+    detail:(d.detail||"").trim()||null,achieved_on:d.achieved_on||null,created_by:STATE.user.profileId};
+  const{error}=d.id
+    ?await sb.from("committee_achievements").update(row).eq("id",d.id)
+    :await sb.from("committee_achievements").insert(row);
+  if(error){showToast(cteErrMsg(error));return;}
+  await loadCommitteesAY(ay);
+  set({cteAch:null});
+}
+async function cteDeleteAchievement(id){
+  if(!confirm("Delete this achievement?"))return;
+  const{error}=await sb.from("committee_achievements").delete().eq("id",id);
+  if(error){showToast(cteErrMsg(error));return;}
+  await loadCommitteesAY(cteAY());
+  set({cteAch:null});
+}
+
+// ─── Committees: small render helpers ────────────────────────────────────────
+function cteAv(res,big){
+  if(!res)return null;
+  return el("div",{cls:"av"+(big?"":" cte-av-sm"),st:{background:LC[res.level]||"#94a3b8"}},ini(res.name));
+}
+function cteLeadPill(role,label,res,color,extra){
+  if(!res)return el("div",{cls:"cte-lead cte-vacant"},
+    el("div",null,el("div",{cls:"cte-rl",st:{color:"#b52040"}},label),
+      el("div",{cls:"cte-nm cte-nm-vac"},"Not appointed")));
+  return el("div",{cls:"cte-lead",st:{background:cteTint(color)}},
+    cteAv(res),
+    el("div",null,el("div",{cls:"cte-rl",st:{color:color}},label),
+      el("div",{cls:"cte-nm"},dname(res.name)+(extra?" \u00b7 "+extra:"")))
+  );
+}
+function cteTint(hex){
+  const h=(hex||"#c96a4a").replace("#","");
+  const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);
+  return"rgba("+r+","+g+","+b+",.09)";
+}
+function cteFacPill(f){
+  const c=CONSULTANTS.find(x=>x.id==f.consultant_id);
+  const nm=c?c.name:"Consultant #"+f.consultant_id;
+  return el("div",{cls:"cte-lead cte-fac"},
+    el("div",{cls:"av cte-av-sm cte-fac-av"},ini(nm)),
+    el("div",null,el("div",{cls:"cte-rl cte-fac-rl"},"Faculty Lead"),el("div",{cls:"cte-nm cte-fac-nm"},nm))
+  );
+}
+function cteFmtDate(d){
+  if(!d)return"";
+  const dt=new Date(d+"T00:00:00");
+  if(isNaN(dt))return String(d);
+  const DW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],MO=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return DW[dt.getDay()]+" "+dt.getDate()+" "+MO[dt.getMonth()]+" "+dt.getFullYear();
+}
+function cteFmtTime(t){
+  if(!t)return"";
+  const p=String(t).split(":"),h=parseInt(p[0],10),m=p[1]||"00";
+  const ap=h>=12?"PM":"AM",hh=h%12===0?12:h%12;
+  return hh+":"+m+" "+ap;
+}
+function cteTodayISO(){return new Date().toISOString().slice(0,10);}
+function cteNextMeeting(cid){
+  const t=cteTodayISO();
+  return cteMeetings(cid).filter(m=>m.meeting_date>=t).sort((a,b)=>a.meeting_date.localeCompare(b.meeting_date))[0]||null;
+}
+function ctePastMeetings(cid){
+  const t=cteTodayISO();
+  return cteMeetings(cid).filter(m=>m.meeting_date<t).sort((a,b)=>b.meeting_date.localeCompare(a.meeting_date));
+}
+
+// ─── Committees: header + coverage ───────────────────────────────────────────
+function cteHeader(ay){
+  const years=[CURRENT_ACADEMIC_YEAR,CURRENT_ACADEMIC_YEAR+1];
+  return el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"22px"}},
+    el("div",null,
+      el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Programme Governance"),
+      el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Committees"),
+      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},
+        CTE_DEFS.length+" standing committees \u00b7 "+cteAYLabel(ay))
+    ),
+    el("div",{st:{display:"flex",gap:"8px",alignItems:"center"}},
+      el("div",{st:{display:"flex",gap:"4px"}},
+        ...years.map(y=>el("button",{cls:"pill"+(y===ay?" on":""),
+          st:y===ay?{background:"#1F1A12",color:"#FEFBF3",borderColor:"#1F1A12"}:{},
+          onClick:()=>set({cteAY:y,cteSel:null})},cteAYLabel(y)))),
+      el("button",{cls:"sbtn ghost",onClick:()=>cteExport(ay)},"Export")
+    )
+  );
+}
+function cteCoverage(ay){
+  const eligible=RESIDENTS.filter(r=>!r.chiefRole);
+  const seated={};CTE_MEMB.forEach(m=>{seated[m.resident_id]=(seated[m.resident_id]||0)+1;});
+  const unseated=eligible.filter(r=>!seated[r.id]).length;
+  let vacant=0;
+  CTE_DEFS.forEach(c=>{if(!cteLeader(c.id))vacant++;if(!cteCoLeader(c.id))vacant++;});
+  function item(n,l,tone){
+    return el("div",null,
+      el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.5rem",lineHeight:"1.1",
+        color:tone==="warn"?"#b52040":tone==="ok"?"#2a7a5a":"#1F1A12"}},String(n)),
+      el("div",{st:{fontSize:".68rem",fontWeight:"600",letterSpacing:".07em",textTransform:"uppercase",color:"rgba(31,26,18,.4)",marginTop:"3px"}},l));
+  }
+  return el("div",{st:{display:"flex",gap:"26px",flexWrap:"wrap",padding:"18px 0 22px",borderBottom:"1px solid rgba(31,26,18,.07)"}},
+    item(CTE_DEFS.length,"Committees","ok"),
+    item(CTE_MEMB.length,"Seats filled"),
+    item(unseated,"Residents unassigned",unseated?"warn":"ok"),
+    item(vacant,"Roles vacant",vacant?"warn":"ok")
+  );
+}
+
+// ─── Committees: list (flowing bands) ────────────────────────────────────────
+function cteBand(c){
+  const lead=cteLeader(c.id),co=cteCoLeader(c.id),mem=ctePlain(c.id);
+  const leadRes=lead?anyResById(lead.resident_id):null;
+  const coRes=co?anyResById(co.resident_id):null;
+  const total=cteMembers(c.id).length;
+  return el("div",{cls:"cte-band",onClick:()=>set({cteSel:c.id,cteMode:"work"})},
+    el("div",{cls:"cte-band-l"},
+      el("div",{cls:"cte-spine",st:{background:c.color}}),
+      el("div",{cls:"cte-band-name"},c.name),
+      // "seats" not "members": the right-hand column already says "Members · N"
+      // for the plain members, and the leader and co-leader are seats too.
+      el("div",{cls:"cte-band-meta"},c.description||"",
+        el("div",{st:{marginTop:"4px",color:"rgba(31,26,18,.6)",fontWeight:"600"}},total+(total===1?" seat":" seats")))
+    ),
+    el("div",{cls:"cte-band-r"},
+      el("div",{cls:"cte-leads"},
+        ...cteFacultyOf(c.id).map(cteFacPill),
+        cteLeadPill("leader","Leader",leadRes,c.color,leadRes?leadRes.level:""),
+        cteLeadPill("co_leader","Co-leader",coRes,c.color,coRes?coRes.level:"")
+      ),
+      mem.length?el("div",{cls:"cte-mem-lbl"},"Members \u00b7 "+mem.length):null,
+      mem.length?el("div",{cls:"cte-mems"},...mem.map(m=>{
+        const r=anyResById(m.resident_id);
+        if(!r)return null;
+        return el("div",{cls:"cte-mem"},cteAv(r),dname(r.name));
+      })):el("div",{cls:"cte-mem-lbl",st:{color:"#b52040"}},"No members yet")
+    )
+  );
+}
+
+// ─── Committees: workspace ───────────────────────────────────────────────────
+function cteWorkspace(c){
+  const ay=cteAY(),canEd=canEditCommittee(c.id),canAssign=canManageCommittees();
+  const lead=cteLeader(c.id),co=cteCoLeader(c.id),mem=ctePlain(c.id);
+  const leadRes=lead?anyResById(lead.resident_id):null;
+  const coRes=co?anyResById(co.resident_id):null;
+  const next=cteNextMeeting(c.id),past=ctePastMeetings(c.id);
+  const ach=cteAchievements(c.id);
+  const later=cteMeetings(c.id).filter(m=>next&&m.meeting_date>next.meeting_date)
+    .sort((a,b)=>a.meeting_date.localeCompare(b.meeting_date)).slice(0,3);
+
+  const nextCard=next
+    ?el("div",{cls:"cte-next",st:{background:cteTint(c.color),borderLeftColor:c.color}},
+        el("div",{cls:"cte-next-when"},cteFmtDate(next.meeting_date)),
+        el("div",{cls:"cte-next-meta"},
+          [next.start_time?cteFmtTime(next.start_time)+" \u2013 "+cteFmtTime(next.end_time):"All day",
+           next.location||null].filter(Boolean).join(" \u00b7 ")),
+        next.agenda?el("div",{cls:"cte-next-ag"},el("b",null,"Agenda"),el("div",{st:{whiteSpace:"pre-line",marginTop:"3px"}},next.agenda)):null,
+        el("div",{cls:"cte-cal-note"},"\u2713 On "+cteMembers(c.id).length+" members' calendars"),
+        canEd?el("button",{cls:"sbtn ghost small",st:{marginTop:"12px"},
+          onClick:()=>set({cteMtg:Object.assign({},next)})},"Edit"):null)
+    :el("div",{cls:"cte-empty"},"No meeting scheduled.");
+
+  return el("div",null,
+    el("div",{cls:"cte-back",onClick:()=>set({cteSel:null,cteMode:null})},"\u2190 All committees"),
+    el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"20px"}},
+      el("div",null,
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:c.color,marginBottom:"8px",display:"flex",alignItems:"center",gap:"8px"}},
+          el("span",{st:{width:"8px",height:"8px",borderRadius:"50%",background:c.color,display:"inline-block"}}),"Programme Governance"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",marginBottom:"5px"}},c.name),
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},
+          [c.description,cteAYLabel(ay),cteMembers(c.id).length+" seats"].filter(Boolean).join(" \u00b7 "))),
+      el("div",{st:{display:"flex",gap:"8px"}},
+        canAssign?el("button",{cls:"sbtn ghost",onClick:()=>set({cteMode:"assign"})},"Assign roles"):null,
+        canEd?el("button",{cls:"sbtn primary",onClick:()=>set({cteMtg:{committee_id:c.id,meeting_date:"",held:false}})},"Add meeting"):null)
+    ),
+    el("div",{cls:"cte-sec",st:{paddingTop:"26px"}},
+      el("div",{cls:"cte-leads"},
+        ...cteFacultyOf(c.id).map(f=>{
+          const pill=cteFacPill(f);
+          if(canAssign)pill.appendChild(el("span",{cls:"cte-x",title:"Remove",
+            onClick:e=>{e.stopPropagation();cteRemoveFaculty(f.id);}},"\u00d7"));
+          return pill;
+        }),
+        canAssign?cteFacultyAdder(c):null,
+        cteLeadPill("leader","Leader",leadRes,c.color,leadRes?leadRes.level:""),
+        cteLeadPill("co_leader","Co-leader",coRes,c.color,coRes?coRes.level:"")),
+      mem.length?el("div",{cls:"cte-mem-lbl"},"Members \u00b7 "+mem.length):null,
+      mem.length?el("div",{cls:"cte-mems"},...mem.map(m=>{
+        const r=anyResById(m.resident_id);return r?el("div",{cls:"cte-mem"},cteAv(r),dname(r.name)):null;
+      })):null
+    ),
+    el("div",{cls:"cte-sec cte-cols"},
+      el("div",null,
+        el("h2",{cls:"cte-h2"},"Next meeting"),
+        nextCard,
+        later.length?el("div",{st:{marginTop:"14px",fontSize:".75rem",color:"rgba(31,26,18,.42)"}},
+          "Then: "+later.map(m=>cteFmtDate(m.meeting_date).replace(/^\w+ /,"")).join(" \u00b7 ")):null),
+      el("div",null,
+        el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"baseline"}},
+          el("h2",{cls:"cte-h2"},"Achievements"),
+          canEd?el("button",{cls:"sbtn ghost small",onClick:()=>set({cteAch:{committee_id:c.id,title:""}})},"Add"):null),
+        ach.length?el("div",null,...ach.map(a=>el("div",{cls:"cte-ach"},
+          el("div",{cls:"cte-ach-i"},"\u2713"),
+          el("div",{st:{flex:"1"}},
+            el("div",{cls:"cte-ach-t"},a.title),
+            a.detail||a.achieved_on?el("div",{cls:"cte-ach-d"},
+              [a.achieved_on?cteFmtDate(a.achieved_on):null,a.detail].filter(Boolean).join(" \u00b7 ")):null),
+          canEd?el("span",{cls:"cte-x",onClick:()=>set({cteAch:Object.assign({},a)})},"\u270e"):null
+        ))):el("div",{cls:"cte-empty"},"Nothing recorded yet."))
+    ),
+    el("div",{cls:"cte-sec"},
+      el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"baseline"}},
+        el("h2",{cls:"cte-h2"},"Previous meetings & notes"),
+        el("span",{st:{fontSize:".73rem",color:"rgba(31,26,18,.38)"}},past.length+" held this year")),
+      past.length?el("div",null,...past.map(m=>{
+        const open=STATE.cteExpand===m.id;
+        return el("div",{cls:"cte-pm"},
+          el("div",{cls:"cte-pm-h",onClick:()=>set({cteExpand:open?null:m.id})},
+            el("div",{cls:"cte-pm-date"},cteFmtDate(m.meeting_date).replace(/^\w+ /,"")),
+            el("div",{cls:"cte-pm-ti"},m.agenda?m.agenda.split("\n")[0]:"(no agenda recorded)"),
+            canEd?el("span",{cls:"cte-x",onClick:e=>{e.stopPropagation();set({cteMtg:Object.assign({},m)});}},"\u270e"):null,
+            el("span",{cls:"cte-chev"},open?"\u25bc":"\u25b6")),
+          open?el("div",{cls:"cte-pm-b"},m.minutes||"No notes were recorded for this meeting."):null);
+      })):el("div",{cls:"cte-empty"},"No meetings held yet this year.")
+    )
+  );
+}
+function cteFacultyAdder(c){
+  const taken=cteFacultyOf(c.id).map(f=>String(f.consultant_id));
+  const avail=CONSULTANTS.filter(x=>taken.indexOf(String(x.id))<0);
+  if(!avail.length)return null;
+  const sel=el("select",{cls:"input cte-fac-sel",onChange:e=>{
+    const v=e.target.value;if(v)cteAddFaculty(c.id,Number(v));
+  }},el("option",{value:""},"+ Faculty lead"),...avail.map(x=>el("option",{value:String(x.id)},x.name)));
+  return sel;
+}
+
+// ─── Committees: assign roles ────────────────────────────────────────────────
+function cteAssignView(c){
+  const ay=cteAY();
+  const rows=sortByLevel(RESIDENTS.slice());
+  return el("div",null,
+    el("div",{cls:"cte-back",onClick:()=>set({cteMode:"work"})},"\u2190 "+c.name),
+    el("div",null,
+      el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:c.color,marginBottom:"8px"}},"Assign roles"),
+      el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",marginBottom:"5px"}},c.name),
+      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},cteAYLabel(ay))),
+    el("div",{cls:"cte-rules"},
+      el("b",null,"Rules applied below \u2014 "),
+      "an R1 may co-lead or be a member, never lead \u00b7 a resident may lead one committee only, but may lead one and co-lead another \u00b7 ",
+      "one leader and one co-leader per committee \u00b7 the Chief and Co-Chief hold no committee seat \u00b7 no limit on how many committees a resident joins."),
+    el("div",null,...rows.map(r=>{
+      const cur=CTE_MEMB.find(m=>m.committee_id==c.id&&m.resident_id==r.id);
+      const role=cur?cur.role:"none";
+      const why=cteBlockedReason(r,c.id);
+      const chiefBlocked=!!r.chiefRole;
+      const leadBlocked=chiefBlocked||r.level==="R1"||cteLeadsElsewhere(r.id,c.id);
+      function rb(k,label){
+        const on=role===k;
+        const off=chiefBlocked||(k==="leader"&&leadBlocked);
+        return el("button",{cls:"cte-rb"+(on?" on":"")+(off?" off":""),
+          st:on?{background:c.color,borderColor:c.color,color:"#fff"}:{},
+          onClick:()=>{if(off)return;cteSetRole(c.id,r.id,k);}},label);
+      }
+      return el("div",{cls:"cte-arow"},
+        el("span",{cls:"level-badge",st:{background:LC[r.level]||"#94a3b8"}},r.level),
+        cteAv(r),
+        el("div",{cls:"cte-arow-nm"},dname(r.name),
+          cteSeatCount(r.id)?el("span",{cls:"cte-seats"},cteSeatCount(r.id)+(cteSeatCount(r.id)===1?" committee":" committees")):null),
+        why?el("div",{cls:"cte-why"},why):null,
+        el("div",{cls:"cte-roles"},rb("leader","Leader"),rb("co_leader","Co-leader"),rb("member","Member"),rb("none","None")));
+    }))
+  );
+}
+
+// ─── Committees: my committees (resident view) ───────────────────────────────
+function cteMine(){
+  const rid=STATE.user&&STATE.user.rid;
+  const mine=rid?CTE_MEMB.filter(m=>m.resident_id==rid):[];
+  if(!mine.length)return el("div",{cls:"cte-empty",st:{padding:"34px 0"}},
+    "You are not on a committee for "+cteAYLabel(cteAY())+".");
+  const RL={leader:"Leader",co_leader:"Co-leader",member:"Member"};
+  return el("div",null,...mine.map(m=>{
+    const c=cteDef(m.committee_id);if(!c)return null;
+    const next=cteNextMeeting(c.id);
+    return el("div",{cls:"cte-band",onClick:()=>set({cteSel:c.id,cteMode:"work"})},
+      el("div",{cls:"cte-band-l"},
+        el("div",{cls:"cte-spine",st:{background:c.color}}),
+        el("div",{cls:"cte-band-name"},c.name),
+        el("div",{cls:"cte-band-meta"},el("span",{cls:"bdg",st:{background:cteTint(c.color),color:c.color}},RL[m.role]||m.role))),
+      el("div",{cls:"cte-band-r"},
+        next?el("div",{cls:"cte-next",st:{background:cteTint(c.color),borderLeftColor:c.color}},
+          el("div",{cls:"cte-next-when"},cteFmtDate(next.meeting_date)),
+          el("div",{cls:"cte-next-meta"},[next.start_time?cteFmtTime(next.start_time)+" \u2013 "+cteFmtTime(next.end_time):"All day",next.location||null].filter(Boolean).join(" \u00b7 ")),
+          next.agenda?el("div",{cls:"cte-next-ag",st:{whiteSpace:"pre-line",marginTop:"6px"}},next.agenda):null)
+        :el("div",{cls:"cte-empty"},"No meeting scheduled."))
+    );
+  }));
+}
+
+// ─── Committees: modals ──────────────────────────────────────────────────────
+function renderCteMeetingModal(){
+  const d=STATE.cteMtg;if(!d)return null;
+  const c=cteDef(d.committee_id);
+  function close(){set({cteMtg:null});}
+  function val(id){const e=document.getElementById(id);return e?e.value:"";}
+  function save(){
+    cteSaveMeeting({id:d.id,committee_id:d.committee_id,calendar_event_id:d.calendar_event_id,
+      meeting_date:val("cte_m_date"),start_time:val("cte_m_start"),end_time:val("cte_m_end"),
+      location:val("cte_m_loc"),agenda:val("cte_m_ag"),minutes:val("cte_m_min"),
+      held:document.getElementById("cte_m_held").checked});
+  }
+  return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
+    el("div",{cls:"modal-card",st:{width:"560px",maxWidth:"100%"}},
+      el("div",{cls:"cte-mh"},
+        el("div",{cls:"cte-mt"},(d.id?"Edit":"Add")+" meeting \u2014 "+(c?c.name:"")),
+        el("button",{cls:"cte-mx",onClick:close},"\u00d7")),
+      el("div",{cls:"cte-mb"},
+        el("div",{cls:"lbl"},"Date"),
+        el("input",{id:"cte_m_date",cls:"input",type:"date",value:d.meeting_date||""}),
+        el("div",{st:{display:"flex",gap:"10px",marginTop:"12px"}},
+          el("div",{st:{flex:"1"}},el("div",{cls:"lbl"},"Start"),
+            el("input",{id:"cte_m_start",cls:"input",type:"time",value:d.start_time?String(d.start_time).slice(0,5):""})),
+          el("div",{st:{flex:"1"}},el("div",{cls:"lbl"},"End"),
+            el("input",{id:"cte_m_end",cls:"input",type:"time",value:d.end_time?String(d.end_time).slice(0,5):""}))),
+        el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.4)",marginTop:"5px"}},"Leave both blank for a whole-day entry."),
+        el("div",{cls:"lbl",st:{marginTop:"12px"}},"Location"),
+        el("input",{id:"cte_m_loc",cls:"input",value:d.location||"",placeholder:"e.g. Meeting Room 2, Level 3"}),
+        el("div",{cls:"lbl",st:{marginTop:"12px"}},"Agenda"),
+        el("textarea",{id:"cte_m_ag",cls:"input",rows:"3"},d.agenda||""),
+        el("div",{cls:"lbl",st:{marginTop:"12px"}},"Minutes / notes"),
+        el("textarea",{id:"cte_m_min",cls:"input",rows:"4"},d.minutes||""),
+        el("label",{st:{display:"flex",alignItems:"center",gap:"8px",marginTop:"12px",fontSize:".82rem"}},
+          el("input",{id:"cte_m_held",type:"checkbox",checked:!!d.held,st:{width:"auto",margin:"0",flexShrink:"0"}}),"This meeting has been held"),
+        el("div",{st:{fontSize:".72rem",color:"#2a7a5a",marginTop:"12px",fontWeight:"600"}},
+          "Saving puts this on the calendar of all "+cteMembers(d.committee_id).length+" members.")),
+      el("div",{cls:"cte-mf"},
+        d.id?el("button",{cls:"sbtn danger",st:{marginRight:"auto"},onClick:()=>cteDeleteMeeting(d)},"Delete"):null,
+        el("button",{cls:"sbtn ghost",onClick:close},"Cancel"),
+        el("button",{cls:"sbtn primary",onClick:save},"Save"))));
+}
+function renderCteAchModal(){
+  const d=STATE.cteAch;if(!d)return null;
+  const c=cteDef(d.committee_id);
+  function close(){set({cteAch:null});}
+  function val(id){const e=document.getElementById(id);return e?e.value:"";}
+  return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
+    el("div",{cls:"modal-card",st:{width:"480px",maxWidth:"100%"}},
+      el("div",{cls:"cte-mh"},
+        el("div",{cls:"cte-mt"},(d.id?"Edit":"Add")+" achievement \u2014 "+(c?c.name:"")),
+        el("button",{cls:"cte-mx",onClick:close},"\u00d7")),
+      el("div",{cls:"cte-mb"},
+        el("div",{cls:"lbl"},"What was achieved"),
+        el("input",{id:"cte_a_title",cls:"input",value:d.title||"",placeholder:"e.g. Attendance lifted from 61% to 84%"}),
+        el("div",{cls:"lbl",st:{marginTop:"12px"}},"Detail"),
+        el("textarea",{id:"cte_a_detail",cls:"input",rows:"3"},d.detail||""),
+        el("div",{cls:"lbl",st:{marginTop:"12px"}},"Date"),
+        el("input",{id:"cte_a_date",cls:"input",type:"date",value:d.achieved_on||""})),
+      el("div",{cls:"cte-mf"},
+        d.id?el("button",{cls:"sbtn danger",st:{marginRight:"auto"},onClick:()=>cteDeleteAchievement(d.id)},"Delete"):null,
+        el("button",{cls:"sbtn ghost",onClick:close},"Cancel"),
+        el("button",{cls:"sbtn primary",onClick:()=>cteSaveAchievement({id:d.id,committee_id:d.committee_id,
+          title:val("cte_a_title"),detail:val("cte_a_detail"),achieved_on:val("cte_a_date")})},"Save"))));
+}
+
+function cteExport(ay){
+  const headers=["Committee","Role","Resident","Level","Faculty leads"];
+  const rows=[];
+  const RL={leader:"Leader",co_leader:"Co-leader",member:"Member"};
+  CTE_DEFS.forEach(c=>{
+    const fac=cteFacultyOf(c.id).map(f=>{const x=CONSULTANTS.find(y=>y.id==f.consultant_id);return x?x.name:"";}).filter(Boolean).join("; ");
+    const ordered=[cteLeader(c.id),cteCoLeader(c.id)].filter(Boolean).concat(ctePlain(c.id));
+    if(!ordered.length){rows.push([c.name,"","(no members)","",fac]);return;}
+    ordered.forEach(m=>{
+      const r=anyResById(m.resident_id);
+      rows.push([c.name,RL[m.role]||m.role,r?dname(r.name):"#"+m.resident_id,r?r.level:"",fac]);
+    });
+  });
+  const ws=XLSX.utils.aoa_to_sheet([headers,...rows]);
+  ws["!cols"]=headers.map(()=>({wch:30}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Committees");
+  XLSX.writeFile(wb,"Committees_"+ay+"-"+String(ay+1).slice(2)+".xlsx");
+}
+
+function renderCommittees(){
+  const ay=cteAY();
+  if(CTE_AY!==ay){
+    if(!CTE_LOADING){
+      CTE_LOADING=true;
+      loadCommitteesAY(ay).then(()=>{CTE_LOADING=false;render();});
+    }
+    return el("div",{cls:"content"},
+      el("div",{st:{padding:"60px 0",color:"rgba(31,26,18,.4)",fontSize:".85rem"}},"Loading committees\u2026"));
+  }
+  if(CTE_ERR){
+    return el("div",{cls:"content"},
+      el("h1",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"2rem",fontWeight:"400",marginBottom:"14px"}},"Committees"),
+      el("p",{cls:"alert-yellow"},"The committee tables are not there yet. Run supabase/add_committees.sql in the Supabase SQL Editor, then reload."),
+      el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.35)",marginTop:"10px"}},CTE_ERR));
+  }
+  if(!CTE_DEFS.length){
+    return el("div",{cls:"content"},cteHeader(ay),
+      el("p",{cls:"alert-yellow"},"No committees are set up yet. Run supabase/add_committees.sql in the Supabase SQL Editor."));
+  }
+  const sel=STATE.cteSel?cteDef(STATE.cteSel):null;
+  if(sel&&STATE.cteMode==="assign"&&canManageCommittees())return el("div",{cls:"content"},cteAssignView(sel));
+  if(sel)return el("div",{cls:"content"},cteWorkspace(sel));
+  const tab=STATE.cteTab||"all";
+  return el("div",{cls:"content"},
+    cteHeader(ay),
+    el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"8px"}},
+      ...[["all","Committees"],["mine","My committees"]].map(t=>{
+        const active=tab===t[0];
+        return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",
+          color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",
+          borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px"},
+          onClick:()=>set({cteTab:t[0]})},t[1]);
+      })),
+    tab==="mine"?cteMine():el("div",null,cteCoverage(ay),...CTE_DEFS.map(cteBand))
+  );
+}
 // ─── BEST RESIDENT MODULE ─────────────────────────────────────────────────────
 function renderBestResident(){
   const u=STATE.user;
@@ -13237,6 +13921,7 @@ function render(){
         case"calendar":content=renderCalendar();break;
         case"best_resident":content=renderBestResident();break;
         case"leave_plan":content=renderLeavePlan();break;
+        case"committees":content=renderCommittees();break;
         default:content=renderModGrid();
       }
     }
@@ -13252,6 +13937,8 @@ function render(){
   if(STATE.showBroadcast)(isPD()||STATE.user?.role==="chief")&&app.appendChild(renderBroadcastModal());
   if(STATE.showCalModal)app.appendChild(renderCalModal());
   if(STATE.brDetailRid)app.appendChild(renderBrDetailModal());
+  if(STATE.cteMtg)app.appendChild(renderCteMeetingModal());
+  if(STATE.cteAch)app.appendChild(renderCteAchModal());
   const _np=renderNotifPanel();if(_np)app.appendChild(_np);
   const srch=renderSearchOverlay();if(srch)app.appendChild(srch);
   appendAccountModal(app);
