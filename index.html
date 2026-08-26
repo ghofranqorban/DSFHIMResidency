@@ -1170,7 +1170,7 @@ async function loadRotaPlan(){
   // so page it and order by the unique key.
   const[{data,error},{data:sdata,error:serr}]=await Promise.all([
     fetchAllRows(()=>sb.from("rota_plan")
-      .select("resident_id,block_number,segment,week_start,weeks,rotation_name,leave_weeks,leave_position,note")
+      .select("resident_id,block_number,segment,week_start,weeks,rotation_name,leave_weeks,leave_position,note,source")
       .eq("academic_year",PLAN_AY)
       .order("resident_id").order("block_number").order("segment")),
     sb.from("rota_plan_block_status").select("*").eq("academic_year",PLAN_AY)
@@ -1182,7 +1182,8 @@ async function loadRotaPlan(){
     if(!plan[rid])plan[rid]={};
     if(!plan[rid][blk])plan[rid][blk]=[];
     plan[rid][blk].push({seg:r.segment||1,weekStart:r.week_start||1,weeks:r.weeks||4,
-      rot:r.rotation_name||"",leaveWeeks:r.leave_weeks||0,leavePos:r.leave_position||"none",note:r.note||""});
+      rot:r.rotation_name||"",leaveWeeks:r.leave_weeks||0,leavePos:r.leave_position||"none",note:r.note||"",
+      source:r.source||null});
   });
   Object.keys(plan).forEach(rid=>Object.keys(plan[rid]).forEach(b=>plan[rid][b].sort((x,y)=>x.seg-y.seg)));
   const st={};
@@ -10533,6 +10534,14 @@ function rbPrefillR4(rid,blk){
   return null;
 }
 function rbPlanRoster(){return allRoster().filter(r=>planLevel(r));}
+// A cell the prefill wrote may be replaced on a re-run; one the chief touched may not.
+// The two are otherwise identical rows, which is why rota_plan carries `source`. Every
+// segment must be marked, so a cell the chief split by hand beside a prefilled segment
+// counts as hand-owned — savePlanCell() rewrites the whole cell without a source anyway.
+function rbPrefillOwned(rid,blk){
+  const segs=(ROTA_PLAN[rid]||{})[String(blk)]||[];
+  return segs.length>0&&segs.every(s=>s.source==="prefill");
+}
 // Works out every cell the prefill would write without touching the database, so the
 // confirm dialog can show real counts and the save can replay the identical result.
 // Approved leave is binding and the R4 picks are only preferences, so leave always wins
@@ -10541,7 +10550,8 @@ function rbPlanRoster(){return allRoster().filter(r=>planLevel(r));}
 function rbPrefillPlan(src){
   const fills=[],counts={leave:0,elective:0,clinic:0};
   const skip={planned:0,locked:0,displaced:0,leaveHold:0};
-  let shared=0;
+  let shared=0,refresh=0;
+  const hit={};
   rbPlanRoster().forEach(r=>{
     rotaPeriods(PLAN_AY).forEach((_,i)=>{
       const blk=i+1;
@@ -10550,7 +10560,8 @@ function rbPrefillPlan(src){
       const pick=(r4&&src[r4.src])?r4:null;
       if(lv&&!src.leave){if(pick)skip.leaveHold++;return;}
       if(!lv&&!pick)return;
-      if(((ROTA_PLAN[r.id]||{})[String(blk)]||[]).length){skip.planned++;return;}
+      const owned=rbPrefillOwned(r.id,blk);
+      if(((ROTA_PLAN[r.id]||{})[String(blk)]||[]).length&&!owned){skip.planned++;return;}
       if(!planBlockEditable(blk)){skip.locked++;return;}
       const bw=blockWeeks(blk,PLAN_AY),lw=rbLeaveWeeks(lv?lv.mode:"none",bw);
       let segs;
@@ -10572,32 +10583,61 @@ function rbPrefillPlan(src){
         segs=[{weekStart:1,weeks:bw,rot:pick.rot}];
         counts[pick.src]++;
       }
+      if(owned)refresh++;
+      hit[r.id+":"+blk]=1;
       fills.push({rid:r.id,blk,segs});
     });
   });
-  return{fills,counts,skip,shared};
+  // Cells a previous run wrote that the plans no longer justify — the leave was withdrawn,
+  // or the approval moved to another block. The re-run drops them rather than leaving a
+  // stale copy behind. Locked blocks are excluded: their prefilled rows are left as they are.
+  let stale=0;
+  rbPlanRoster().forEach(r=>{
+    rotaPeriods(PLAN_AY).forEach((_,i)=>{
+      const blk=i+1;
+      if(hit[r.id+":"+blk]||!planBlockEditable(blk))return;
+      if(rbPrefillOwned(r.id,blk))stale++;
+    });
+  });
+  return{fills,counts,skip,shared,refresh,stale};
 }
 async function rbRunPrefill(){
-  const{fills}=rbPrefillPlan(STATE.rbPfSrc||{leave:true,elective:true,clinic:true});
+  const{fills,refresh,stale}=rbPrefillPlan(STATE.rbPfSrc||{leave:true,elective:true,clinic:true});
+  const blocks=rotaPeriods(PLAN_AY).map((_,i)=>i+1).filter(planBlockEditable);
+  // Clear what the last run wrote before writing this one, so an approval that has since
+  // moved or been withdrawn does not leave its old cell behind. Only source='prefill' rows
+  // go — anything the chief placed or edited by hand carries no source and survives. The
+  // delete is scoped to editable blocks, so an approved or published block keeps its rows.
+  if(blocks.length){
+    const{error:derr}=await sb.from("rota_plan").delete()
+      .eq("academic_year",PLAN_AY).eq("source","prefill").in("block_number",blocks);
+    if(derr){showToast("Could not clear the previous prefill: "+derr.message,"error");return;}
+  }
   const rows=[];
   fills.forEach(f=>f.segs.forEach((s,i)=>rows.push({
     resident_id:f.rid,academic_year:PLAN_AY,block_number:f.blk,
     segment:i+1,week_start:s.weekStart,weeks:s.weeks,
-    rotation_name:s.rot,leave_weeks:0,leave_position:"none",
+    rotation_name:s.rot,leave_weeks:0,leave_position:"none",source:"prefill",
     updated_by:STATE.user?.profileId||null,updated_at:new Date().toISOString()
   })));
-  if(!rows.length)return;
-  // Every cell here was empty, so there is nothing to delete first and the whole prefill
-  // goes in as one insert rather than one round trip per cell.
-  const{error}=await sb.from("rota_plan").insert(rows);
-  if(error){showToast("Could not prefill: "+error.message,"error");return;}
+  // Both can be empty on a run whose only effect is clearing stale cells, so the insert is
+  // conditional but the reload is not.
+  if(rows.length){
+    const{error}=await sb.from("rota_plan").insert(rows);
+    if(error){showToast("Could not prefill: "+error.message,"error");return;}
+  }
   STATE.rbPrefill=false;
   await loadRotaPlan();
-  showToast("Filled "+fills.length+" cell"+(fills.length===1?"":"s"),"success");
+  const parts=[];
+  if(fills.length-refresh)parts.push("Filled "+(fills.length-refresh));
+  if(refresh)parts.push("refreshed "+refresh);
+  if(stale)parts.push("cleared "+stale);
+  showToast((parts.length?parts.join(", "):"Nothing changed")+
+    (parts.length?" cell"+(fills.length+stale===1?"":"s"):""),"success");
 }
 function rbPrefillModal(){
   const src=STATE.rbPfSrc||{leave:true,elective:true,clinic:true};
-  const{fills,counts,skip,shared}=rbPrefillPlan(src);
+  const{fills,counts,skip,shared,refresh,stale}=rbPrefillPlan(src);
   const rowDef=[
     ["leave","Approved annual leave","Only leave the PD has approved — a suggested one is left alone."],
     ["elective","R4 electives → Elective","From submitted R4 preferences."],
@@ -10616,19 +10656,23 @@ function rbPrefillModal(){
   if(skip.leaveHold)notes.push(skip.leaveHold+" R4 pick"+s(skip.leaveHold)+" held back — that block has approved leave.");
   if(skip.displaced)notes.push(skip.displaced+" R4 pick"+s(skip.displaced)+" dropped — the whole block is leave.");
   if(shared)notes.push(shared+" cell"+s(shared)+(shared===1?" takes":" take")+" leave and an R4 pick together, so the counts above overlap.");
+  if(refresh)notes.push(refresh+" cell"+s(refresh)+" from the last prefill "+(refresh===1?"is":"are")+" rewritten with the current plan.");
+  if(stale)notes.push(stale+" cell"+s(stale)+" from the last prefill "+(stale===1?"is":"are")+" cleared — the approval behind "+(stale===1?"it has":"them has")+" moved or been withdrawn.");
   return el("div",{cls:"rb-pfov",onClick:e=>{if(e.target.classList.contains("rb-pfov"))set({rbPrefill:false});}},
     el("div",{cls:"rb-pf"},
       el("div",{cls:"ct"},"Prefill the grid"),
-      el("p",{cls:"cb"},"Fills empty cells in the ",ayLabel(PLAN_AY)," draft from plans that are already ",
-        el("b",null,"approved"),". Cells you have already planned are never overwritten."),
+      el("p",{cls:"cb"},"Fills the ",ayLabel(PLAN_AY)," draft from plans that are already ",
+        el("b",null,"approved"),". Replaces what an earlier prefill wrote, so this stays in step ",
+        "with the approvals. Cells you planned or edited yourself are never touched."),
       tally,
       el("div",{cls:"sum"},el("span",{cls:"big"},String(fills.length)),
         el("span",{cls:"lbl"},"cell"+(fills.length===1?"":"s")+" will be filled")),
       notes.length?el("div",{cls:"foot"},notes.join(" ")):null,
       el("div",{cls:"cbtns"},
         el("button",{cls:"sbtn ghost",onClick:()=>set({rbPrefill:false})},"Cancel"),
-        el("button",{cls:"sbtn primary",disabled:!fills.length,onClick:rbRunPrefill},
-          fills.length?"Prefill "+fills.length+" cell"+(fills.length===1?"":"s"):"Nothing to fill"))));
+        el("button",{cls:"sbtn primary",disabled:!fills.length&&!stale,onClick:rbRunPrefill},
+          fills.length?"Prefill "+fills.length+" cell"+(fills.length===1?"":"s")
+          :stale?"Clear "+stale+" stale cell"+(stale===1?"":"s"):"Nothing to fill"))));
 }
 function rbOpenCell(rid,blk){
   const segs=(ROTA_PLAN[rid]||{})[String(blk)]||[];
