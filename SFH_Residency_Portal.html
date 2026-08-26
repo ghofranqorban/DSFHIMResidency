@@ -12114,20 +12114,34 @@ function renderKPIExecutive(){
 #kpix-wrap .pod-4 .pod-avatar,#kpix-wrap .pod-5 .pod-avatar{width:62px;height:62px;font-size:.9rem;background:var(--cream-warm);color:rgba(31,26,18,.3);border:1px solid rgba(31,26,18,.04);}
 #kpix-wrap .pod-crown{position:absolute;top:-26px;left:50%;transform:translateX(-50%) scale(0);opacity:0;z-index:2;}
 #kpix-wrap .pod-badge{position:absolute;bottom:-3px;right:-3px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-weight:700;color:#fff;border:2px solid var(--cream);z-index:2;}
-#kpix-wrap .pod-1 .pod-badge{width:28px;height:28px;font-size:.68rem;background:linear-gradient(135deg,var(--gold-light),var(--gold));box-shadow:0 3px 8px rgba(164,122,40,.2);}
-#kpix-wrap .pod-2 .pod-badge{width:24px;height:24px;font-size:.58rem;background:linear-gradient(135deg,#dfe2e6,var(--silver));box-shadow:0 2px 6px rgba(0,0,0,.08);}
-#kpix-wrap .pod-3 .pod-badge{width:24px;height:24px;font-size:.58rem;background:linear-gradient(135deg,#e2a877,var(--bronze));box-shadow:0 2px 6px rgba(0,0,0,.08);}
-#kpix-wrap .pod-4 .pod-badge,#kpix-wrap .pod-5 .pod-badge{width:20px;height:20px;font-size:.48rem;background:rgba(31,26,18,.14);box-shadow:0 2px 4px rgba(0,0,0,.06);}
+/* the digit is white and ~10px, so the LIGHTEST stop of each gradient has to clear 4.5:1 by
+   itself. The medal tokens read 2.5-3.9:1 behind white and rank 4-5 read 1.2:1 -- fine while
+   this was decoration, not fine now that the badge is the only place the rank is written. */
+#kpix-wrap .pod-1 .pod-badge{width:28px;height:28px;font-size:.68rem;background:linear-gradient(135deg,#8A6420,#6d4e18);box-shadow:0 3px 8px rgba(164,122,40,.2);}
+#kpix-wrap .pod-2 .pod-badge{width:24px;height:24px;font-size:.58rem;background:linear-gradient(135deg,#646B75,#4d535b);box-shadow:0 2px 6px rgba(0,0,0,.08);}
+#kpix-wrap .pod-3 .pod-badge{width:24px;height:24px;font-size:.58rem;background:linear-gradient(135deg,#96591F,#7a4718);box-shadow:0 2px 6px rgba(0,0,0,.08);}
+#kpix-wrap .pod-4 .pod-badge,#kpix-wrap .pod-5 .pod-badge{width:20px;height:20px;font-size:.48rem;background:rgba(31,26,18,.66);box-shadow:0 2px 4px rgba(0,0,0,.06);}
 #kpix-wrap .pod-name{font-weight:600;margin-bottom:2px;}
 #kpix-wrap .pod-1 .pod-name{font-size:.9rem;}
 #kpix-wrap .pod-2 .pod-name,#kpix-wrap .pod-3 .pod-name{font-size:.78rem;}
 #kpix-wrap .pod-4 .pod-name,#kpix-wrap .pod-5 .pod-name{font-size:.7rem;color:rgba(31,26,18,.5);}
 #kpix-wrap .pod-level{font-size:.54rem;color:rgba(31,26,18,.28);margin-bottom:12px;}
+#kpix-wrap .pod-empty{font-size:.82rem;line-height:1.6;color:rgba(31,26,18,.62);max-width:46ch;margin:0 auto;text-align:center;}
 #kpix-wrap .pod-score{font-family:'Playfair Display',serif;font-weight:700;line-height:1;}
-#kpix-wrap .pod-1 .pod-score{font-size:2.6rem;color:var(--terracotta-deep);}
-#kpix-wrap .pod-2 .pod-score{font-size:1.7rem;color:var(--silver);}
-#kpix-wrap .pod-3 .pod-score{font-size:1.7rem;color:var(--bronze);}
-#kpix-wrap .pod-4 .pod-score,#kpix-wrap .pod-5 .pod-score{font-size:1.3rem;color:rgba(31,26,18,.2);}
+/* every colour here is set for the DENOMINATOR, which is the smallest text on the card and on
+   mobile falls under the 18.66px large-text cutoff -- so all five must clear 4.5:1 on cream,
+   not the 3:1 the big numeral alone would need. --terracotta-deep and the medal tokens all
+   fail that; the tokens still tint the badges, where they sit behind white text. */
+#kpix-wrap .pod-1 .pod-score{font-size:2.6rem;color:#a94e2c;}
+#kpix-wrap .pod-2 .pod-score{font-size:1.7rem;color:#646B75;}
+#kpix-wrap .pod-3 .pod-score{font-size:1.7rem;color:#96591F;}
+/* ranks 4-5 stay visually quieter than the top three, but the count is the result now, not a
+   decoration: .2 was unreadable for a number a resident is being judged on */
+#kpix-wrap .pod-4 .pod-score,#kpix-wrap .pod-5 .pod-score{font-size:1.3rem;color:rgba(31,26,18,.66);}
+/* baseline-aligned, not a superscript -- "/6" set as an exponent reads as a power, and the
+   denominator is load-bearing here because it differs per resident (5 of 5 is not 5 of 6).
+   Quieted by size and nothing else: an opacity here would drop it back below 4.5:1. */
+#kpix-wrap .pod-den{font-size:.52em;font-weight:700;letter-spacing:-.01em;}
 #kpix-wrap .pod-score sup{font-size:.35em;font-weight:400;vertical-align:super;opacity:.45;}
 #kpix-wrap .pod-riser{width:100%;border-radius:10px 10px 0 0;height:0;position:relative;overflow:hidden;margin-top:16px;}
 #kpix-wrap .pod-1 .pod-riser{background:linear-gradient(180deg,rgba(201,106,74,.08),rgba(201,106,74,.03));border-top:2px solid rgba(201,106,74,.12);}
@@ -12186,6 +12200,39 @@ function renderKPIExecutive(){
 #kpix-wrap .drow .fill{height:100%;width:0%;border-radius:9999px;}
 #kpix-wrap .drow .val{font-family:'Playfair Display',serif;font-weight:700;min-width:44px;text-align:right;}
 #kpix-wrap .drow .wt{font-size:.6rem;color:rgba(31,26,18,.25);min-width:32px;text-align:right;}
+/* ── Five Podiums: one ranking per Performance dimension ──────────────────────────────────
+   Performance is never aggregated, so there is no single score to rank by and no single
+   winner to crown. Each dimension keeps its own units and awards its own three places. */
+#kpix-wrap .kpix-perfpod{padding:110px 24px 0;position:relative;}
+#kpix-wrap .pp-hinge{display:flex;align-items:center;gap:20px;max-width:1080px;margin:0 auto 56px;}
+#kpix-wrap .pp-hinge::before,#kpix-wrap .pp-hinge::after{content:'';flex:1;height:1px;background:rgba(31,26,18,.09);}
+/* not var(--terracotta): #c96a4a is 3.53:1 on cream and this is 9.6px type. The older section
+   eyebrows have the same problem and should follow, but that is a sheet-wide change. */
+#kpix-wrap .pp-hinge span{font-size:.6rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:#a94e2c;white-space:nowrap;}
+#kpix-wrap .kpix-perfpod .sec-head h2{font-size:2rem;}
+#kpix-wrap .pp-sub{font-size:.82rem;line-height:1.6;color:rgba(31,26,18,.62);max-width:56ch;margin:14px auto 0;text-align:center;}
+#kpix-wrap .pp-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:24px 20px;max-width:1080px;margin:56px auto 0;}
+#kpix-wrap .pp-dl{font-size:.58rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(31,26,18,.62);line-height:1.4;min-height:2.6em;padding-bottom:12px;border-bottom:1px solid rgba(31,26,18,.09);}
+#kpix-wrap .pp-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(31,26,18,.09);}
+#kpix-wrap .pp-row:last-of-type{border-bottom:none;}
+/* the rank digit is white on the badge's lightest stop, so that stop carries the contrast on
+   its own: the shipped medal tokens read 2.5-3.9:1 behind white and the digit IS the rank */
+#kpix-wrap .pp-b{width:19px;height:19px;border-radius:50%;color:#fff;font-size:.56rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;}
+#kpix-wrap .pp-1 .pp-b{background:linear-gradient(135deg,#8A6420,#6d4e18);}
+#kpix-wrap .pp-2 .pp-b{background:linear-gradient(135deg,#646B75,#4d535b);}
+#kpix-wrap .pp-3 .pp-b{background:linear-gradient(135deg,#96591F,#7a4718);}
+#kpix-wrap .pp-n{font-size:.76rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#kpix-wrap .pp-1 .pp-n{font-size:.84rem;font-weight:700;}
+#kpix-wrap .pp-v{font-family:'Playfair Display',serif;font-weight:700;font-size:1rem;font-variant-numeric:tabular-nums;color:rgba(31,26,18,.66);}
+#kpix-wrap .pp-1 .pp-v{font-size:1.6rem;color:#a94e2c;}
+#kpix-wrap .pp-v .u{font-size:.55em;}
+#kpix-wrap .pp-sup{font-size:.62rem;color:rgba(31,26,18,.62);margin-top:12px;}
+#kpix-wrap .pp-none{font-size:.72rem;line-height:1.6;color:rgba(31,26,18,.62);margin-top:14px;}
+#kpix-wrap .pp-foot{font-size:.74rem;line-height:1.7;color:rgba(31,26,18,.62);max-width:72ch;margin:40px auto 0;padding-top:20px;border-top:1px solid rgba(31,26,18,.09);}
+/* five columns of names stop being legible well above the 760 breakpoint the rest of this
+   sheet uses, so this section gets its own two steps */
+@media(max-width:1000px){#kpix-wrap .pp-grid{grid-template-columns:repeat(2,1fr);gap:32px 28px;}}
+@media(max-width:560px){#kpix-wrap .pp-grid{grid-template-columns:1fr;}#kpix-wrap .kpix-perfpod{padding:70px 16px 0;}#kpix-wrap .pp-hinge{margin-bottom:36px;}}
 #kpix-wrap .kpix-progkpi{padding:96px 0 40px;position:relative;}
 #kpix-wrap .pk-sub{font-size:.82rem;line-height:1.6;color:rgba(31,26,18,.62);max-width:58ch;margin:14px auto 0;text-align:center;}
 #kpix-wrap .pk-chart{display:grid;grid-template-columns:repeat(6,1fr);margin-top:56px;}
@@ -12319,7 +12366,11 @@ function renderKPIExecutive(){
 
   // ── Data computation (same as before) ──
   const active=RESIDENTS.filter(r=>r.active!==false);
-  const scored=active.map(r=>({...r,k:calcKPI(r.id)})).sort((a,b)=>b.k.overall-a.k.overall);
+  // cv is computed once per resident and handed the existing calcKPI result, so canmedsVerdicts
+  // does not recompute it 38 times. Only the podium reads cv; nothing else may depend on the
+  // sort order of `scored`, which is why the podium builds its own array below.
+  const scored=active.map(r=>{const k=calcKPI(r.id);return{...r,k,cv:canmedsVerdicts(r.id,{k})};})
+    .sort((a,b)=>b.k.overall-a.k.overall);
   const total=scored.length||1;
   const avgKPI=Math.round(scored.reduce((s,r)=>s+r.k.overall,0)/total);
   const mmScored=scored.filter(r=>r.k.mmPct!=null);
@@ -12567,7 +12618,23 @@ function renderKPIExecutive(){
   });
 
   // ── Podium (top 5) HTML ──
-  var podTop5=scored.slice(0,Math.min(5,scored.length));
+  // Ranked on CanMEDS standards MET, not the retired weighted score. The old `overall` averaged
+  // eleven weighted domains, and there was never a defensible answer to why quiz was worth 25%
+  // and QI 10%; a count of binary standards needs no exchange rate.
+  //
+  // Residents with nothing judged yet are excluded rather than ranked last: applicable is 0 both
+  // for a resident nobody has assessed and for one with no obligations, and "0 of 0" is not a
+  // result. This is the same "not recorded is not the same as not met" rule the rest of the
+  // page follows.
+  //
+  // Tie-break is fewest standards MISSED, so 3 of 3 outranks 3 of 5 -- the second resident has
+  // two real failures. Beyond that ties are broken by name: with at most 6 applicable standards
+  // across 38 residents, ties are the normal case, and ordering them by any residual number
+  // would smuggle back the aggregate this model exists to remove.
+  var podRanked=scored.filter(function(r){return r.cv.applicable>0;}).slice().sort(function(a,b){
+    return (b.cv.met-a.cv.met)||(a.cv.notMet-b.cv.notMet)||a.name.localeCompare(b.name);
+  });
+  var podTop5=podRanked.slice(0,Math.min(5,podRanked.length));
   var podRiserH=[180,130,100,70,50];
   var podDisplayOrder=[3,1,0,2,4];
   var podiumHtml='';
@@ -12583,10 +12650,63 @@ function renderKPIExecutive(){
       +'</div>'
       +'<div class="pod-name">'+dnameL(r.name)+'</div>'
       +'<div class="pod-level">'+r.level+'</div>'
-      +'<div class="pod-score" data-final="'+r.k.overall+'"><span class="psv">0</span><sup>%</sup></div>'
+      +'<div class="pod-score" data-final="'+r.cv.met+'"><span class="psv">0</span>'
+        +'<span class="pod-den">/'+r.cv.applicable+'</span></div>'
       +'<div class="pod-riser" data-h="'+podRiserH[idx]+'"></div>'
       +'</div>';
   });
+
+  // ── Five Podiums: Performance, one ranking per dimension ──
+  // There is deliberately no single Performance score to rank by: 3 publications and a quiz
+  // average of 95 have no defensible exchange rate, and inventing one is exactly the weighted
+  // aggregate the CanMEDS model replaced. So each dimension awards its own three places. A
+  // resident can lead one and place nowhere in another; both statements are true at once.
+  function ppQuizzesSat(id){
+    return QUIZZES.filter(function(q){return q.published&&q.sc&&q.sc[id]!=null;}).length;
+  }
+  var perfDims=[
+    // mmPct/tPct/qAvg are null - not 0 - when there is nothing to average, so every value
+    // function may return null and null rows are dropped rather than ranked last.
+    {label:"Quiz average",unit:"%",note:"Across published quizzes",
+     val:function(r){return ppQuizzesSat(r.id)?r.k.qAvg:null;},
+     none:"No quiz has been sat yet."},
+    {label:"Morning Meeting attendance",unit:"%",note:"Of sessions they were rostered for",
+     val:function(r){return r.k.mmPct;},
+     none:"No morning meeting attendance recorded yet."},
+    {label:"Academic Day attendance",unit:"%",note:"Of academic days held",
+     val:function(r){return r.k.tPct;},
+     none:"No academic day attendance recorded yet."},
+    // counts, not percentages: a "leader" on zero is not a leader, so zeros are dropped too
+    {label:"Sessions presented",unit:"",note:"Morning Meeting",count:true,
+     val:function(r){return r.k.presCount;},
+     none:"No resident has presented yet."},
+    {label:"Publications",unit:"",note:"Published, this training",count:true,
+     val:function(r){return (RESEARCH_PROJECTS[r.id]||[]).filter(function(p){
+       return p.status==="published";}).length;},
+     none:"No publication is on file yet.",
+     // a failed CanMEDS read and an empty table are indistinguishable from the row data alone,
+     // and the difference is "could not load" versus "nobody has published"
+     needsCanmeds:true}
+  ];
+  var ppGridHtml=perfDims.map(function(d){
+    var rows;
+    if(d.needsCanmeds&&!pkReady){
+      rows='<p class="pp-none">Research records could not be loaded, so this ranking is not shown.</p>';
+    }else{
+      var ranked=scored.map(function(r){return{name:r.name,v:d.val(r)};})
+        .filter(function(x){return x.v!=null&&(!d.count||x.v>0);})
+        .sort(function(a,b){return (b.v-a.v)||a.name.localeCompare(b.name);})
+        .slice(0,3);
+      rows=ranked.length
+        ? ranked.map(function(x,i){
+            return '<div class="pp-row pp-'+(i+1)+'"><span class="pp-b">'+(i+1)+'</span>'
+              +'<span class="pp-n">'+dnameL(x.name)+'</span>'
+              +'<span class="pp-v">'+x.v+(d.unit?'<span class="u">'+d.unit+'</span>':'')+'</span></div>';
+          }).join('')+'<div class="pp-sup">'+d.note+'</div>'
+        : '<p class="pp-none">'+d.none+'</p>';
+    }
+    return '<div class="pp-col"><div class="pp-dl">'+d.label+'</div>'+rows+'</div>';
+  }).join('');
 
   // ── Publications for marquee ──
   var publications=KPI_PROPOSALS.filter(function(p){return p.status==="approved"&&p.field_key==="publication";});
@@ -12771,6 +12891,7 @@ function renderKPIExecutive(){
     +'<nav class="kpix-navdots" id="kpix-navdots">'
     +'<a href="#kpix-pin-wrap" data-name="Overview"><span>Overview</span></a>'
     +'<a href="#kpix-podium" data-name="Podium"><span>Podium</span></a>'
+    +'<a href="#kpix-perfpod" data-name="Performance"><span>Performance</span></a>'
     +'<a href="#kpix-achievements" data-name="Research"><span>Research</span></a>'
     +'<a href="#kpix-progkpi" data-name="Programme KPI"><span>Programme KPI</span></a>'
     +'<a href="#kpix-metrics" data-name="Metrics"><span>Cohort Metrics</span></a>'
@@ -12801,8 +12922,18 @@ function renderKPIExecutive(){
     // Podium
     +'<section class="kpix-podium" id="kpix-podium">'
     +'<div class="conf-host" id="kpix-podiumConfHost"></div>'
-    +'<div class="sec-head reveal"><div class="lbl">Top Performers</div><h2>The Podium</h2></div>'
-    +'<div class="podium-row" id="kpix-podiumRow">'+podiumHtml+'</div>'
+    +'<div class="sec-head reveal"><div class="lbl">Standards Met</div><h2>The Podium</h2></div>'
+    +(podiumHtml?'<div class="podium-row" id="kpix-podiumRow">'+podiumHtml+'</div>'
+      :'<p class="pod-empty">No standard has been judged yet, so there is nothing to rank. Residents appear here once their records are entered and confirmed.</p>')
+    +'</section>'
+
+    // Five Podiums - Performance, one ranking per dimension, nothing summed
+    +'<section class="kpix-perfpod" id="kpix-perfpod">'
+    +'<div class="pp-hinge"><span>Performance</span></div>'
+    +'<div class="sec-head reveal"><h2>Five Podiums</h2>'
+    +'<p class="pp-sub">Gold, silver and bronze in every dimension separately. Fifteen places instead of three, and no dimension has to be traded against another to award them.</p></div>'
+    +'<div class="pp-grid">'+ppGridHtml+'</div>'
+    +'<p class="pp-foot">Standards met is a count, so it can be ranked outright. Performance cannot: a quiz average and a publication count share no scale, so they keep their own podiums rather than being averaged into a single score.</p>'
     +'</section>'
 
     // Published Research Marquee
@@ -13223,7 +13354,7 @@ function renderKPIExecutive(){
     });
 
     // ── Nav dots active state ──
-    var dotSections=["kpix-pin-wrap","kpix-podium","kpix-achievements","kpix-progkpi","kpix-metrics"];
+    var dotSections=["kpix-pin-wrap","kpix-podium","kpix-perfpod","kpix-achievements","kpix-progkpi","kpix-metrics"];
     var dots=wrap.querySelectorAll("#kpix-navdots a");
     dotSections.forEach(function(id,i){
       ScrollTrigger.create(Object.assign({},stConfig,{
