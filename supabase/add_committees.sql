@@ -8,8 +8,8 @@
 -- KPI numbers. Everything here is additive: no column is dropped and the view is
 -- left alone.
 --
--- The one behavioural change is that committee_name stops being free text. Seven
--- fixed committees replace "type whatever you like", because the unique index is
+-- The one behavioural change is that committee_name stops being free text. A
+-- fixed catalogue replaces "type whatever you like", because the unique index is
 -- on lower(committee_name) — so "Research Committee", "research" and "Research
 -- Comm." were three different committees as far as the KPI was concerned.
 --
@@ -55,6 +55,9 @@ insert into committees (id, slug, name, description, color, sort_order, privileg
      '{}'),
   (7,'morbidity_mortality','Morbidity & Mortality Committee',
      'M&M case review, presentation & follow-up','#b52040',7,
+     '{}'),
+  (8,'undergraduate','Undergraduate Committee',
+     'Medical student teaching, clerkship supervision & undergraduate exams','#5f6a2a',8,
      '{}')
 on conflict (id) do update
   set name           = excluded.name,
