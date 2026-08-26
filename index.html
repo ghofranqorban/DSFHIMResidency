@@ -2952,13 +2952,24 @@ function canmedsVerdicts(id,opts){
     note:"The Mumaris ITER is the authoritative record. The portal does not duplicate it."});
 
   // -- Collaborator ----------------------------------------------------------
-  // Membership only. Fair as a KPI because the PD guarantees every resident a seat.
+  // Membership only. Fair as a KPI because the PD guarantees every resident a seat -- except the
+  // Chief and Co-Chief, whom a committee_memberships trigger bars from holding one. They oversee
+  // every committee, so the chief role satisfies this outright. Deliberately "met" and not "na":
+  // "na" would drop them out of the denominator and leave them scored out of 5 while everyone
+  // else is scored out of 6, which makes the two totals incomparable.
   var comms=COMMITTEES[id]||[];
+  // Any non-null chief_role, matching both committee_summary's "r.chief_role is not null" and the
+  // Committees module's own !!r.chiefRole seat gate. Testing for the two known values instead
+  // would re-create the permanent-fail bug the moment a third chief_role is added.
+  var chiefRole=(resById(id)||{}).chiefRole;
+  var chiefTitle=chiefRole?(chiefRole==="cochief"?"Co-Chief":"Chief Resident"):null;
   roles.push({key:"collab",role:"Collaborator",
     kpi:"Member of at least one committee",
-    state:comms.length?"met":empty,
-    value:comms.length?(comms.length+" committee"+(comms.length!==1?"s":"")):"None on file",
-    note:comms.length?comms.map(function(c){return c.committee_name;}).join(", "):null});
+    state:(chiefTitle||comms.length)?"met":empty,
+    value:chiefTitle||(comms.length?(comms.length+" committee"+(comms.length!==1?"s":"")):"None on file"),
+    // a pass with no committee row behind it has to say what the evidence is, or it reads unaudited
+    note:chiefTitle?"Oversees all committees. Barred from holding a seat, so the chief role is the evidence."
+      :(comms.length?comms.map(function(c){return c.committee_name;}).join(", "):null)});
 
   // -- Manager ---------------------------------------------------------------
   var af=getApprovedFields(id);
@@ -12175,6 +12186,51 @@ function renderKPIExecutive(){
 #kpix-wrap .drow .fill{height:100%;width:0%;border-radius:9999px;}
 #kpix-wrap .drow .val{font-family:'Playfair Display',serif;font-weight:700;min-width:44px;text-align:right;}
 #kpix-wrap .drow .wt{font-size:.6rem;color:rgba(31,26,18,.25);min-width:32px;text-align:right;}
+#kpix-wrap .kpix-progkpi{padding:96px 0 40px;position:relative;}
+#kpix-wrap .pk-sub{font-size:.82rem;line-height:1.6;color:rgba(31,26,18,.62);max-width:58ch;margin:14px auto 0;text-align:center;}
+#kpix-wrap .pk-chart{display:grid;grid-template-columns:repeat(6,1fr);margin-top:56px;}
+#kpix-wrap .pk-col{grid-row:1;grid-column:var(--i);position:relative;height:320px;padding:0 12px;}
+#kpix-wrap .pk-bar{position:absolute;left:0;right:0;bottom:0;height:var(--v);width:min(64px,100%);margin:0 auto;background:rgba(201,106,74,.62);border-radius:4px 4px 0 0;transform-origin:50% 100%;}
+#kpix-wrap .pk-col.met .pk-bar{background:var(--green);}
+/* the shortfall is drawn, not left blank -- the distance still to close is the point */
+#kpix-wrap .pk-gap{position:absolute;left:0;right:0;bottom:var(--v);height:var(--g);width:min(64px,100%);margin:0 auto;transform-origin:50% 100%;border:1px dashed rgba(201,106,74,.45);border-bottom:none;border-radius:4px 4px 0 0;background:repeating-linear-gradient(-45deg,rgba(201,106,74,.06) 0 4px,transparent 4px 9px);}
+#kpix-wrap .pk-col.na .pk-gap{border-color:rgba(31,26,18,.18);background:repeating-linear-gradient(-45deg,rgba(31,26,18,.04) 0 4px,transparent 4px 9px);}
+/* each column carries its own segment of the rule; zero column gap joins them into one line */
+#kpix-wrap .pk-seg{position:absolute;left:0;right:0;bottom:var(--line);height:0;border-top:2px solid var(--ink);opacity:.8;}
+#kpix-wrap .pk-cap{position:absolute;right:12px;bottom:var(--line);padding-bottom:4px;font-size:.6rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(31,26,18,.75);white-space:nowrap;}
+#kpix-wrap .pk-cap b{color:#a94e2c;}
+#kpix-wrap .pk-mobcap{display:none;}
+#kpix-wrap .pk-ax{grid-row:2;grid-column:var(--i);padding:12px 12px 0;text-align:center;border-top:1px solid rgba(31,26,18,.09);}
+#kpix-wrap .pk-ax .nm{font-size:.74rem;font-weight:700;color:var(--ink);line-height:1.3;min-height:2.6em;display:flex;align-items:flex-start;justify-content:center;}
+/* the figure lives on the axis, never floating over the plot, so it cannot land on the wrong
+   side of the target rule or collide with the hatching */
+#kpix-wrap .pk-ax .val{font-family:'Playfair Display',Georgia,serif;font-size:1.5rem;font-weight:700;line-height:1;letter-spacing:-.02em;margin-top:4px;}
+/* reserves the second line so a target that wraps does not push its verdict out of step with
+   the other five -- the six verdicts have to be scannable as one row */
+#kpix-wrap .pk-ax .rq{font-size:.66rem;line-height:1.35;color:rgba(31,26,18,.62);margin-top:8px;min-height:2.7em;}
+#kpix-wrap .pk-ax .gp{font-size:.66rem;font-weight:700;margin-top:4px;}
+#kpix-wrap .pk-foot{font-size:.72rem;line-height:1.7;color:rgba(31,26,18,.62);margin-top:36px;max-width:66ch;}
+#kpix-wrap .pk-foot b{color:rgba(31,26,18,.82);font-weight:700;}
+#kpix-wrap .pk-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+/* six columns stop being legible well before mobile, so they become rows: the same custom
+   properties drive width instead of height and the rule becomes a per-row tick */
+@media(max-width:760px){
+#kpix-wrap .pk-chart{grid-template-columns:1fr;margin-top:36px;}
+#kpix-wrap .pk-col,#kpix-wrap .pk-ax{grid-row:auto;grid-column:1;}
+#kpix-wrap .pk-col{height:26px;padding:0;}
+#kpix-wrap .pk-bar,#kpix-wrap .pk-gap{top:0;bottom:auto;height:100%;width:var(--v);margin:0;transform-origin:0 50%;border-radius:0 4px 4px 0;}
+#kpix-wrap .pk-gap{left:var(--v);right:auto;width:var(--g);border:1px dashed rgba(201,106,74,.45);border-left:none;}
+#kpix-wrap .pk-col.na .pk-gap{border-color:rgba(31,26,18,.18);border-left:none;}
+#kpix-wrap .pk-seg{left:var(--line);right:auto;top:-3px;bottom:-3px;height:auto;width:0;border-top:none;border-left:2px solid var(--ink);}
+#kpix-wrap .pk-cap{display:none;}
+#kpix-wrap .pk-mobcap{display:block;text-align:center;font-size:.6rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(31,26,18,.75);margin-top:32px;}
+#kpix-wrap .pk-mobcap b{color:#a94e2c;}
+#kpix-wrap .pk-ax{display:grid;grid-template-columns:1fr auto;column-gap:16px;text-align:left;border-top:none;padding:8px 0 24px;border-bottom:1px solid rgba(31,26,18,.09);align-items:baseline;}
+#kpix-wrap .pk-ax .nm{min-height:0;display:block;grid-column:1;}
+#kpix-wrap .pk-ax .val{grid-column:2;grid-row:1;text-align:right;margin:0;}
+#kpix-wrap .pk-ax .rq{grid-column:1;margin-top:4px;min-height:0;}
+#kpix-wrap .pk-ax .gp{grid-column:2;text-align:right;margin-top:4px;}
+}
 #kpix-wrap .reveal{opacity:1;transform:none;}
 #kpix-wrap .icon-wrap svg{width:16px;height:16px;}
 #kpix-wrap .kpix-footer{padding:60px 24px 40px;text-align:center;position:relative;background:transparent;}
@@ -12289,6 +12345,117 @@ function renderKPIExecutive(){
     }).length;
   }
   const tierLabel=avgKPI>=80?"Outstanding":avgKPI>=60?"Strong Progress":avgKPI>=30?"Developing":"Needs Improvement";
+
+  // ── Programme KPI: six standards, each plotted against its OWN target ──────────────────────
+  // Five different thresholds (75/60/25/25/50) cannot share a y-axis: 18% published would look
+  // catastrophic beside 66% quiz although they are 7 and 6 points from their own targets. So every
+  // standard is drawn as a share of its target and one rule judges all six. The real figure is
+  // printed on the axis rather than floating in the plot, so it can never land on the wrong side
+  // of that rule.
+  //
+  // The three CanMEDS-backed standards read RESEARCH_PROJECTS / COMMITTEES, which are empty both
+  // when nobody qualifies AND when the load failed. Those two must never look the same, so an
+  // unavailable standard is null and renders as "no data", never as 0%.
+  var pkReady=CANMEDS_LOADED&&!CANMEDS_ERR;
+  function pkShare(n){return Math.round(n/total*100);}
+  function pkPct(n,d){return d?Math.round(n/d*100):null;}
+  function pkCount(fn){return active.filter(fn).length;}
+  // Attendance and quiz are the SHARE of residents personally clearing the bar, not the cohort
+  // mean: a mean can pass while a third of the programme fails, and the department cannot claim a
+  // standard its residents individually miss. The mean is department PERFORMANCE, reported
+  // separately and never scored. The personal bars are >=75 and >=60 to match canmedsVerdicts
+  // exactly -- if these drifted, this page would fail a resident whose own KPI page says met.
+  // Residents with no data are left out of the denominator rather than counted as failing.
+  var pkMmDen=mmScored.length, pkMmN=mmScored.filter(function(r){return r.k.mmPct>=75;}).length;
+  var pkQzDen=qScored.length,  pkQzN=qScored.filter(function(r){return r.k.qAvg>=60;}).length;
+  function pkPublished(r){return (RESEARCH_PROJECTS[r.id]||[]).some(function(p){return p.status==="published";});}
+  var pkPubN=pkReady?pkCount(pkPublished):null;
+  // Counted exclusively: a resident who has published is not also counted as in progress. If the
+  // two should instead be cumulative, delete the pkPublished guard and nothing else changes.
+  var pkIrbN=pkReady?pkCount(function(r){
+    if(pkPublished(r))return false;
+    return (RESEARCH_PROJECTS[r.id]||[]).some(function(p){
+      return p.status==="irb_approved"||p.status==="submitted";});
+  }):null;
+  // Chief and Co-Chief are barred from holding a seat but oversee every committee, so they count
+  // here exactly as they do in the resident-level Collaborator verdict.
+  var pkCommN=pkReady?pkCount(function(r){
+    return !!r.chiefRole||(COMMITTEES[r.id]||[]).length>0;}):null;
+  var pkQiN=achCount("qi");
+  // op is carried per standard rather than derived from kind: the programme spec sets attendance
+  // and committee as strictly greater-than, so attendance of exactly 75 is a miss, not a pass.
+  var progKpis=[
+    // The programme target reuses the personal bar rather than inventing a second number:
+    // "more than 75% of residents attend at least 75%". One constant each to change.
+    // The personal bar rides in the name, so the "need" line underneath can only be read as the
+    // share -- otherwise both numbers print as 75% on the same axis and neither says which is which.
+    {name:"Attendance &ge; 75%",target:75,op:">",
+     value:pkPct(pkMmN,pkMmDen),
+     basis:pkMmDen?pkMmN+" of "+pkMmDen:null},
+    {name:"Quiz &ge; 60%",target:60,op:">",
+     value:pkPct(pkQzN,pkQzDen),
+     basis:pkQzDen?pkQzN+" of "+pkQzDen+" who sat one":null},
+    {name:"Research published",label:"Share of residents published",target:25,op:">=",
+     value:pkPubN==null?null:pkShare(pkPubN),basis:pkPubN==null?null:pkPubN+" of "+total},
+    {name:"Research in progress",label:"Draft written or IRB approved",target:25,op:">=",
+     value:pkIrbN==null?null:pkShare(pkIrbN),basis:pkIrbN==null?null:pkIrbN+" of "+total},
+    {name:"QI / patient safety",label:"Share involved in a QI project",target:25,op:">=",
+     value:pkShare(pkQiN),basis:pkQiN+" of "+total},
+    {name:"Committee membership",label:"Share sitting on a committee",target:50,op:">",
+     value:pkCommN==null?null:pkShare(pkCommN),basis:pkCommN==null?null:pkCommN+" of "+total}
+  ];
+  progKpis.forEach(function(k){
+    k.avail=k.value!=null;
+    k.met=k.avail&&(k.op===">"?k.value>k.target:k.value>=k.target);
+    k.ratio=k.avail?Math.round(k.value/k.target*100):0;
+    k.gap=k.avail?k.value-k.target:0;
+  });
+  var pkMetN=progKpis.filter(function(k){return k.met;}).length;
+  var pkAvailN=progKpis.filter(function(k){return k.avail;}).length;
+  // Headroom above the tallest column, never below the preview's 124 so a healthy programme does
+  // not squash the target rule against the top of the plot.
+  var pkScale=Math.max(124,Math.max.apply(null,progKpis.map(function(k){return k.ratio;}))+10);
+  var pkLine=100/pkScale*100;
+  // Denominator is the standards that HAVE data, so a failed load reads "2 of 3", never "2 of 6".
+  var pkCap='Target &middot; <b>'+pkMetN+' of '+pkAvailN+'</b> clear this line';
+  var pkBody=progKpis.map(function(k,i){
+    var h=k.avail?Math.min(k.ratio,pkScale)/pkScale*100:0;
+    var ink=k.avail?(k.met?"var(--green-dark)":"#b55a3a"):"rgba(31,26,18,.3)";
+    // #b55a3a clears 4.5:1 on cream at 24px but not at 10px, so small text takes the darker tone
+    var inkSm=k.avail?(k.met?"var(--green-dark)":"#a94e2c"):"rgba(31,26,18,.45)";
+    var g=Math.abs(k.gap),u=(g===1?" pt ":" pts ");
+    return '<div class="pk-col'+(k.met?" met":"")+(k.avail?"":" na")+'" style="--i:'+(i+1)
+        +';--v:'+h+'%;--g:'+(pkLine-h)+'%;--line:'+pkLine+'%">'
+        +(k.met?"":'<div class="pk-gap"></div>')
+        +'<div class="pk-bar"></div><div class="pk-seg"></div>'
+        +(i===progKpis.length-1?'<span class="pk-cap">'+pkCap+'</span>':"")
+      +'</div>'
+      +'<div class="pk-ax" style="--i:'+(i+1)+'">'
+        +'<div class="nm">'+k.name+'</div>'
+        +'<div class="val" style="color:'+ink+'">'+(k.avail?k.value+"%":"\u2014")+'</div>'
+        +'<div class="rq">need '+(k.op===">"?"&gt;":"&ge;")+" "+k.target+'%'
+          +(k.basis?" &middot; "+k.basis:"")+'</div>'
+        +'<div class="gp" style="color:'+inkSm+'">'
+          +(k.avail?(g+u+(k.met?"over":"short")):"No data")+'</div>'
+      +'</div>';
+  }).join("");
+  // A bar chart is unreadable to a screen reader; give it the same facts as a sentence and a table.
+  var pkSum=pkMetN+" of "+pkAvailN+" programme standards met. "
+    +progKpis.map(function(k){
+      return k.name+": "+(k.avail?(k.value+" percent against a target of "+k.target+" percent, "
+        +(k.met?"met":"not met")):"no data available")+".";}).join(" ");
+  var pkErrNote=pkReady?""
+    :" <b>The research and committee tables could not be loaded</b>, so those standards show as no data rather than as zero.";
+  var pkSection=
+    '<section class="kpix-progkpi" id="kpix-progkpi">'
+    +'<div class="wrap">'
+    +'<div class="sec-head reveal"><div class="lbl" style="color:var(--terracotta);">Programme</div><h2>KPI</h2></div>'
+    +'<p class="pk-sub">Six standards, each the share of residents clearing it, plotted against its own target &mdash; so one line judges all of them. Actual and required figures are printed on every column.</p>'
+    +'<p class="pk-mobcap">'+pkCap+'</p>'
+    +'<div class="pk-chart" role="img" aria-labelledby="kpix-pk-sum">'+pkBody+'</div>'
+    +'<p class="pk-sr" id="kpix-pk-sum">'+pkSum+'</p>'
+    +'<p class="pk-foot">Different thresholds cannot share a y&#8209;axis, so each column is drawn as a share of its own target. <b>Hatching is the distance still to close.</b> Every standard is the share of residents personally clearing the bar, not a cohort average &mdash; an average can pass while many residents fail. Residents with nothing recorded are left out of the denominator rather than counted as failing; cohort averages are reported under Performance and are never scored.'+pkErrNote+'</p>'
+    +'</div></section>';
 
   // ── Domain data for burst ──
   var domains=[
@@ -12605,6 +12772,7 @@ function renderKPIExecutive(){
     +'<a href="#kpix-pin-wrap" data-name="Overview"><span>Overview</span></a>'
     +'<a href="#kpix-podium" data-name="Podium"><span>Podium</span></a>'
     +'<a href="#kpix-achievements" data-name="Research"><span>Research</span></a>'
+    +'<a href="#kpix-progkpi" data-name="Programme KPI"><span>Programme KPI</span></a>'
     +'<a href="#kpix-metrics" data-name="Metrics"><span>Cohort Metrics</span></a>'
     +'</nav>'
 
@@ -12642,6 +12810,9 @@ function renderKPIExecutive(){
     +'<div class="sec-head reveal"><div class="lbl" style="color:var(--terracotta);">Published</div><h2>Resident Research</h2></div>'
     +'<div class="marquee-viewport"><div class="marquee-track" id="kpix-marqueeTrack">'+marqueeCardsHtml+'</div></div>'
     +'</section>'
+
+    // Programme KPI - six standards against their own targets
+    +pkSection
 
     // Horizon Landscape (KPI Summary)
     +'<section class="kpix-metrics" id="kpix-metrics">'
@@ -13052,7 +13223,7 @@ function renderKPIExecutive(){
     });
 
     // ── Nav dots active state ──
-    var dotSections=["kpix-pin-wrap","kpix-podium","kpix-achievements","kpix-metrics"];
+    var dotSections=["kpix-pin-wrap","kpix-podium","kpix-achievements","kpix-progkpi","kpix-metrics"];
     var dots=wrap.querySelectorAll("#kpix-navdots a");
     dotSections.forEach(function(id,i){
       ScrollTrigger.create(Object.assign({},stConfig,{
