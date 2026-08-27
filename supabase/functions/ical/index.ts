@@ -276,10 +276,15 @@ Deno.serve(async (req) => {
 
   // ── 2. On-Call duties ──────────────────────────────────────────────────────
   if (prefs.oncall && resId) {
+    // published=true is NOT optional. This client is built with the service-role
+    // key, which bypasses RLS entirely, so the oncall_schedule_select policy that
+    // hides drafts in the portal does nothing here. Without this filter a block
+    // still being drafted is pushed straight to every subscriber's phone.
     const { data: ocs } = await sb
       .from("oncall_schedule")
       .select("id, schedule_date, slot_key, is_extra")
       .eq("resident_id", resId)
+      .eq("published", true)
       .order("schedule_date");
 
     (ocs ?? []).forEach((e: { id: string; schedule_date: string; slot_key: string; is_extra: boolean }) => {
@@ -304,6 +309,7 @@ Deno.serve(async (req) => {
     const { data: mms } = await sb
       .from("mm_sessions")
       .select("id, block_number, session_date, topic, presenter_resident_id, moderator_resident_id")
+      .eq("published", true)
       .order("session_date");
 
     (mms ?? []).forEach((s: {
@@ -336,6 +342,7 @@ Deno.serve(async (req) => {
     const { data: teaches } = await sb
       .from("teaching_sessions")
       .select("id, block_number, session_date, topic, presenter_label")
+      .eq("published", true)
       .order("session_date");
 
     (teaches ?? []).forEach((s: {
