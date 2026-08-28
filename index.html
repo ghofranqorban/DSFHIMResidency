@@ -12030,7 +12030,10 @@ function renderKPIExecutive(){
   const kpixS=document.createElement("style");
   kpixS.id="kpix-css";
   kpixS.textContent=`
-#kpix-wrap{--cream:#fdf8f3;--cream-warm:#f5ede0;--parchment:#ede5dd;--dark:#2c1a0e;--terracotta:#c96a4a;--terracotta-deep:#b55a3a;--terracotta-light:#e8956d;--gold:#A47A28;--gold-light:#CBA155;--green:#7FB89C;--green-dark:#26523A;--ink:#1F1A12;--silver:#9ca3af;--bronze:#CD7F32;position:relative;}
+/* --terracotta is 3.5:1 on cream: fine for the 54px hero italic, which only needs 3:1, and not
+   fine for anything small. Every eyebrow on this report is 8-11px, so all of them use
+   --terracotta-ink (5.2:1) instead. --terracotta-deep is NOT a substitute -- it measures 4.4:1. */
+#kpix-wrap{--cream:#fdf8f3;--cream-warm:#f5ede0;--parchment:#ede5dd;--dark:#2c1a0e;--terracotta:#c96a4a;--terracotta-deep:#b55a3a;--terracotta-light:#e8956d;--terracotta-ink:#a94e2c;--gold:#A47A28;--gold-light:#CBA155;--green:#7FB89C;--green-dark:#26523A;--ink:#1F1A12;--silver:#9ca3af;--bronze:#CD7F32;position:relative;}
 #kpix-wrap *{box-sizing:border-box;}
 #kpix-wrap ::selection{background:rgba(201,106,74,.25);}
 #kpix-wrap .disp{font-family:'Playfair Display',Georgia,serif;}
@@ -12053,7 +12056,7 @@ function renderKPIExecutive(){
 #kpix-wrap .kpix-stage .blob1{width:520px;height:520px;background:radial-gradient(circle,#e8956d,transparent 70%);top:-180px;left:-140px;}
 #kpix-wrap .kpix-stage .blob2{width:400px;height:400px;background:radial-gradient(circle,rgba(164,122,40,.4),transparent 70%);bottom:-100px;right:-100px;opacity:.08;}
 #kpix-wrap .kpix-scene1{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 24px;color:#241a10;}
-#kpix-wrap .hero-eyebrow{font-size:.68rem;font-weight:700;letter-spacing:.3em;text-transform:uppercase;color:var(--terracotta);margin-bottom:18px;}
+#kpix-wrap .hero-eyebrow{font-size:.68rem;font-weight:700;letter-spacing:.3em;text-transform:uppercase;color:var(--terracotta-ink);margin-bottom:18px;}
 #kpix-wrap .hero-title{font-family:'Playfair Display',serif;font-size:clamp(2rem,5vw,3.6rem);font-weight:700;line-height:1.05;margin-bottom:6px;}
 #kpix-wrap .hero-title em{font-style:italic;font-weight:400;color:var(--terracotta);}
 #kpix-wrap .hero-sub{font-size:.88rem;color:rgba(36,26,16,.5);max-width:520px;margin:0 auto 4px;}
@@ -12064,7 +12067,9 @@ function renderKPIExecutive(){
 #kpix-wrap .burst-zone svg{position:absolute;top:0;left:0;}
 #kpix-wrap .burst-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:2;}
 #kpix-wrap .burst-num{font-family:'Playfair Display',serif;font-size:4.2rem;font-weight:700;color:var(--terracotta-deep);line-height:1;letter-spacing:-.04em;}
-#kpix-wrap .burst-num sup{font-size:1.4rem;font-weight:400;vertical-align:super;color:var(--terracotta);}
+/* the three sups below carry a "%" or a unit, so they are content, not decoration. All are
+   under the 24px regular-weight cutoff -- 22.4px, 15.8px and 10.4px -- so all need 4.5:1. */
+#kpix-wrap .burst-num sup{font-size:1.4rem;font-weight:400;vertical-align:super;color:var(--terracotta-ink);}
 #kpix-wrap .burst-label{font-size:.56rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(31,26,18,.35);margin-top:4px;}
 @keyframes kpix-burstGlow{0%,100%{filter:drop-shadow(0 0 10px rgba(201,106,74,.08));}50%{filter:drop-shadow(0 0 28px rgba(201,106,74,.22));}}
 #kpix-wrap .burst-zone svg{animation:kpix-burstGlow 4s ease-in-out infinite;}
@@ -12075,19 +12080,19 @@ function renderKPIExecutive(){
 #kpix-wrap .ay-card{position:relative;width:min(560px,86vw);background:var(--cream);border-radius:22px;padding:48px 40px;text-align:center;box-shadow:0 20px 40px -24px rgba(40,25,5,.45),0 4px 60px rgba(0,0,0,.35);border:1px solid rgba(31,26,18,.08);}
 #kpix-wrap .ay-card::before{content:'';position:absolute;inset:0;border-radius:22px;background:var(--cream-warm);z-index:-1;transform:rotate(-3deg) translateY(10px);box-shadow:0 14px 30px -18px rgba(40,25,5,.35);}
 #kpix-wrap .ay-card::after{content:'';position:absolute;inset:0;border-radius:22px;background:var(--parchment);z-index:-2;transform:rotate(3deg) translateY(18px);box-shadow:0 14px 30px -18px rgba(40,25,5,.25);}
-#kpix-wrap .ay-eyebrow{font-size:.6rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--terracotta);margin-bottom:12px;}
+#kpix-wrap .ay-eyebrow{font-size:.6rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--terracotta-ink);margin-bottom:12px;}
 #kpix-wrap .ay-title{font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:700;color:var(--ink);margin-bottom:4px;}
 #kpix-wrap .ay-mountains{position:relative;margin:20px auto 0;width:100%;max-width:460px;height:150px;}
 #kpix-wrap .ay-mountains svg{width:100%;height:100%;}
 #kpix-wrap .ay-score-float{position:absolute;font-family:'Playfair Display',serif;font-weight:700;font-size:2rem;color:var(--terracotta-deep);transform:translate(-50%,-100%);text-shadow:0 2px 12px rgba(201,106,74,.15);line-height:1;}
-#kpix-wrap .ay-score-float sup{font-size:.65rem;font-weight:400;vertical-align:super;color:var(--terracotta);}
+#kpix-wrap .ay-score-float sup{font-size:.65rem;font-weight:400;vertical-align:super;color:var(--terracotta-ink);}
 #kpix-wrap .ay-timeline{display:flex;align-items:flex-start;gap:0;margin-top:8px;position:relative;padding:16px 0 0;}
 #kpix-wrap .ay-timeline::before{content:'';position:absolute;top:24px;left:10%;right:10%;height:2px;background:linear-gradient(90deg,rgba(31,26,18,.04),var(--terracotta) 70%,var(--terracotta));border-radius:9999px;}
 #kpix-wrap .ay-tnode{flex:1;text-align:center;position:relative;z-index:1;}
 #kpix-wrap .ay-tdot{width:12px;height:12px;border-radius:50%;margin:0 auto 8px;border:2px solid rgba(31,26,18,.1);background:var(--cream);}
 #kpix-wrap .ay-tnode.active .ay-tdot{width:18px;height:18px;background:var(--terracotta);border:3px solid var(--cream);box-shadow:0 0 0 3px rgba(201,106,74,.2),0 3px 10px rgba(201,106,74,.3);}
 #kpix-wrap .ay-tyear{font-size:.54rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(31,26,18,.2);}
-#kpix-wrap .ay-tnode.active .ay-tyear{color:var(--terracotta-deep);font-size:.6rem;}
+#kpix-wrap .ay-tnode.active .ay-tyear{color:var(--terracotta-ink);font-size:.6rem;}
 #kpix-wrap .ay-tstatus{font-size:.4rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(31,26,18,.1);margin-top:2px;}
 #kpix-wrap .ay-domain-row{display:flex;gap:5px;margin:18px auto 0;max-width:360px;justify-content:center;}
 #kpix-wrap .ay-dbar{flex:1;text-align:center;}
@@ -12100,7 +12105,7 @@ function renderKPIExecutive(){
 #kpix-wrap .kpix-podium{padding:150px 24px 0;color:var(--ink);overflow:hidden;position:relative;background:transparent;}
 #kpix-wrap .kpix-podium .conf-host{position:absolute;inset:0;pointer-events:none;overflow:hidden;}
 #kpix-wrap .sec-head{text-align:center;margin-bottom:70px;}
-#kpix-wrap .sec-head .lbl{color:var(--terracotta);margin-bottom:14px;}
+#kpix-wrap .sec-head .lbl{color:var(--terracotta-ink);margin-bottom:14px;}
 #kpix-wrap .sec-head h2{font-family:'Playfair Display',serif;font-size:clamp(2rem,4.4vw,3rem);font-weight:700;}
 #kpix-wrap .kpix-podium .sec-head h2{color:var(--ink);}
 #kpix-wrap .podium-row{display:flex;align-items:flex-end;justify-content:center;gap:12px;max-width:920px;margin:0 auto;position:relative;z-index:2;}
@@ -12132,7 +12137,7 @@ function renderKPIExecutive(){
    mobile falls under the 18.66px large-text cutoff -- so all five must clear 4.5:1 on cream,
    not the 3:1 the big numeral alone would need. --terracotta-deep and the medal tokens all
    fail that; the tokens still tint the badges, where they sit behind white text. */
-#kpix-wrap .pod-1 .pod-score{font-size:2.6rem;color:#a94e2c;}
+#kpix-wrap .pod-1 .pod-score{font-size:2.6rem;color:var(--terracotta-ink);}
 #kpix-wrap .pod-2 .pod-score{font-size:1.7rem;color:#646B75;}
 #kpix-wrap .pod-3 .pod-score{font-size:1.7rem;color:#96591F;}
 /* ranks 4-5 stay visually quieter than the top three, but the count is the result now, not a
@@ -12155,12 +12160,14 @@ function renderKPIExecutive(){
 #kpix-wrap .marquee-track{display:flex;gap:28px;width:max-content;align-items:stretch;}
 #kpix-wrap .pub-card{width:380px;flex-shrink:0;background:var(--cream);border-radius:18px;padding:28px 28px 24px;box-shadow:0 8px 28px rgba(31,26,18,.06);position:relative;overflow:hidden;border:1px solid rgba(31,26,18,.04);display:flex;flex-direction:column;}
 #kpix-wrap .pub-card:hover{transform:translateY(-3px);box-shadow:0 12px 36px rgba(31,26,18,.1);transition:all .3s ease;}
-#kpix-wrap .pub-journal{font-size:.5rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--terracotta);margin-bottom:10px;}
+#kpix-wrap .pub-journal{font-size:.5rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--terracotta-ink);margin-bottom:10px;}
 #kpix-wrap .pub-title{font-family:'Playfair Display',serif;font-size:1rem;font-weight:700;line-height:1.35;color:var(--ink);margin-bottom:12px;flex:1;}
 #kpix-wrap .pub-authors{font-size:.7rem;color:rgba(31,26,18,.4);line-height:1.4;margin-bottom:10px;}
-#kpix-wrap .pub-authors strong{color:var(--terracotta-deep);font-weight:600;}
+/* the resident's own name, picked out of the author list -- 11.2px, so 4.5:1, and
+   --terracotta-deep misses at 4.4:1. Same reason for .ay-tyear and .hz-score below. */
+#kpix-wrap .pub-authors strong{color:var(--terracotta-ink);font-weight:600;}
 #kpix-wrap .pub-meta{display:flex;align-items:center;gap:12px;font-size:.56rem;color:rgba(31,26,18,.25);font-weight:500;}
-#kpix-wrap .pub-meta-tag{padding:3px 10px;border-radius:9999px;background:rgba(201,106,74,.06);color:var(--terracotta);font-weight:600;letter-spacing:.04em;}
+#kpix-wrap .pub-meta-tag{padding:3px 10px;border-radius:9999px;background:rgba(201,106,74,.06);color:var(--terracotta-ink);font-weight:600;letter-spacing:.04em;}
 #kpix-wrap .pub-dot{width:3px;height:3px;border-radius:50%;background:rgba(31,26,18,.12);}
 #kpix-wrap .pub-card::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:linear-gradient(180deg,var(--terracotta),var(--gold-light));border-radius:0 2px 2px 0;opacity:.5;}
 #kpix-wrap .kpix-metrics{padding:130px 24px;position:relative;background:transparent;}
@@ -12172,11 +12179,11 @@ function renderKPIExecutive(){
 #kpix-wrap .hz-dot{width:11px;height:11px;border-radius:3px;flex-shrink:0;}
 #kpix-wrap .hz-score{font-family:'Playfair Display',serif;font-weight:700;font-size:.82rem;margin-left:2px;}
 #kpix-wrap .hz-item.active{font-weight:600;}
-#kpix-wrap .hz-item.active .hz-score{color:var(--terracotta-deep);}
+#kpix-wrap .hz-item.active .hz-score{color:var(--terracotta-ink);}
 #kpix-wrap .hz-item.dim{opacity:.45;}
 #kpix-wrap .hz-badge{position:absolute;right:24px;top:20px;text-align:center;z-index:10;background:rgba(253,248,243,.88);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:16px;padding:14px 22px;border:1px solid rgba(31,26,18,.06);}
 #kpix-wrap .hz-badge-val{font-family:'Playfair Display',serif;font-weight:700;font-size:2.2rem;color:var(--terracotta-deep);line-height:1;}
-#kpix-wrap .hz-badge-val sup{font-size:.45em;font-weight:400;vertical-align:super;color:var(--terracotta);}
+#kpix-wrap .hz-badge-val sup{font-size:.45em;font-weight:400;vertical-align:super;color:var(--terracotta-ink);}
 #kpix-wrap .hz-badge-lbl{font-size:.45rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(31,26,18,.3);margin-top:3px;}
 #kpix-wrap .kpix-drilldown{display:none;background:var(--cream);padding-bottom:100px;}
 #kpix-wrap .kpix-drilldown.show{display:block;}
@@ -12206,9 +12213,8 @@ function renderKPIExecutive(){
 #kpix-wrap .kpix-perfpod{padding:110px 24px 0;position:relative;}
 #kpix-wrap .pp-hinge{display:flex;align-items:center;gap:20px;max-width:1080px;margin:0 auto 56px;}
 #kpix-wrap .pp-hinge::before,#kpix-wrap .pp-hinge::after{content:'';flex:1;height:1px;background:rgba(31,26,18,.09);}
-/* not var(--terracotta): #c96a4a is 3.53:1 on cream and this is 9.6px type. The older section
-   eyebrows have the same problem and should follow, but that is a sheet-wide change. */
-#kpix-wrap .pp-hinge span{font-size:.6rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:#a94e2c;white-space:nowrap;}
+/* not var(--terracotta): #c96a4a is 3.5:1 on cream and this is 9.6px type. See the token block. */
+#kpix-wrap .pp-hinge span{font-size:.6rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--terracotta-ink);white-space:nowrap;}
 #kpix-wrap .kpix-perfpod .sec-head h2{font-size:2rem;}
 #kpix-wrap .pp-sub{font-size:.82rem;line-height:1.6;color:rgba(31,26,18,.62);max-width:56ch;margin:14px auto 0;text-align:center;}
 #kpix-wrap .pp-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:24px 20px;max-width:1080px;margin:56px auto 0;}
@@ -12224,7 +12230,7 @@ function renderKPIExecutive(){
 #kpix-wrap .pp-n{font-size:.76rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 #kpix-wrap .pp-1 .pp-n{font-size:.84rem;font-weight:700;}
 #kpix-wrap .pp-v{font-family:'Playfair Display',serif;font-weight:700;font-size:1rem;font-variant-numeric:tabular-nums;color:rgba(31,26,18,.66);}
-#kpix-wrap .pp-1 .pp-v{font-size:1.6rem;color:#a94e2c;}
+#kpix-wrap .pp-1 .pp-v{font-size:1.6rem;color:var(--terracotta-ink);}
 #kpix-wrap .pp-v .u{font-size:.55em;}
 #kpix-wrap .pp-sup{font-size:.62rem;color:rgba(31,26,18,.62);margin-top:12px;}
 #kpix-wrap .pp-none{font-size:.72rem;line-height:1.6;color:rgba(31,26,18,.62);margin-top:14px;}
@@ -12245,7 +12251,7 @@ function renderKPIExecutive(){
 /* each column carries its own segment of the rule; zero column gap joins them into one line */
 #kpix-wrap .pk-seg{position:absolute;left:0;right:0;bottom:var(--line);height:0;border-top:2px solid var(--ink);opacity:.8;}
 #kpix-wrap .pk-cap{position:absolute;right:12px;bottom:var(--line);padding-bottom:4px;font-size:.6rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(31,26,18,.75);white-space:nowrap;}
-#kpix-wrap .pk-cap b{color:#a94e2c;}
+#kpix-wrap .pk-cap b{color:var(--terracotta-ink);}
 #kpix-wrap .pk-mobcap{display:none;}
 #kpix-wrap .pk-ax{grid-row:2;grid-column:var(--i);padding:12px 12px 0;text-align:center;border-top:1px solid rgba(31,26,18,.09);}
 #kpix-wrap .pk-ax .nm{font-size:.74rem;font-weight:700;color:var(--ink);line-height:1.3;min-height:2.6em;display:flex;align-items:flex-start;justify-content:center;}
@@ -12271,7 +12277,7 @@ function renderKPIExecutive(){
 #kpix-wrap .pk-seg{left:var(--line);right:auto;top:-3px;bottom:-3px;height:auto;width:0;border-top:none;border-left:2px solid var(--ink);}
 #kpix-wrap .pk-cap{display:none;}
 #kpix-wrap .pk-mobcap{display:block;text-align:center;font-size:.6rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(31,26,18,.75);margin-top:32px;}
-#kpix-wrap .pk-mobcap b{color:#a94e2c;}
+#kpix-wrap .pk-mobcap b{color:var(--terracotta-ink);}
 #kpix-wrap .pk-ax{display:grid;grid-template-columns:1fr auto;column-gap:16px;text-align:left;border-top:none;padding:8px 0 24px;border-bottom:1px solid rgba(31,26,18,.09);align-items:baseline;}
 #kpix-wrap .pk-ax .nm{min-height:0;display:block;grid-column:1;}
 #kpix-wrap .pk-ax .val{grid-column:2;grid-row:1;text-align:right;margin:0;}
@@ -12473,7 +12479,7 @@ function renderKPIExecutive(){
     var h=k.avail?Math.min(k.ratio,pkScale)/pkScale*100:0;
     var ink=k.avail?(k.met?"var(--green-dark)":"#b55a3a"):"rgba(31,26,18,.3)";
     // #b55a3a clears 4.5:1 on cream at 24px but not at 10px, so small text takes the darker tone
-    var inkSm=k.avail?(k.met?"var(--green-dark)":"#a94e2c"):"rgba(31,26,18,.45)";
+    var inkSm=k.avail?(k.met?"var(--green-dark)":"var(--terracotta-ink)"):"rgba(31,26,18,.45)";
     var g=Math.abs(k.gap),u=(g===1?" pt ":" pts ");
     return '<div class="pk-col'+(k.met?" met":"")+(k.avail?"":" na")+'" style="--i:'+(i+1)
         +';--v:'+h+'%;--g:'+(pkLine-h)+'%;--line:'+pkLine+'%">'
