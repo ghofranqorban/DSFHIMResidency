@@ -1,0 +1,35 @@
+# DSFH Residency Portal — Supabase CLI config
+#
+# This file exists for ONE load-bearing reason: to pin verify_jwt per function.
+#
+# `supabase functions deploy` defaults verify_jwt to TRUE. Until this file
+# existed there was nothing recording that the ical feed must be public, so a
+# routine redeploy would have switched JWT verification on and the Supabase
+# gateway would have rejected every calendar subscriber with 401 before our code
+# ran — turning a draft-visibility fix into a total calendar outage. Deploying
+# with the --no-verify-jwt flag worked but relied on remembering it every time.
+#
+# Keep this file in sync with reality. If you add a function, add it here.
+
+project_id = "yekjpasqiisjpegwmvqw"
+
+
+# Calendar feed. MUST stay public: iOS Calendar, Google Calendar and every other
+# subscription client fetch the .ics URL with no Authorization header, so any
+# platform-level JWT check breaks all subscriptions at once.
+#
+# It is not unauthenticated in practice — the function authenticates the caller
+# itself, by looking up the opaque per-user token in profiles.calendar_token and
+# returning 401 if it does not match. That check is in the function body, which
+# only runs because verify_jwt is false here.
+[functions.ical]
+verify_jwt = false
+
+
+# Admin "create login" action, called from the portal by a signed-in PD/chief.
+# Genuinely privileged: it uses the service-role key to create auth users.
+# Verified at BOTH layers on purpose — the platform rejects a missing or invalid
+# JWT, and the function then re-reads the Authorization header itself and calls
+# auth.getUser(jwt) to confirm who the caller is before doing anything.
+[functions.admin-create-login]
+verify_jwt = true
