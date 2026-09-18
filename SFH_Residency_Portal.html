@@ -2712,6 +2712,103 @@ async function saveOncallCell(blk,date,slotKey,residentId,residentName){
   }
   await loadOncallData();
 }
+// ─── ON-CALL PREFERENCE SURVEY ───────────────────────────────────────────────
+// Per block, each resident names dates they would prefer NOT to be on call:
+// 2 of the block's Fri/Sat days + 4 weekdays. These are preferences, not blocks —
+// the builder flags a clash and still lets the scheduler assign over it.
+const OC_PREF_WE_CAP=2;
+const OC_PREF_WD_CAP=4;
+let ONCALL_PREFS=[];
+let ONCALL_PREFS_STATUS={};
+async function loadOncallPrefs(){
+  // Every resident's picks for the whole year: ~41 residents x 6 dates x 13 blocks
+  // runs past the 1000-row cap well before the year is out, so this has to page.
+  const{data,error}=await fetchAllRows(()=>sb.from("oncall_prefs").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("id"));
+  if(error){console.warn("oncall_prefs load",error.message);return;}
+  ONCALL_PREFS=data||[];
+}
+async function loadOncallPrefsStatus(){
+  const{data,error}=await sb.from("oncall_prefs_status").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR);
+  if(error){console.warn("oncall_prefs_status load",error.message);return;}
+  ONCALL_PREFS_STATUS={};
+  (data||[]).forEach(r=>{ONCALL_PREFS_STATUS[r.block_number]=r;});
+}
+function oncallPrefsIsOpen(blk){
+  const w=ONCALL_PREFS_STATUS[blk];
+  if(!w||!w.is_open)return false;
+  if(w.deadline&&new Date(w.deadline)<new Date())return false;
+  return true;
+}
+function oncallPrefsCountdown(blk){
+  const w=ONCALL_PREFS_STATUS[blk];
+  if(!w||!w.deadline)return null;
+  const diff=new Date(w.deadline)-new Date();
+  if(diff<=0)return"Window closed";
+  const d=Math.floor(diff/86400000),h=Math.floor((diff%86400000)/3600000),mn=Math.floor((diff%3600000)/60000);
+  if(d>0)return d+"d "+h+"h left";
+  if(h>0)return h+"h "+mn+"m left";
+  return mn+"m left";
+}
+// The block whose survey is currently collecting — used to point residents at the
+// right block when they land on the tab from a different one.
+function oncallPrefsOpenBlock(){
+  const keys=Object.keys(ONCALL_PREFS_STATUS).map(Number).sort((a,b)=>a-b);
+  return keys.find(oncallPrefsIsOpen)||null;
+}
+async function oncallPrefsOpenWindow(blk,deadline){
+  const{error}=await sb.from("oncall_prefs_status").upsert({academic_year:CURRENT_ACADEMIC_YEAR,block_number:blk,is_open:true,opened_at:new Date().toISOString(),deadline:deadline||null},{onConflict:"academic_year,block_number"});
+  if(error){showToast("Error: "+error.message,"error");return;}
+  await loadOncallPrefsStatus();
+  showToast("Preference survey opened for Block "+blk,"success");
+  render();
+}
+async function oncallPrefsCloseWindow(blk){
+  const{error}=await sb.from("oncall_prefs_status").upsert({academic_year:CURRENT_ACADEMIC_YEAR,block_number:blk,is_open:false},{onConflict:"academic_year,block_number"});
+  if(error){showToast("Error: "+error.message,"error");return;}
+  await loadOncallPrefsStatus();
+  showToast("Preference survey closed for Block "+blk,"success");
+  render();
+}
+function oncallPrefRows(blk,rid){
+  return ONCALL_PREFS.filter(p=>p.block_number===blk&&p.resident_id===rid);
+}
+function oncallPrefHasPick(blk,rid,date){
+  return ONCALL_PREFS.some(p=>p.block_number===blk&&p.resident_id===rid&&p.pref_date===date);
+}
+// A pick is honoured when the resident holds no on-call slot that day.
+function oncallPrefMet(blk,rid,date){
+  return !ONCALL_DATA.some(e=>e.block_number===blk&&e.resident_id===rid&&e.schedule_date===date);
+}
+// How many residents asked to avoid each date. Clustering is allowed, so the
+// scheduler needs to see where it lands before assigning.
+function oncallPrefDemand(blk){
+  const m={};
+  ONCALL_PREFS.filter(p=>p.block_number===blk).forEach(p=>{m[p.pref_date]=(m[p.pref_date]||0)+1;});
+  return m;
+}
+// Every assignment in the block that lands on a date the resident asked to avoid.
+function oncallPrefClashes(blk){
+  return ONCALL_DATA.filter(e=>e.block_number===blk&&e.resident_id&&oncallPrefHasPick(blk,e.resident_id,e.schedule_date));
+}
+// Saving replaces the resident's rows for the block rather than diffing them.
+async function saveOncallPrefs(blk,sel,status){
+  const u=STATE.user;if(!u?.rid)return;
+  const dates=Object.keys(sel).filter(d=>sel[d]).sort();
+  const we=dates.filter(isWeekendDate).length,wd=dates.length-we;
+  if(status==="submitted"&&(we!==OC_PREF_WE_CAP||wd!==OC_PREF_WD_CAP)){
+    showToast("Choose exactly "+OC_PREF_WE_CAP+" weekend days and "+OC_PREF_WD_CAP+" weekdays before submitting","error");return;
+  }
+  const{error:de}=await sb.from("oncall_prefs").delete().eq("resident_id",u.rid).eq("academic_year",CURRENT_ACADEMIC_YEAR).eq("block_number",blk);
+  if(de){showToast("Save failed: "+de.message,"error");return;}
+  if(dates.length){
+    const rows=dates.map(d=>({resident_id:Number(u.rid),academic_year:CURRENT_ACADEMIC_YEAR,block_number:blk,pref_date:d,kind:isWeekendDate(d)?"weekend":"weekday",status,updated_at:new Date().toISOString()}));
+    const{error:ie}=await sb.from("oncall_prefs").insert(rows);
+    if(ie){showToast("Save failed: "+ie.message,"error");return;}
+  }
+  await loadOncallPrefs();
+  showToast(status==="submitted"?"Preferences submitted":"Draft saved","success");
+  render();
+}
 function downloadOncallICS(resId){
   const res=resById(resId);if(!res)return;
   const entries=ONCALL_DATA.filter(e=>e.resident_id===resId).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date));
@@ -3209,6 +3306,8 @@ function renderLogin(){
     loadKpiProposals();
     loadCanmeds();
     loadOncallData();
+    loadOncallPrefs();
+    loadOncallPrefsStatus();
     loadBestResident();
     render();
   }
@@ -13876,6 +13975,12 @@ function renderOncall(){
           const li=document.createElement("li");
           li.textContent=dname(r.name)+" ("+r.level+")";
           li.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;border-bottom:1px solid #f9fafb;";
+          if(oncallPrefHasPick(blk,r.id,date)){
+            const warn=document.createElement("span");
+            warn.style.cssText="margin-left:7px;font-size:.7rem;font-weight:700;color:#a94e2c;";
+            warn.textContent="\u26a0 asked off";
+            li.appendChild(warn);
+          }
           li.onmouseover=()=>{li.style.background="#f0f9ff";};
           li.onmouseout=()=>{li.style.background="";};
           li.onmouseenter=()=>oncallSpotlight(blk,date,r.id,null,blkDateStart,blkDateEnd,li);
@@ -13953,6 +14058,13 @@ function renderOncall(){
         nm.onmouseleave=()=>oncallClearSpotlight();
       }
       cell.appendChild(nm);
+      if(res&&oncallPrefHasPick(blk,res.id,date)){
+        const pf=document.createElement("span");
+        pf.style.cssText="font-size:.63rem;background:rgba(201,106,74,.13);color:#a94e2c;border:1px solid rgba(169,78,44,.35);border-radius:4px;padding:1px 5px;display:inline-block;margin-top:2px;white-space:nowrap;font-weight:700;";
+        pf.textContent="Asked off";
+        pf.title="This resident asked not to be on call on "+fmtDate(date);
+        cell.appendChild(pf);
+      }
       if(entry.is_extra){
         const badge=document.createElement("span");
         badge.style.cssText="font-size:.63rem;background:#fde8e8;color:#b91c1c;border:1px solid #fca5a5;border-radius:4px;padding:1px 5px;display:inline-block;margin-top:2px;white-space:nowrap;";
@@ -14008,8 +14120,13 @@ function renderOncall(){
     }
     const fsOpen=!!STATE.oncallFullscreen;
     if(fsOpen)requestAnimationFrame(fitOncallFullscreen);
+    // Preferences are advisory, so this reports the overrides rather than blocking publish.
+    const clashes=canEdit?oncallPrefClashes(blk):[];
     return el("div",null,
       renderPublishControls(blkEntriesAll,"oncall_schedule",blk,canEdit,loadOncallData),
+      clashes.length?el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},
+        clashes.length+" assignment"+(clashes.length===1?"":"s")+" in this block fall on a date the resident asked to avoid \u2014 marked \u201cAsked off\u201d below. You can publish anyway."
+      ):null,
       el("div",{st:{marginBottom:"16px",display:"flex",gap:"10px",flexWrap:"wrap"}},
         canEdit?el("button",{cls:"sbtn primary",onClick:()=>set({oncallEditDate:allDates[0]?.date||""})}, " Add / Edit Day"):null,
         el("button",{cls:"sbtn",onClick:()=>set({oncallFullscreen:true})},"⛶ Full Screen"),
@@ -14088,6 +14205,172 @@ function renderOncall(){
         :null
     );
   }
+  // ── Preferences tab ──────────────────────────────────────────
+  function renderPrefsTab(){
+    if(!blockStart)return el("p",{cls:"sh"},"Block data not available.");
+    const win=ONCALL_PREFS_STATUS[blk]||null;
+    const isOpen=oncallPrefsIsOpen(blk);
+    const myRows=u.rid?oncallPrefRows(blk,u.rid):[];
+    const mySubmitted=myRows.some(p=>p.status==="submitted");
+    const demand=oncallPrefDemand(blk);
+    const hasSchedule=blkEntriesAll.some(e=>e.resident_id||e.resident_name);
+    const openElsewhere=oncallPrefsOpenBlock();
+    // Seed the picker from what is on file whenever the resident changes block.
+    if(u.rid&&STATE.ocPrefBlk!==blk){
+      STATE.ocPrefBlk=blk;
+      STATE.ocPrefSel={};
+      myRows.forEach(p=>{STATE.ocPrefSel[p.pref_date]=true;});
+    }
+    const sel=u.rid?(STATE.ocPrefSel||{}):{};
+    const selDates=Object.keys(sel).filter(d=>sel[d]);
+    const weCount=selDates.filter(isWeekendDate).length;
+    const wdCount=selDates.length-weCount;
+    const editable=isOpen&&!!u.rid;
+    const isResidentView=!!u.rid;
+    const complete=weCount===OC_PREF_WE_CAP&&wdCount===OC_PREF_WD_CAP;
+    function toggleDay(date){
+      const next=Object.assign({},sel);
+      if(next[date]){
+        delete next[date];
+      }else{
+        const isWe=isWeekendDate(date);
+        if(isWe&&weCount>=OC_PREF_WE_CAP)return;
+        if(!isWe&&wdCount>=OC_PREF_WD_CAP)return;
+        next[date]=true;
+      }
+      set({ocPrefSel:next});
+    }
+    const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    // Blocks do not always open on a Sunday, so the grid is padded to the real weekday.
+    const firstDow=oncallDateObj(allDates[0].date).getDay();
+    const cells=[];
+    for(let i=0;i<firstDow;i++)cells.push(null);
+    allDates.forEach(d=>cells.push(d));
+    while(cells.length%7)cells.push(null);
+    const weeks=[];
+    for(let i=0;i<cells.length;i+=7)weeks.push(cells.slice(i,i+7));
+    function dayCell(d){
+      if(!d)return el("td",{st:{padding:"4px"}},"");
+      const picked=!!sel[d.date];
+      const kindFull=d.isWe?weCount>=OC_PREF_WE_CAP:wdCount>=OC_PREF_WD_CAP;
+      const dim=editable&&!picked&&kindFull;
+      const parts=d.date.split("-");
+      const met=picked&&hasSchedule&&u.rid?oncallPrefMet(blk,u.rid,d.date):null;
+      const dem=demand[d.date]||0;
+      // Schedulers read the same grid as a heat map: the darker the day, the more
+      // residents asked to be off it.
+      const demBg=dem?"rgba(201,106,74,"+Math.min(.10+dem*0.08,.5).toFixed(2)+")":null;
+      const bg=picked?(d.isWe?"#26523A":"#c96a4a")
+              :(!isResidentView&&demBg)?demBg
+              :(d.isWe?"rgba(127,184,156,.16)":"transparent");
+      const fg=picked?"#FEFBF3":"#1F1A12";
+      const kids=[
+        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",lineHeight:"1"}},String(parseInt(parts[2],10))),
+        el("div",{st:{fontSize:".56rem",letterSpacing:".08em",textTransform:"uppercase",marginTop:"3px",opacity:".6"}},MONTHS[parseInt(parts[1],10)-1])
+      ];
+      if(met!==null){
+        kids.push(el("div",{st:{fontSize:".56rem",fontWeight:"800",letterSpacing:".06em",marginTop:"4px",textTransform:"uppercase"}},met?"\u2713 met":"\u2715 not met"));
+      }
+      if(canEdit&&!picked&&dem){
+        kids.push(el("div",{st:{fontSize:".58rem",fontWeight:"700",marginTop:"4px",color:"#a94e2c"}},dem+" want off"));
+      }
+      const box=el("div",{st:{borderRadius:"12px",padding:"10px 4px",textAlign:"center",background:bg,color:fg,opacity:dim?".35":"1",cursor:editable&&!dim?"pointer":"default",transition:"background .15s,opacity .15s",minHeight:"46px"}},...kids);
+      if(picked&&met===false)box.style.boxShadow="0 0 0 2px #a94e2c";
+      const td=el("td",{st:{padding:"4px"}},box);
+      if(editable)td.onclick=()=>toggleDay(d.date);
+      return td;
+    }
+    function quota(n,cap,label){
+      const done=n===cap;
+      return el("div",{st:{display:"flex",alignItems:"baseline",gap:"8px"}},
+        el("span",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.9rem",lineHeight:"1",color:done?"#26523A":"#1F1A12"}},String(n)),
+        el("span",{st:{fontSize:".8rem",color:"rgba(31,26,18,.45)",fontWeight:"600"}},"/ "+cap),
+        el("span",{st:{fontSize:".66rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:done?"#26523A":"rgba(31,26,18,.5)"}},label)
+      );
+    }
+    // Window strip + scheduler controls
+    const windowStrip=el("div",{st:{display:"flex",alignItems:"center",gap:"14px",flexWrap:"wrap",padding:"14px 0",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"22px"}},
+      el("span",{st:{fontSize:".7rem",fontWeight:"800",letterSpacing:".09em",textTransform:"uppercase",padding:"4px 12px",borderRadius:"999px",background:isOpen?"rgba(127,184,156,.25)":"rgba(31,26,18,.07)",color:isOpen?"#26523A":"rgba(31,26,18,.5)"}},isOpen?"Survey open":"Survey closed"),
+      win&&win.deadline?el("span",{st:{fontSize:".8rem",color:"rgba(31,26,18,.5)"}},
+        isOpen?"Closes "+fmtDate(win.deadline.slice(0,10))+" \u00b7 "+oncallPrefsCountdown(blk)
+              :"Closed "+fmtDate(win.deadline.slice(0,10))):null,
+      canEdit?el("div",{st:{display:"flex",gap:"8px",alignItems:"center",marginLeft:"auto",flexWrap:"wrap"}},
+        el("input",{type:"date",cls:"input",value:STATE.ocPrefDeadline||"",st:{padding:"5px 9px",fontSize:".8rem",width:"auto"},onChange:e=>{STATE.ocPrefDeadline=e.target.value;}}),
+        isOpen
+          ?el("button",{cls:"sbtn",onClick:()=>oncallPrefsCloseWindow(blk)},"Close survey")
+          :el("button",{cls:"sbtn primary",onClick:()=>oncallPrefsOpenWindow(blk,STATE.ocPrefDeadline?new Date(STATE.ocPrefDeadline+"T23:59:59").toISOString():null)},"Open survey for Block "+blk)
+      ):null
+    );
+    // Residents landing on the wrong block get pointed at the one that is collecting.
+    const nudge=(!isOpen&&openElsewhere&&openElsewhere!==blk)
+      ?el("div",{cls:"alert-yellow",st:{marginBottom:"18px",display:"flex",alignItems:"center",gap:"12px",flexWrap:"wrap"}},
+          el("span",null,"The survey for Block "+openElsewhere+" is open now."),
+          el("button",{cls:"sbtn",onClick:()=>set({oncallBlock:openElsewhere,oncallTab:"prefs"})},"Go to Block "+openElsewhere)
+        )
+      :null;
+    const calendar=el("div",null,
+      isResidentView?el("div",{st:{display:"flex",gap:"38px",alignItems:"flex-end",flexWrap:"wrap",marginBottom:"18px"}},
+        quota(weCount,OC_PREF_WE_CAP,"Weekend days"),
+        quota(wdCount,OC_PREF_WD_CAP,"Weekdays")
+      ):null,
+      el("div",{st:{fontSize:".78rem",color:"rgba(31,26,18,.5)",marginBottom:"18px"}},
+        isResidentView
+          ?(editable?"Tap the days you would prefer not to be on call. Your two weekend days need not be in the same weekend."
+                    :"These are the days you asked to avoid.")
+          :"How many residents asked to avoid each day of Block "+blk+". Preferences are advisory \u2014 assign over them where the rota needs it."),
+      el("table",{st:{width:"100%",borderCollapse:"collapse"}},
+        el("thead",null,el("tr",null,...["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(dn=>
+          el("th",{st:{fontSize:".62rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:(dn==="Fri"||dn==="Sat")?"#26523A":"rgba(31,26,18,.42)",padding:"0 0 12px",textAlign:"center"}},dn)))),
+        el("tbody",null,...weeks.map(w=>el("tr",null,...w.map(dayCell))))
+      ),
+      editable?el("div",{st:{display:"flex",gap:"10px",alignItems:"center",flexWrap:"wrap",marginTop:"22px"}},
+        el("button",{cls:"sbtn primary",disabled:!complete,st:complete?{}:{opacity:".45",cursor:"not-allowed"},onClick:()=>{if(complete)saveOncallPrefs(blk,sel,"submitted");}},mySubmitted?"Update submission":"Submit preferences"),
+        el("button",{cls:"sbtn",onClick:()=>saveOncallPrefs(blk,sel,"draft")},"Save draft"),
+        el("span",{st:{fontSize:".78rem",color:"rgba(31,26,18,.45)"}},
+          complete?(mySubmitted?"Submitted \u2014 you can still change it while the survey is open":"Ready to submit")
+                  :"Choose "+[OC_PREF_WE_CAP-weCount>0?(OC_PREF_WE_CAP-weCount)+" more weekend day"+(OC_PREF_WE_CAP-weCount===1?"":"s"):null,
+                              OC_PREF_WD_CAP-wdCount>0?(OC_PREF_WD_CAP-wdCount)+" more weekday"+(OC_PREF_WD_CAP-wdCount===1?"":"s"):null].filter(Boolean).join(" and "))
+      ):null
+    );
+    // Outcome: did the published schedule honour each pick?
+    const outcome=(u.rid&&myRows.length&&hasSchedule)
+      ?el("div",{cls:"card",st:{marginTop:"22px"}},
+          el("div",{cls:"card-title"},"Outcome \u2014 Block "+blk),
+          el("div",null,...myRows.slice().sort((a,b)=>a.pref_date.localeCompare(b.pref_date)).map(p=>{
+            const met=oncallPrefMet(blk,u.rid,p.pref_date);
+            const slots=ONCALL_DATA.filter(e=>e.block_number===blk&&e.resident_id===u.rid&&e.schedule_date===p.pref_date)
+              .map(e=>{const s=ONCALL_SLOTS.find(x=>x.key===e.slot_key);return s?s.label:e.slot_key;});
+            return el("div",{st:{display:"flex",alignItems:"center",gap:"12px",padding:"10px 4px",borderBottom:"1px solid rgba(31,26,18,.07)"}},
+              el("span",{st:{minWidth:"96px",fontWeight:"700",fontSize:".86rem"}},fmtDate(p.pref_date)),
+              el("span",{st:{fontSize:".74rem",color:"rgba(31,26,18,.42)",minWidth:"70px",textTransform:"capitalize"}},p.kind),
+              el("span",{st:{flex:"1",fontSize:".8rem",color:"rgba(31,26,18,.55)"}},met?"Not on call \u2014 preference honoured":("Assigned: "+slots.join(", "))),
+              el("span",{st:{fontSize:".7rem",fontWeight:"800",letterSpacing:".06em",textTransform:"uppercase",padding:"3px 11px",borderRadius:"999px",background:met?"rgba(127,184,156,.25)":"rgba(201,106,74,.15)",color:met?"#26523A":"#a94e2c"}},met?"Met":"Not met")
+            );
+          }))
+        )
+      :null;
+    // Scheduler view: who has answered, and where the demand piled up.
+    let tracker=null;
+    if(canEdit){
+      const roster=sortByLevel(RESIDENTS);
+      const done=roster.filter(r=>oncallPrefRows(blk,r.id).some(p=>p.status==="submitted"));
+      tracker=el("div",{cls:"card",st:{marginTop:"22px"}},
+        el("div",{cls:"card-title"},"Submissions \u2014 "+done.length+" of "+roster.length),
+        el("div",{st:{display:"flex",gap:"7px",flexWrap:"wrap"}},...roster.map(r=>{
+          const rows=oncallPrefRows(blk,r.id);
+          const sub=rows.some(p=>p.status==="submitted");
+          return el("span",{st:{fontSize:".76rem",padding:"4px 11px",borderRadius:"999px",background:sub?"rgba(127,184,156,.22)":"rgba(31,26,18,.06)",color:sub?"#26523A":"rgba(31,26,18,.45)"}},dname(r.name)+(sub?"":rows.length?" \u00b7 draft":""));
+        }))
+      );
+    }
+    return el("div",null,
+      windowStrip,
+      nudge,
+      calendar,
+      outcome,
+      tracker
+    );
+  }
   // ── Statistics tab (PD-only initially) ───────────────────────
   function renderStatsTab(){
     if(!isPD()){
@@ -14158,8 +14441,8 @@ function renderOncall(){
     ),
     renderBlockPills(blk,n=>set({oncallBlock:n,oncallTab:tab}),{st:{marginBottom:"20px"},cur:true,inactiveBg:"#F6EFE2"}),
     el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
-      ...["schedule","mine","stats"].map(t=>{const lbs={schedule:"Schedule",mine:"My On-Calls",stats:"Statistics"};const active=tab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({oncallTab:t})},lbs[t]);})),
-    tab==="schedule"?renderScheduleTab():tab==="mine"?renderMineTab():renderStatsTab()
+      ...["schedule","mine","prefs","stats"].map(t=>{const lbs={schedule:"Schedule",mine:"My On-Calls",prefs:"Preferences",stats:"Statistics"};const active=tab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({oncallTab:t})},lbs[t]);})),
+    tab==="schedule"?renderScheduleTab():tab==="mine"?renderMineTab():tab==="prefs"?renderPrefsTab():renderStatsTab()
   );
 }
 // ─── MAIN RENDER ─────────────────────────────────────────────────────────────
@@ -14586,6 +14869,8 @@ function renderCalModal(){
         loadKpiProposals();
         loadCanmeds();
         loadOncallData();
+        loadOncallPrefs();
+        loadOncallPrefsStatus();
         loadBestResident();
         loadLeavePlan();
         loadGimPrefs();
