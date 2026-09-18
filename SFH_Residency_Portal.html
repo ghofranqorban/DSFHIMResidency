@@ -975,6 +975,40 @@ let TEACH_SESSIONS=[];
 let TEACH_SESSION_BY_ID={};
 let TEACH_ATT={};
 let TEACH_ATT_CMT={};
+// MM_ATT / TEACH_ATT are keyed block -> date -> resident, with no year in the key, so they can
+// only ever hold one year at a time. Both modules can be pointed at next year, so the maps are
+// rebuilt from the raw rows on every switch rather than being built once at load.
+let MM_ATT_RAW=[];
+let TEACH_ATT_RAW=[];
+function buildAttendanceMaps(){
+  const mmYr=mmAY(),teYr=teachAY();
+  MM_ATT={};MM_ATT_CMT={};
+  MM_ATT_RAW.forEach(a=>{
+    const s=MM_SESSION_BY_ID[a.session_id];if(!s)return;
+    if(s.academic_year!==mmYr)return;
+    if(!MM_ATT[s.block_number])MM_ATT[s.block_number]={};
+    if(!MM_ATT[s.block_number][s.session_date])MM_ATT[s.block_number][s.session_date]={};
+    MM_ATT[s.block_number][s.session_date][a.resident_id]=a.status;
+    if(a.comment){
+      if(!MM_ATT_CMT[s.block_number])MM_ATT_CMT[s.block_number]={};
+      if(!MM_ATT_CMT[s.block_number][s.session_date])MM_ATT_CMT[s.block_number][s.session_date]={};
+      MM_ATT_CMT[s.block_number][s.session_date][a.resident_id]=a.comment;
+    }
+  });
+  TEACH_ATT={};TEACH_ATT_CMT={};
+  TEACH_ATT_RAW.forEach(a=>{
+    const s=TEACH_SESSION_BY_ID[a.session_id];if(!s)return;
+    if(s.academic_year!==teYr)return;
+    if(!TEACH_ATT[s.block_number])TEACH_ATT[s.block_number]={};
+    if(!TEACH_ATT[s.block_number][s.session_date])TEACH_ATT[s.block_number][s.session_date]={};
+    TEACH_ATT[s.block_number][s.session_date][a.resident_id]=a.status;
+    if(a.comment){
+      if(!TEACH_ATT_CMT[s.block_number])TEACH_ATT_CMT[s.block_number]={};
+      if(!TEACH_ATT_CMT[s.block_number][s.session_date])TEACH_ATT_CMT[s.block_number][s.session_date]={};
+      TEACH_ATT_CMT[s.block_number][s.session_date][a.resident_id]=a.comment;
+    }
+  });
+}
 async function loadSchedules(){
   const[{data:mm,error:mmErr},{data:mmA,error:mmAErr},{data:te,error:teErr},{data:teA,error:teAErr},{data:mmH,error:mmHErr}]=await Promise.all([
     // All five are unfiltered whole-table reads, so all five page. The attendance tables are
@@ -992,32 +1026,9 @@ async function loadSchedules(){
   MM_HIGHLIGHTS=mmHErr?[]:(mmH||[]);
   MM_SESSION_BY_ID={};MM_SESSIONS.forEach(s=>{MM_SESSION_BY_ID[s.id]=s;});
   TEACH_SESSION_BY_ID={};TEACH_SESSIONS.forEach(s=>{TEACH_SESSION_BY_ID[s.id]=s;});
-  MM_ATT={};MM_ATT_CMT={};
-  (mmAErr?[]:(mmA||[])).forEach(a=>{
-    const s=MM_SESSION_BY_ID[a.session_id];if(!s)return;
-    if(s.academic_year!==CURRENT_ACADEMIC_YEAR)return;
-    if(!MM_ATT[s.block_number])MM_ATT[s.block_number]={};
-    if(!MM_ATT[s.block_number][s.session_date])MM_ATT[s.block_number][s.session_date]={};
-    MM_ATT[s.block_number][s.session_date][a.resident_id]=a.status;
-    if(a.comment){
-      if(!MM_ATT_CMT[s.block_number])MM_ATT_CMT[s.block_number]={};
-      if(!MM_ATT_CMT[s.block_number][s.session_date])MM_ATT_CMT[s.block_number][s.session_date]={};
-      MM_ATT_CMT[s.block_number][s.session_date][a.resident_id]=a.comment;
-    }
-  });
-  TEACH_ATT={};TEACH_ATT_CMT={};
-  (teAErr?[]:(teA||[])).forEach(a=>{
-    const s=TEACH_SESSION_BY_ID[a.session_id];if(!s)return;
-    if(s.academic_year!==CURRENT_ACADEMIC_YEAR)return;
-    if(!TEACH_ATT[s.block_number])TEACH_ATT[s.block_number]={};
-    if(!TEACH_ATT[s.block_number][s.session_date])TEACH_ATT[s.block_number][s.session_date]={};
-    TEACH_ATT[s.block_number][s.session_date][a.resident_id]=a.status;
-    if(a.comment){
-      if(!TEACH_ATT_CMT[s.block_number])TEACH_ATT_CMT[s.block_number]={};
-      if(!TEACH_ATT_CMT[s.block_number][s.session_date])TEACH_ATT_CMT[s.block_number][s.session_date]={};
-      TEACH_ATT_CMT[s.block_number][s.session_date][a.resident_id]=a.comment;
-    }
-  });
+  MM_ATT_RAW=mmAErr?[]:(mmA||[]);
+  TEACH_ATT_RAW=teAErr?[]:(teA||[]);
+  buildAttendanceMaps();
   render();
 }
 async function markMMAttendance(sessionId,residentId,status){
@@ -2162,6 +2173,11 @@ function renderKpiProposalModal(){
 // via leave_weeks/leave_position and is merged in by buildLeaveData()) ───────
 let LEAVE_PENDING_COUNT=0;
 let ONCALL_DATA=[];
+// Next year's on-call, held apart from ONCALL_DATA rather than merged into it. The calendar,
+// the dashboard and the ICS feed all read ONCALL_DATA directly and must keep meaning "the year
+// we are living in", so the on-call module swaps source via ocData() instead of the array
+// swapping underneath everyone. Loaded only once someone actually looks at next year.
+let ONCALL_PLAN_DATA=null;
 let BEST_VOTES=[];let BEST_STATUS=null;
 let _inactiveResById={};
 async function loadLeaveRecords(){
@@ -2344,6 +2360,29 @@ function el(tag,props,...kids){
   return e;
 }
 function set(s){Object.assign(STATE,s);render();}
+// ─── VIEWING YEAR ────────────────────────────────────────────────────────────
+// Forward-planning modules (on-call, morning meetings, academic day) can be pointed at the
+// year after the live one, because their schedules and surveys have to be built before that
+// year starts. Nothing else in the portal moves: KPI, promotion and the rota stay on
+// CURRENT_ACADEMIC_YEAR. Each module keeps its own key so switching one never drags the others.
+function ayClamp(y){return y===CURRENT_ACADEMIC_YEAR+1?y:CURRENT_ACADEMIC_YEAR;}
+function ayLabel(y){return"AY "+y+"-"+(y+1).toString().slice(2);}
+function mmAY(){return ayClamp(STATE.mmAY);}
+function teachAY(){return ayClamp(STATE.teachAY);}
+function mmSessions(){const y=mmAY();return MM_SESSIONS.filter(s=>s.academic_year===y);}
+function teachSessions(){const y=teachAY();return TEACH_SESSIONS.filter(s=>s.academic_year===y);}
+// The attendance maps hold one year at a time, so they have to be rebuilt before the render
+// that follows the switch — hence the explicit render() instead of set().
+function mmSetYear(y){
+  if(y===mmAY())return;
+  Object.assign(STATE,{mmAY:y,mmBlock:y===CURRENT_ACADEMIC_YEAR?CURRENT_PERIOD:1,mmShowEntry:false,mmEntrySession:null});
+  buildAttendanceMaps();render();
+}
+function teachSetYear(y){
+  if(y===teachAY())return;
+  Object.assign(STATE,{teachAY:y,teachBlock:y===CURRENT_ACADEMIC_YEAR?CURRENT_PERIOD:1,teachShowEntry:false,teachEntrySession:null});
+  buildAttendanceMaps();render();
+}
 function rotColor(rot){return ROT_COLORS[rot]||{bg:"#FEFBF3",tx:"#475569"};}
 // Outline (not border) so the dashed ring on Freeze cannot collide
 // with the amber current-block border or the rotation-tracker completion border.
@@ -2585,11 +2624,21 @@ const ONCALL_SLOTS=[
 function isWeekendDate(ds){const[y,m,d]=ds.split("-").map(Number);const dw=new Date(y,m-1,d).getDay();return dw===5||dw===6;}
 function oncallHoursLabel(slotKey,ds){if(slotKey==="ctu1"||slotKey==="ctu2")return"08:00 - 16:00";return isWeekendDate(ds)?"08:00 - 22:00":"16:00 - 22:00";}
 function canEditOncall(){const u=STATE.user;if(!u)return false;if(isPdRole(u.role)||u.role==="chief")return true;return hasPriv(u.profileId,"edit_oncall");}
+// The year the on-call module is pointed at. Only the live year and the one after it: the
+// survey for Block 1 has to run before that year begins, which is the whole reason this exists.
+// Everything in the module reads the year through here, reads AND writes, so a save can never
+// land in a different year from the one on screen.
+function ocAY(){return ayClamp(STATE.oncallAY);}
+function ocIsPlanYear(){return ocAY()!==CURRENT_ACADEMIC_YEAR;}
+function ocData(){return ocIsPlanYear()?(ONCALL_PLAN_DATA||[]):ONCALL_DATA;}
+function ocPrefs(){return ocIsPlanYear()?(ONCALL_PREFS_PLAN||[]):ONCALL_PREFS;}
+function ocPrefsStatus(){return ocIsPlanYear()?(ONCALL_PREFS_STATUS_PLAN||{}):ONCALL_PREFS_STATUS;}
+function ocAYLabel(y){return ayLabel(y);}
 function oncallDateObj(ds){const[y,m,d]=ds.split("-").map(Number);return new Date(y,m-1,d);}
 function oncallAddDays(ds,n){const dt=oncallDateObj(ds);dt.setDate(dt.getDate()+n);return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");}
 function oncallResidentDatesInBlock(blk,rid,rname){
   const key=rname?rname.trim().toLowerCase():null;
-  return ONCALL_DATA.filter(e=>e.block_number===blk&&(rid?e.resident_id===rid:(e.resident_name||"").trim().toLowerCase()===key)).map(e=>e.schedule_date).filter((d,i,a)=>a.indexOf(d)===i).sort();
+  return ocData().filter(e=>e.block_number===blk&&(rid?e.resident_id===rid:(e.resident_name||"").trim().toLowerCase()===key)).map(e=>e.schedule_date).filter((d,i,a)=>a.indexOf(d)===i).sort();
 }
 // Preview shown while hovering a candidate name in the on-call cell picker:
 // their other on-call days this block (for highlighting), plus any
@@ -2683,34 +2732,37 @@ function fitOncallFullscreen(){
   style.textContent="#oc-fullscreen .oncall-tbl td{padding:"+padV+"px 12px;font-size:"+fontPx+"px;} #oc-fullscreen .oncall-tbl thead th{padding:5px 12px;font-size:.6rem;} #oc-fullscreen .oc-day-pill{font-size:"+btnFontPx+"px!important;padding:1px 7px!important;} #oc-fullscreen .oncall-tbl td button.sbtn{font-size:"+btnFontPx+"px!important;padding:1px 6px!important;} #oc-fullscreen .oc-sticky-date div{font-size:"+fontPx+"px!important;line-height:1.15!important;} #oc-fullscreen .oncall-tbl td>div{min-height:"+cellMinH+"px!important;}";
 }
 window.addEventListener("resize",()=>{if(STATE.oncallFullscreen)fitOncallFullscreen();});
-async function loadOncallData(){
+async function loadOncallData(ay){
   // The academic_year filter does not bound this under 1000: a full year is ~4 slots on each
   // weekday plus 6 on each weekend day, so roughly 1700 rows per year. Paged, ordered by the
   // (schedule_date, slot_key) unique constraint.
-  const{data,error}=await fetchAllRows(()=>sb.from("oncall_schedule").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("schedule_date").order("slot_key"));
-  if(!error&&data)ONCALL_DATA=data;
+  const yr=ay==null?CURRENT_ACADEMIC_YEAR:ay;
+  const{data,error}=await fetchAllRows(()=>sb.from("oncall_schedule").select("*").eq("academic_year",yr).order("schedule_date").order("slot_key"));
+  if(!error&&data){if(yr===CURRENT_ACADEMIC_YEAR)ONCALL_DATA=data;else ONCALL_PLAN_DATA=data;}
   render();
 }
 async function saveOncallDay(blockNum,date,entries){
+  const yr=ocAY();
   const priorForDate={};
-  ONCALL_DATA.filter(e=>e.schedule_date===date).forEach(e=>{priorForDate[e.slot_key]=e;});
-  const blockPublished=schedulePublishState(ONCALL_DATA.filter(e=>e.block_number===blockNum))==="published";
-  const{error:de}=await sb.from("oncall_schedule").delete().eq("schedule_date",date).eq("academic_year",CURRENT_ACADEMIC_YEAR);
+  ocData().filter(e=>e.schedule_date===date).forEach(e=>{priorForDate[e.slot_key]=e;});
+  const blockPublished=schedulePublishState(ocData().filter(e=>e.block_number===blockNum))==="published";
+  const{error:de}=await sb.from("oncall_schedule").delete().eq("schedule_date",date).eq("academic_year",yr);
   if(de){showToast("Error clearing old entries: "+de.message);return;}
-  const rows=entries.filter(e=>e.resident_id||e.resident_name).map(e=>({block_number:blockNum,schedule_date:date,slot_key:e.slot_key,resident_id:e.resident_id?parseInt(e.resident_id,10):null,resident_name:e.resident_name||null,is_extra:!!e.is_extra,published:priorForDate[e.slot_key]?!!priorForDate[e.slot_key].published:blockPublished,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null}));
+  const rows=entries.filter(e=>e.resident_id||e.resident_name).map(e=>({block_number:blockNum,schedule_date:date,slot_key:e.slot_key,resident_id:e.resident_id?parseInt(e.resident_id,10):null,resident_name:e.resident_name||null,is_extra:!!e.is_extra,published:priorForDate[e.slot_key]?!!priorForDate[e.slot_key].published:blockPublished,academic_year:yr,created_by:STATE.user?.profileId||null}));
   if(rows.length){const{error:ie}=await sb.from("oncall_schedule").insert(rows);if(ie){showToast("Error saving: "+ie.message);return;}}
-  await loadOncallData();
+  await loadOncallData(yr);
 }
 async function saveOncallCell(blk,date,slotKey,residentId,residentName){
-  const existing=ONCALL_DATA.find(e=>e.schedule_date===date&&e.slot_key===slotKey);
-  const blockPublished=schedulePublishState(ONCALL_DATA.filter(e=>e.block_number===blk))==="published";
-  const{error:de}=await sb.from("oncall_schedule").delete().eq("schedule_date",date).eq("slot_key",slotKey).eq("academic_year",CURRENT_ACADEMIC_YEAR);
+  const yr=ocAY();
+  const existing=ocData().find(e=>e.schedule_date===date&&e.slot_key===slotKey);
+  const blockPublished=schedulePublishState(ocData().filter(e=>e.block_number===blk))==="published";
+  const{error:de}=await sb.from("oncall_schedule").delete().eq("schedule_date",date).eq("slot_key",slotKey).eq("academic_year",yr);
   if(de){showToast("Error: "+de.message);return;}
   if(residentId||residentName){
-    const{error:ie}=await sb.from("oncall_schedule").insert({block_number:blk,schedule_date:date,slot_key:slotKey,resident_id:residentId?parseInt(residentId,10):null,resident_name:residentName||null,is_extra:existing?.is_extra||false,published:existing?!!existing.published:blockPublished,academic_year:CURRENT_ACADEMIC_YEAR,created_by:STATE.user?.profileId||null});
+    const{error:ie}=await sb.from("oncall_schedule").insert({block_number:blk,schedule_date:date,slot_key:slotKey,resident_id:residentId?parseInt(residentId,10):null,resident_name:residentName||null,is_extra:existing?.is_extra||false,published:existing?!!existing.published:blockPublished,academic_year:yr,created_by:STATE.user?.profileId||null});
     if(ie){showToast("Error saving: "+ie.message);return;}
   }
-  await loadOncallData();
+  await loadOncallData(yr);
 }
 // ─── ON-CALL PREFERENCE SURVEY ───────────────────────────────────────────────
 // Per block, each resident names dates they would prefer NOT to be on call:
@@ -2720,27 +2772,47 @@ const OC_PREF_WE_CAP=2;
 const OC_PREF_WD_CAP=4;
 let ONCALL_PREFS=[];
 let ONCALL_PREFS_STATUS={};
-async function loadOncallPrefs(){
+let ONCALL_PREFS_PLAN=null;
+let ONCALL_PREFS_STATUS_PLAN=null;
+async function loadOncallPrefs(ay){
   // Every resident's picks for the whole year: ~41 residents x 6 dates x 13 blocks
   // runs past the 1000-row cap well before the year is out, so this has to page.
-  const{data,error}=await fetchAllRows(()=>sb.from("oncall_prefs").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("id"));
+  const yr=ay==null?CURRENT_ACADEMIC_YEAR:ay;
+  const{data,error}=await fetchAllRows(()=>sb.from("oncall_prefs").select("*").eq("academic_year",yr).order("id"));
   if(error){console.warn("oncall_prefs load",error.message);return;}
-  ONCALL_PREFS=data||[];
+  if(yr===CURRENT_ACADEMIC_YEAR)ONCALL_PREFS=data||[];else ONCALL_PREFS_PLAN=data||[];
 }
-async function loadOncallPrefsStatus(){
-  const{data,error}=await sb.from("oncall_prefs_status").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR);
+async function loadOncallPrefsStatus(ay){
+  const yr=ay==null?CURRENT_ACADEMIC_YEAR:ay;
+  const{data,error}=await sb.from("oncall_prefs_status").select("*").eq("academic_year",yr);
   if(error){console.warn("oncall_prefs_status load",error.message);return;}
-  ONCALL_PREFS_STATUS={};
-  (data||[]).forEach(r=>{ONCALL_PREFS_STATUS[r.block_number]=r;});
+  const m={};
+  (data||[]).forEach(r=>{m[r.block_number]=r;});
+  if(yr===CURRENT_ACADEMIC_YEAR)ONCALL_PREFS_STATUS=m;else ONCALL_PREFS_STATUS_PLAN=m;
+}
+// Pulls next year in on first look. ONCALL_PLAN_DATA stays null until then, which is also how
+// the toggle knows whether it still has to fetch.
+async function ocLoadPlanYear(){
+  const yr=CURRENT_ACADEMIC_YEAR+1;
+  await Promise.all([loadOncallPrefs(yr),loadOncallPrefsStatus(yr)]);
+  await loadOncallData(yr);
+}
+// Block and picker state are cleared on the way across, so a draft typed against Block 3 of
+// one year cannot be saved into Block 3 of the other.
+function ocSetYear(y){
+  if(y===ocAY())return;
+  const plan=y!==CURRENT_ACADEMIC_YEAR;
+  set({oncallAY:y,oncallBlock:plan?1:CURRENT_PERIOD,oncallInlineEdit:null,ocPrefBlk:null,ocPrefSel:{}});
+  if(plan&&ONCALL_PLAN_DATA===null)ocLoadPlanYear();
 }
 function oncallPrefsIsOpen(blk){
-  const w=ONCALL_PREFS_STATUS[blk];
+  const w=ocPrefsStatus()[blk];
   if(!w||!w.is_open)return false;
   if(w.deadline&&new Date(w.deadline)<new Date())return false;
   return true;
 }
 function oncallPrefsCountdown(blk){
-  const w=ONCALL_PREFS_STATUS[blk];
+  const w=ocPrefsStatus()[blk];
   if(!w||!w.deadline)return null;
   const diff=new Date(w.deadline)-new Date();
   if(diff<=0)return"Window closed";
@@ -2752,66 +2824,67 @@ function oncallPrefsCountdown(blk){
 // The block whose survey is currently collecting — used to point residents at the
 // right block when they land on the tab from a different one.
 function oncallPrefsOpenBlock(){
-  const keys=Object.keys(ONCALL_PREFS_STATUS).map(Number).sort((a,b)=>a-b);
+  const keys=Object.keys(ocPrefsStatus()).map(Number).sort((a,b)=>a-b);
   return keys.find(oncallPrefsIsOpen)||null;
 }
 async function oncallPrefsOpenWindow(blk,deadline){
-  const{error}=await sb.from("oncall_prefs_status").upsert({academic_year:CURRENT_ACADEMIC_YEAR,block_number:blk,is_open:true,opened_at:new Date().toISOString(),deadline:deadline||null},{onConflict:"academic_year,block_number"});
+  const{error}=await sb.from("oncall_prefs_status").upsert({academic_year:ocAY(),block_number:blk,is_open:true,opened_at:new Date().toISOString(),deadline:deadline||null},{onConflict:"academic_year,block_number"});
   if(error){showToast("Error: "+error.message,"error");return;}
-  await loadOncallPrefsStatus();
+  await loadOncallPrefsStatus(ocAY());
   showToast("Preference survey opened for Block "+blk,"success");
   render();
 }
 async function oncallPrefsCloseWindow(blk){
-  const{error}=await sb.from("oncall_prefs_status").upsert({academic_year:CURRENT_ACADEMIC_YEAR,block_number:blk,is_open:false},{onConflict:"academic_year,block_number"});
+  const{error}=await sb.from("oncall_prefs_status").upsert({academic_year:ocAY(),block_number:blk,is_open:false},{onConflict:"academic_year,block_number"});
   if(error){showToast("Error: "+error.message,"error");return;}
-  await loadOncallPrefsStatus();
+  await loadOncallPrefsStatus(ocAY());
   showToast("Preference survey closed for Block "+blk,"success");
   render();
 }
 function oncallPrefRows(blk,rid){
-  return ONCALL_PREFS.filter(p=>p.block_number===blk&&p.resident_id===rid);
+  return ocPrefs().filter(p=>p.block_number===blk&&p.resident_id===rid);
 }
 function oncallPrefHasPick(blk,rid,date){
-  return ONCALL_PREFS.some(p=>p.block_number===blk&&p.resident_id===rid&&p.pref_date===date);
+  return ocPrefs().some(p=>p.block_number===blk&&p.resident_id===rid&&p.pref_date===date);
 }
 // A pick is honoured when the resident holds no on-call slot that day.
 function oncallPrefMet(blk,rid,date){
-  return !ONCALL_DATA.some(e=>e.block_number===blk&&e.resident_id===rid&&e.schedule_date===date);
+  return !ocData().some(e=>e.block_number===blk&&e.resident_id===rid&&e.schedule_date===date);
 }
 // How many residents asked to avoid each date. Clustering is allowed, so the
 // scheduler needs to see where it lands before assigning.
 function oncallPrefDemand(blk){
   const m={};
-  ONCALL_PREFS.filter(p=>p.block_number===blk).forEach(p=>{m[p.pref_date]=(m[p.pref_date]||0)+1;});
+  ocPrefs().filter(p=>p.block_number===blk).forEach(p=>{m[p.pref_date]=(m[p.pref_date]||0)+1;});
   return m;
 }
 // Every assignment in the block that lands on a date the resident asked to avoid.
 function oncallPrefClashes(blk){
-  return ONCALL_DATA.filter(e=>e.block_number===blk&&e.resident_id&&oncallPrefHasPick(blk,e.resident_id,e.schedule_date));
+  return ocData().filter(e=>e.block_number===blk&&e.resident_id&&oncallPrefHasPick(blk,e.resident_id,e.schedule_date));
 }
 // Saving replaces the resident's rows for the block rather than diffing them.
 async function saveOncallPrefs(blk,sel,status){
   const u=STATE.user;if(!u?.rid)return;
+  const yr=ocAY();
   const dates=Object.keys(sel).filter(d=>sel[d]).sort();
   const we=dates.filter(isWeekendDate).length,wd=dates.length-we;
   if(status==="submitted"&&(we!==OC_PREF_WE_CAP||wd!==OC_PREF_WD_CAP)){
     showToast("Choose exactly "+OC_PREF_WE_CAP+" weekend days and "+OC_PREF_WD_CAP+" weekdays before submitting","error");return;
   }
-  const{error:de}=await sb.from("oncall_prefs").delete().eq("resident_id",u.rid).eq("academic_year",CURRENT_ACADEMIC_YEAR).eq("block_number",blk);
+  const{error:de}=await sb.from("oncall_prefs").delete().eq("resident_id",u.rid).eq("academic_year",yr).eq("block_number",blk);
   if(de){showToast("Save failed: "+de.message,"error");return;}
   if(dates.length){
-    const rows=dates.map(d=>({resident_id:Number(u.rid),academic_year:CURRENT_ACADEMIC_YEAR,block_number:blk,pref_date:d,kind:isWeekendDate(d)?"weekend":"weekday",status,updated_at:new Date().toISOString()}));
+    const rows=dates.map(d=>({resident_id:Number(u.rid),academic_year:yr,block_number:blk,pref_date:d,kind:isWeekendDate(d)?"weekend":"weekday",status,updated_at:new Date().toISOString()}));
     const{error:ie}=await sb.from("oncall_prefs").insert(rows);
     if(ie){showToast("Save failed: "+ie.message,"error");return;}
   }
-  await loadOncallPrefs();
+  await loadOncallPrefs(yr);
   showToast(status==="submitted"?"Preferences submitted":"Draft saved","success");
   render();
 }
 function downloadOncallICS(resId){
   const res=resById(resId);if(!res)return;
-  const entries=ONCALL_DATA.filter(e=>e.resident_id===resId).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date));
+  const entries=ocData().filter(e=>e.resident_id===resId).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date));
   if(!entries.length){showToast("No on-call entries found.","warning");return;}
   let ics="BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//DSFH IM//Oncall//EN\r\nCALSCALE:GREGORIAN\r\n";
   entries.forEach(e=>{
@@ -3205,6 +3278,29 @@ function sortByLevel(arr){return arr.slice().sort((a,b)=>(_LVL_ORD[a.level]??9)-
 function consultById(id){return CONSULTANTS.find(c=>c.id===id);}
 // renderBlockPills(selected, onSelect, opts?) — unified block pill row
 // opts: { st: extra wrapper styles, cur: bool (outline CURRENT_PERIOD), inactiveBg: string }
+// Year toggle shared by the modules that have to be planned before their year begins:
+// on-call, morning meetings, academic day. Only the live year and the next one — anything
+// further out has no block dates defined. The standing bar below the toggle is the point of
+// the control: once you scroll past the header the two years look identical, and every edit
+// on the page writes to whichever one is selected.
+function renderAYBar(sel,onPick,planNote){
+  const cur=CURRENT_ACADEMIC_YEAR,nxt=cur+1,plan=sel!==cur;
+  const seg=(y)=>{
+    const on=sel===y;
+    return el("span",{st:{padding:"6px 17px",borderRadius:"9999px",fontSize:".78rem",fontWeight:on?"600":"500",color:on?"#FEFBF3":"rgba(31,26,18,.5)",background:on?"#c96a4a":"transparent",cursor:on?"default":"pointer",transition:"all .15s"},onClick:()=>onPick(y)},ocAYLabel(y).slice(3));
+  };
+  const nxtStart=blockStartDate(1,nxt);
+  return el("div",null,
+    el("div",{st:{display:"flex",alignItems:"center",gap:"14px",flexWrap:"wrap",marginBottom:"14px"}},
+      el("div",{st:{display:"inline-flex",border:"1px solid rgba(31,26,18,.12)",borderRadius:"9999px",padding:"3px",background:"rgba(31,26,18,.02)"}},seg(cur),seg(nxt)),
+      el("span",{st:{fontSize:".72rem",color:"rgba(31,26,18,.4)"}},plan?(nxtStart?"Next year \u2014 starts "+fmtDate(toLocalYMD(nxtStart)):"Next year"):"Live year")
+    ),
+    !plan?null:el("div",{st:{display:"flex",alignItems:"center",gap:"12px",flexWrap:"wrap",background:"rgba(201,106,74,.06)",borderLeft:"3px solid #c96a4a",borderRadius:"0 8px 8px 0",padding:"11px 16px",marginBottom:"18px"}},
+      el("span",{st:{fontSize:".78rem",color:"rgba(31,26,18,.72)",flex:"1",minWidth:"220px"}},planNote||("You are planning "+ocAYLabel(nxt)+". Nothing here is live yet \u2014 anything you save is stored against next year.")),
+      el("span",{st:{fontSize:".72rem",fontWeight:"600",color:"#FEFBF3",background:"#c96a4a",borderRadius:"9999px",padding:"6px 14px",cursor:"pointer",whiteSpace:"nowrap"},onClick:()=>onPick(cur)},"Back to "+ocAYLabel(cur).slice(3))
+    )
+  );
+}
 function renderBlockPills(selected,onSelect,opts){
   opts=opts||{};
   return el("div",{st:{display:"flex",gap:"6px",flexWrap:"wrap",...(opts.st||{})}},
@@ -3396,11 +3492,13 @@ function renderSearchOverlay(){
   QUIZZES.filter(q2=>q2.title.toLowerCase().includes(q)).slice(0,5).forEach(qz=>{
     results.push({label:qz.title,sub:"Quiz · "+fmtDate(qz.date)+" · Max: "+qz.max,icon:"",action:()=>set({mod:"quiz",quizSelQuiz:qz.id,searchQ:""})});
   });
+  // Search spans both years, so a hit has to carry its year across or it lands on the right
+  // block of the wrong one.
   MM_SESSIONS.filter(s=>(s.topic||"").toLowerCase().includes(q)).slice(0,5).forEach(s=>{
-    results.push({label:s.topic,sub:"Morning Meeting · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"",action:()=>set({mod:"morning",mmTab:"attendance",mmBlock:s.block_number,searchQ:""})});
+    results.push({label:s.topic,sub:"Morning Meeting · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"",action:()=>{Object.assign(STATE,{mod:"morning",mmTab:"attendance",mmAY:ayClamp(s.academic_year),mmBlock:s.block_number,searchQ:""});buildAttendanceMaps();render();}});
   });
   TEACH_SESSIONS.filter(s=>(s.topic||"").toLowerCase().includes(q)).slice(0,5).forEach(s=>{
-    results.push({label:s.topic,sub:"Academic Day · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"",action:()=>set({mod:"teaching",teachTab:"attendance",teachBlock:s.block_number,searchQ:""})});
+    results.push({label:s.topic,sub:"Academic Day · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"",action:()=>{Object.assign(STATE,{mod:"teaching",teachTab:"attendance",teachAY:ayClamp(s.academic_year),teachBlock:s.block_number,searchQ:""});buildAttendanceMaps();render();}});
   });
   if(!results.length)results.push({label:'No results for "'+STATE.searchQ+'"',sub:"",icon:"",action:null});
   return el("div",{st:{position:"fixed",top:"0",left:"0",right:"0",bottom:"0",zIndex:"999",display:"flex",alignItems:"flex-start",justifyContent:"flex-start"},
@@ -4579,14 +4677,14 @@ function renderScheduleTable(sessions,blk,cols){
 }
 // ─── MORNING MEETINGS ────────────────────────────────────────────────────────
 function renderMorning(){
-  const blk=STATE.mmBlock;
-  const period=blockLabel(blk,CURRENT_ACADEMIC_YEAR);
+  const blk=STATE.mmBlock,ay=mmAY();
+  const period=blockLabel(blk,ay);
   const canEdit=canEditMMSchedule();
   const header=el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
     el("div",null,
       el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Morning Meetings"),
       el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Attendance & Schedule"),
-      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+" · Block "+blk+(period?" · "+period:""))
+      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},ayLabel(ay)+" · Block "+blk+(period?" · "+period:""))
     ),
     canEdit?el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"999px",padding:"9px 22px",fontSize:".84rem",fontWeight:"600",cursor:"pointer",flexShrink:"0"},onClick:()=>set({mmShowEntry:true,mmEntrySession:"new_mm",mmTab:"schedule"})},"+ Add Session"):null
   );
@@ -4599,6 +4697,9 @@ function renderMorning(){
   );
   return el("div",{cls:"content"},
     header,
+    // Only schedulers get the year toggle: residents have nothing to do in a year that has
+    // not started, and next year's sessions are unpublished, so they would see an empty page.
+    canEdit?renderAYBar(ay,mmSetYear,"You are planning "+ayLabel(CURRENT_ACADEMIC_YEAR+1)+". Sessions you add here are stored against next year and stay hidden from residents until you publish the block."):null,
     tabs,
     STATE.mmTab==="schedule"?renderMMSchedule():
     STATE.mmTab==="attendance"?renderMMAttendance():
@@ -4617,7 +4718,7 @@ function renderMMScheduleForm(blk,editingSession){
     el("div",{cls:"grid-3",st:{marginBottom:"10px"}},
       el("div",null,el("label",null,"Week (in block)"),
         el("select",{id:"mm_f_week"},
-          Array.from({length:blockWeeks(blk,CURRENT_ACADEMIC_YEAR)},(_,k)=>k+1).map(n=>el("option",{value:n,...(wk===n?{selected:""}:{})},"Week "+n))
+          Array.from({length:blockWeeks(blk,mmAY())},(_,k)=>k+1).map(n=>el("option",{value:n,...(wk===n?{selected:""}:{})},"Week "+n))
         )
       ),
       el("div",null,el("label",null,"Day"),el("input",{id:"mm_f_day",placeholder:"e.g. Sunday",value:editingSession?.day_label||""})),
@@ -4792,7 +4893,7 @@ function renderMMScheduleForm(blk,editingSession){
         const modResId=modRaw.startsWith("r:")?parseInt(modRaw.slice(2)):null;
         const modConsName=modRaw.startsWith("c:")?consultById(parseInt(modRaw.slice(2)))?.name:null;
         const payload={
-          academic_year:CURRENT_ACADEMIC_YEAR,
+          academic_year:mmAY(),
           block_number:blk,
           week_number:4*(blk-1)+week-1,
           session_date:date,
@@ -4807,7 +4908,7 @@ function renderMMScheduleForm(blk,editingSession){
         };
         let error;
         if(editingSession){({error}=await sb.from("mm_sessions").update(payload).eq("id",editingSession.id));}
-        else{payload.created_by=STATE.user.profileId;payload.published=schedulePublishState(MM_SESSIONS.filter(s=>s.block_number===blk))==="published";({error}=await sb.from("mm_sessions").insert(payload));}
+        else{payload.created_by=STATE.user.profileId;payload.published=schedulePublishState(mmSessions().filter(s=>s.block_number===blk))==="published";({error}=await sb.from("mm_sessions").insert(payload));}
         if(error){showToast("Could not save: "+error.message);return;}
         set({mmShowEntry:false,mmEntrySession:null});
         await loadSchedules();
@@ -4846,15 +4947,17 @@ function mmDatesForBlock(blockNum,academicYear){
   return dates;
 }
 async function generateMMSessions(blk){
-  showConfirm("Auto-generate Sunday–Thursday session slots ("+(blockWeeks(blk,CURRENT_ACADEMIC_YEAR)*5)+" total) for Block "+blk+"? Only dates not already in the schedule will be added.",async()=>{
-    const dates=mmDatesForBlock(blk,CURRENT_ACADEMIC_YEAR);
+  const ay=mmAY();
+  showConfirm("Auto-generate Sunday–Thursday session slots ("+(blockWeeks(blk,ay)*5)+" total) for Block "+blk+" of "+ayLabel(ay)+"? Only dates not already in the schedule will be added.",async()=>{
+    const dates=mmDatesForBlock(blk,ay);
     if(!dates.length){showToast("Could not compute dates for Block "+blk);return;}
-    const existingDates=new Set(MM_SESSIONS.filter(s=>s.block_number===blk).map(s=>s.session_date));
+    const blkSessions=mmSessions().filter(s=>s.block_number===blk);
+    const existingDates=new Set(blkSessions.map(s=>s.session_date));
     const toInsert=dates.filter(d=>!existingDates.has(d.date));
     if(!toInsert.length){showToast("All session slots for Block "+blk+" already exist.","warning");return;}
-    const blockPublished=schedulePublishState(MM_SESSIONS.filter(s=>s.block_number===blk))==="published";
+    const blockPublished=schedulePublishState(blkSessions)==="published";
     const rows=toInsert.map(d=>({
-      academic_year:CURRENT_ACADEMIC_YEAR,block_number:blk,week_number:4*(blk-1)+d.week-1,
+      academic_year:ay,block_number:blk,week_number:4*(blk-1)+d.week-1,
       session_date:d.date,day_label:d.day,topic:"",published:blockPublished,created_by:STATE.user?.profileId||null
     }));
     const{error}=await sb.from("mm_sessions").insert(rows);
@@ -4971,7 +5074,7 @@ function schedulePublishState(sessions){
   if(pubCount===sessions.length)return"published";
   return"partial";
 }
-function renderPublishControls(sessions,tbl,blk,canEditSched,reloadFn){
+function renderPublishControls(sessions,tbl,blk,canEditSched,reloadFn,ay){
   if(!canEditSched)return null;
   const state=schedulePublishState(sessions);
   const badges={
@@ -4983,17 +5086,17 @@ function renderPublishControls(sessions,tbl,blk,canEditSched,reloadFn){
   const b=badges[state];
   const badge=el("span",{st:{fontSize:".72rem",fontWeight:"600",padding:"4px 12px",borderRadius:"999px",background:b.bg,color:b.fg}},b.txt);
   const btn=state==="published"?el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.12)",color:"rgba(31,26,18,.55)",padding:"5px 14px",borderRadius:"999px",cursor:"pointer",fontSize:".78rem"},onClick:async()=>{
-    await sb.from(tbl).update({published:false}).eq("block_number",blk).eq("academic_year",CURRENT_ACADEMIC_YEAR);
-    await reloadFn();
+    await sb.from(tbl).update({published:false}).eq("block_number",blk).eq("academic_year",ay);
+    await reloadFn(ay);
   }},"Unpublish Block"):el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",padding:"5px 16px",borderRadius:"999px",cursor:sessions.length?"pointer":"not-allowed",fontSize:".78rem",fontWeight:"600",opacity:sessions.length?"1":".5"},onClick:sessions.length?async()=>{
-    await sb.from(tbl).update({published:true}).eq("block_number",blk).eq("academic_year",CURRENT_ACADEMIC_YEAR);
-    await reloadFn();
+    await sb.from(tbl).update({published:true}).eq("block_number",blk).eq("academic_year",ay);
+    await reloadFn(ay);
   }:null},"Publish Block");
   return el("div",{st:{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px",flexWrap:"wrap"}},badge,btn);
 }
 function renderMMSchedule(){
   const blk=STATE.mmBlock;
-  const sessions=MM_SESSIONS.filter(s=>s.block_number===blk);
+  const sessions=mmSessions().filter(s=>s.block_number===blk);
   const formOpen=STATE.mmShowEntry&&(STATE.mmEntrySession==="new_mm"||typeof STATE.mmEntrySession==="number");
   const editingSession=(formOpen&&typeof STATE.mmEntrySession==="number")?MM_SESSION_BY_ID[STATE.mmEntrySession]:null;
   const canEditSched=canEditMMSchedule();
@@ -5033,7 +5136,7 @@ function renderMMSchedule(){
   );
   return el("div",null,
     blkRow,
-    renderPublishControls(sessions,"mm_sessions",blk,canEditSched,loadSchedules),
+    renderPublishControls(sessions,"mm_sessions",blk,canEditSched,loadSchedules,mmAY()),
     el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
       canEditSched?el("button",{st:{background:"none",border:"1px solid rgba(31,26,18,.12)",color:"rgba(31,26,18,.55)",padding:"5px 14px",borderRadius:"999px",cursor:"pointer",fontSize:".78rem"},onClick:()=>generateMMSessions(blk)},"Auto-fill dates"):null,
       sessions.length?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem",marginLeft:canEditSched?"0":"auto"},onClick:()=>exportSchedule("mm",blk)},"Export Excel"):null
@@ -5046,7 +5149,7 @@ function renderMMSchedule(){
 }
 function renderMMAttendance(){
   const blk=STATE.mmBlock;
-  const sessions=MM_SESSIONS.filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
+  const sessions=mmSessions().filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
   const vr=visRes();
   let totalSess=sessions.length,totalP=0,totalL=0,totalA=0,totalE=0;
   sessions.forEach(s=>{
@@ -5268,20 +5371,22 @@ function renderAttOverview(cfg){
   );
 }
 function renderMMOverview(){
-  return renderAttOverview({sessionsAll:MM_SESSIONS,attStore:MM_ATT,blockKey:"mmBlock",modeKey:"mmOvMode",sortKey:"mmOvSort",title:"Attendance Overview"});
+  return renderAttOverview({sessionsAll:mmSessions(),attStore:MM_ATT,blockKey:"mmBlock",modeKey:"mmOvMode",sortKey:"mmOvSort",title:"Attendance Overview"});
 }
 // ─── ACADEMIC DAY SCHEDULE ────────────────────────────────────────────────────
 function renderTeaching(){
-  const blkT=STATE.teachBlock;const periodT=blockLabel(blkT,CURRENT_ACADEMIC_YEAR);
+  const blkT=STATE.teachBlock,ayT=teachAY();const periodT=blockLabel(blkT,ayT);
+  const canEditT=canEditTeachSchedule();
   return el("div",{cls:"content"},
     el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
       el("div",null,
         el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Academic Program"),
         el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Academic Day Sessions"),
-        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+" · Block "+blkT+(periodT?" · "+periodT:""))
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},ayLabel(ayT)+" · Block "+blkT+(periodT?" · "+periodT:""))
       ),
-      canEditTeachSchedule()?el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"999px",padding:"9px 22px",fontSize:".84rem",fontWeight:"600",cursor:"pointer",flexShrink:"0"},onClick:()=>set({teachShowEntry:true,teachEntrySession:"new_teach",teachTab:"schedule"})},"+ Add Session"):null
+      canEditT?el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"999px",padding:"9px 22px",fontSize:".84rem",fontWeight:"600",cursor:"pointer",flexShrink:"0"},onClick:()=>set({teachShowEntry:true,teachEntrySession:"new_teach",teachTab:"schedule"})},"+ Add Session"):null
     ),
+    canEditT?renderAYBar(ayT,teachSetYear,"You are planning "+ayLabel(CURRENT_ACADEMIC_YEAR+1)+". Sessions you add here are stored against next year and stay hidden from residents until you publish the block."):null,
     el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"28px"}},
       ...["schedule","attendance","overview"].map(t=>{const lbs={schedule:"Schedule",attendance:"Attendance",overview:"Overview"};const active=STATE.teachTab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({teachTab:t})},lbs[t]);})),
     STATE.teachTab==="schedule"?renderTeachSchedule():
@@ -5301,7 +5406,7 @@ function renderTeachScheduleForm(blk,editingSession){
     el("div",{cls:"grid-3",st:{marginBottom:"10px"}},
       el("div",null,el("label",null,"Week (in block)"),
         el("select",{id:"teach_f_week"},
-          Array.from({length:blockWeeks(blk,CURRENT_ACADEMIC_YEAR)},(_,k)=>k+1).map(n=>el("option",{value:n,...(wk===n?{selected:""}:{})},"Week "+n))
+          Array.from({length:blockWeeks(blk,teachAY())},(_,k)=>k+1).map(n=>el("option",{value:n,...(wk===n?{selected:""}:{})},"Week "+n))
         )
       ),
       el("div",null,el("label",null,"Day"),
@@ -5331,7 +5436,7 @@ function renderTeachScheduleForm(blk,editingSession){
         if(!date||!topic||!presenter){showToast("Date, topic and presenter are required.","warning");return;}
         const week=parseInt(document.getElementById("teach_f_week").value)||1;
         const payload={
-          academic_year:CURRENT_ACADEMIC_YEAR,
+          academic_year:teachAY(),
           block_number:blk,
           week_number:4*(blk-1)+week-1,
           session_date:date,
@@ -5343,7 +5448,7 @@ function renderTeachScheduleForm(blk,editingSession){
         };
         let error;
         if(editingSession){({error}=await sb.from("teaching_sessions").update(payload).eq("id",editingSession.id));}
-        else{payload.created_by=STATE.user.profileId;payload.published=schedulePublishState(TEACH_SESSIONS.filter(s=>s.block_number===blk))==="published";({error}=await sb.from("teaching_sessions").insert(payload));}
+        else{payload.created_by=STATE.user.profileId;payload.published=schedulePublishState(teachSessions().filter(s=>s.block_number===blk))==="published";({error}=await sb.from("teaching_sessions").insert(payload));}
         if(error){showToast("Could not save: "+error.message);return;}
         set({teachShowEntry:false,teachEntrySession:null});
         await loadSchedules();
@@ -5355,7 +5460,7 @@ function renderTeachScheduleForm(blk,editingSession){
 }
 function renderTeachSchedule(){
   const blk=STATE.teachBlock;
-  const sessions=TEACH_SESSIONS.filter(s=>s.block_number===blk);
+  const sessions=teachSessions().filter(s=>s.block_number===blk);
   const formOpen=STATE.teachShowEntry&&(STATE.teachEntrySession==="new_teach"||typeof STATE.teachEntrySession==="number");
   const editingSession=(formOpen&&typeof STATE.teachEntrySession==="number")?TEACH_SESSION_BY_ID[STATE.teachEntrySession]:null;
   const canEditSched=canEditTeachSchedule();
@@ -5384,7 +5489,7 @@ function renderTeachSchedule(){
       renderBlockPills(blk,n=>set({teachBlock:n}))
     ),
     el("div",{cls:"card"},
-      renderPublishControls(sessions,"teaching_sessions",blk,canEditSched,loadSchedules),
+      renderPublishControls(sessions,"teaching_sessions",blk,canEditSched,loadSchedules,teachAY()),
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
         el("span",{cls:"card-title",st:{margin:"0"}},"Block "+blk+" Academic Day Sessions"),
         sessions.length?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem",marginLeft:"auto"},onClick:()=>exportSchedule("teach",blk)},"Export Excel"):null,
@@ -5397,7 +5502,7 @@ function renderTeachSchedule(){
 }
 function renderTeachAttendance(){
   const blk=STATE.teachBlock;
-  const sessions=TEACH_SESSIONS.filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
+  const sessions=teachSessions().filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
   const vr=visRes();
   let totalP=0,totalL=0,totalA=0,totalE=0;
   sessions.forEach(s=>{
@@ -5529,7 +5634,7 @@ function renderTeachEntryForm(blk,sessions){
   return wrap;
 }
 function renderTeachOverview(){
-  return renderAttOverview({sessionsAll:TEACH_SESSIONS,attStore:TEACH_ATT,blockKey:"teachBlock",modeKey:"teachOvMode",sortKey:"teachOvSort",title:"Academic Day Attendance Overview"});
+  return renderAttOverview({sessionsAll:teachSessions(),attStore:TEACH_ATT,blockKey:"teachBlock",modeKey:"teachOvMode",sortKey:"teachOvSort",title:"Academic Day Attendance Overview"});
 }
 // ─── OCTOBER PROMOTION ───────────────────────────────────────────────────────
 let PROMOTION_NEEDED=false;
@@ -5616,7 +5721,7 @@ function renderPromoModal(){
 // ─── ATTENDANCE EXPORT ───────────────────────────────────────────────────────
 function exportAttendance(type, blk){
   const isMM = type === "mm";
-  const sessions = (isMM ? MM_SESSIONS : TEACH_SESSIONS)
+  const sessions = (isMM ? mmSessions() : teachSessions())
     .filter(s => s.block_number === blk)
     .slice().sort((a,b) => a.session_date.localeCompare(b.session_date));
   const ATT = isMM ? MM_ATT : TEACH_ATT;
@@ -5661,7 +5766,7 @@ function exportRota(){
 }
 function exportSchedule(type,blk){
   const isMM=type==="mm";
-  const sessions=(isMM?MM_SESSIONS:TEACH_SESSIONS).filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
+  const sessions=(isMM?mmSessions():teachSessions()).filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
   if(!sessions.length)return;
   const headers=isMM?["Day","Date","Topic","Presenter","Moderator","Consultant"]:["Day","Date","Specialty","Topic","Presenter"];
   const rows=sessions.map(s=>{
@@ -13915,10 +14020,10 @@ function renderOncall(){
   const canEdit=canEditOncall();
   // Build the full block date list (28 days, or 35 where the block runs 5 weeks)
   const allDates=[];
-  const blockStart=blockStartDate(blk,CURRENT_ACADEMIC_YEAR);
+  const blockStart=blockStartDate(blk,ocAY());
   if(blockStart){
     const DN=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-    for(let i=0;i<blockDays(blk,CURRENT_ACADEMIC_YEAR);i++){
+    for(let i=0;i<blockDays(blk,ocAY());i++){
       const d=new Date(blockStart.getTime()+i*86400000);
       const yr=d.getFullYear(),mo=String(d.getMonth()+1).padStart(2,"0"),dy=String(d.getDate()).padStart(2,"0");
       allDates.push({date:yr+"-"+mo+"-"+dy,day:DN[d.getDay()],isWe:d.getDay()===5||d.getDay()===6});
@@ -13926,7 +14031,7 @@ function renderOncall(){
   }
   // Index block data by date+slot
   const byDate={};
-  const blkEntriesAll=ONCALL_DATA.filter(e=>e.block_number===blk);
+  const blkEntriesAll=ocData().filter(e=>e.block_number===blk);
   blkEntriesAll.forEach(e=>{
     if(!byDate[e.schedule_date])byDate[e.schedule_date]={};
     byDate[e.schedule_date][e.slot_key]=e;
@@ -13936,7 +14041,7 @@ function renderOncall(){
   const blkDateEnd=allDates[allDates.length-1]?.date;
   const todayStr=toLocalYMD(new Date());
   // Resident's own oncall across all blocks in current year
-  const myEntries=u.rid?ONCALL_DATA.filter(e=>e.resident_id===u.rid).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date)):[];
+  const myEntries=u.rid?ocData().filter(e=>e.resident_id===u.rid).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date)):[];
   function oncallCell(entry,date,slotKey,interactive){
     const ie=STATE.oncallInlineEdit;
     if(canEdit&&ie&&ie.date===date&&ie.slotKey===slotKey){
@@ -13993,7 +14098,7 @@ function renderOncall(){
           ft.textContent="Save as outside rotator: \""+q+"\"";
           ft.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;font-style:italic;color:#374151;border-top:1px solid #f3f4f6;";
           const rname=q.trim().toLowerCase();
-          if(ONCALL_DATA.some(e=>e.block_number===blk&&(e.resident_name||"").trim().toLowerCase()===rname)){
+          if(ocData().some(e=>e.block_number===blk&&(e.resident_name||"").trim().toLowerCase()===rname)){
             ft.onmouseenter=()=>oncallSpotlight(blk,date,null,rname,blkDateStart,blkDateEnd,ft);
             ft.onmouseleave=()=>oncallClearSpotlight();
           }
@@ -14004,7 +14109,7 @@ function renderOncall(){
           ft.textContent="Use as free text: \""+q+"\"";
           ft.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;font-style:italic;color:#6b7280;border-top:1px solid #f3f4f6;";
           const rname=q.trim().toLowerCase();
-          if(ONCALL_DATA.some(e=>e.block_number===blk&&(e.resident_name||"").trim().toLowerCase()===rname)){
+          if(ocData().some(e=>e.block_number===blk&&(e.resident_name||"").trim().toLowerCase()===rname)){
             ft.onmouseenter=()=>oncallSpotlight(blk,date,null,rname,blkDateStart,blkDateEnd,ft);
             ft.onmouseleave=()=>oncallClearSpotlight();
           }
@@ -14123,7 +14228,7 @@ function renderOncall(){
     // Preferences are advisory, so this reports the overrides rather than blocking publish.
     const clashes=canEdit?oncallPrefClashes(blk):[];
     return el("div",null,
-      renderPublishControls(blkEntriesAll,"oncall_schedule",blk,canEdit,loadOncallData),
+      renderPublishControls(blkEntriesAll,"oncall_schedule",blk,canEdit,loadOncallData,ocAY()),
       clashes.length?el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},
         clashes.length+" assignment"+(clashes.length===1?"":"s")+" in this block fall on a date the resident asked to avoid \u2014 marked \u201cAsked off\u201d below. You can publish anyway."
       ):null,
@@ -14208,7 +14313,7 @@ function renderOncall(){
   // ── Preferences tab ──────────────────────────────────────────
   function renderPrefsTab(){
     if(!blockStart)return el("p",{cls:"sh"},"Block data not available.");
-    const win=ONCALL_PREFS_STATUS[blk]||null;
+    const win=ocPrefsStatus()[blk]||null;
     const isOpen=oncallPrefsIsOpen(blk);
     const myRows=u.rid?oncallPrefRows(blk,u.rid):[];
     const mySubmitted=myRows.some(p=>p.status==="submitted");
@@ -14338,7 +14443,7 @@ function renderOncall(){
           el("div",{cls:"card-title"},"Outcome \u2014 Block "+blk),
           el("div",null,...myRows.slice().sort((a,b)=>a.pref_date.localeCompare(b.pref_date)).map(p=>{
             const met=oncallPrefMet(blk,u.rid,p.pref_date);
-            const slots=ONCALL_DATA.filter(e=>e.block_number===blk&&e.resident_id===u.rid&&e.schedule_date===p.pref_date)
+            const slots=ocData().filter(e=>e.block_number===blk&&e.resident_id===u.rid&&e.schedule_date===p.pref_date)
               .map(e=>{const s=ONCALL_SLOTS.find(x=>x.key===e.slot_key);return s?s.label:e.slot_key;});
             return el("div",{st:{display:"flex",alignItems:"center",gap:"12px",padding:"10px 4px",borderBottom:"1px solid rgba(31,26,18,.07)"}},
               el("span",{st:{minWidth:"96px",fontWeight:"700",fontSize:".86rem"}},fmtDate(p.pref_date)),
@@ -14376,8 +14481,8 @@ function renderOncall(){
     if(!isPD()){
       return el("div",{cls:"alert-yellow"},"Statistics are currently visible to the Program Director only.");
     }
-    const blkEntries=ONCALL_DATA.filter(e=>e.block_number===blk);
-    const allEntries=ONCALL_DATA;
+    const blkEntries=ocData().filter(e=>e.block_number===blk);
+    const allEntries=ocData();
     const resStats=RESIDENTS.map(r=>({
       res:r,
       bReg:blkEntries.filter(e=>e.resident_id===r.id&&!e.is_extra).length,
@@ -14430,16 +14535,17 @@ function renderOncall(){
       )
     );
   }
-  const blkPeriodOC=blockLabel(blk,CURRENT_ACADEMIC_YEAR);
+  const blkPeriodOC=blockLabel(blk,ocAY());
   return el("div",{cls:"content"},
     el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
       el("div",null,
         el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"On-Call Schedule"),
         el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"On-Call Schedule"),
-        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+" · Block "+blk+(blkPeriodOC?" · "+blkPeriodOC:""))
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},ocAYLabel(ocAY())+" · Block "+blk+(blkPeriodOC?" · "+blkPeriodOC:""))
       )
     ),
-    renderBlockPills(blk,n=>set({oncallBlock:n,oncallTab:tab}),{st:{marginBottom:"20px"},cur:true,inactiveBg:"#F6EFE2"}),
+    renderAYBar(ocAY(),ocSetYear,ONCALL_PLAN_DATA===null&&ocIsPlanYear()?("Loading "+ocAYLabel(CURRENT_ACADEMIC_YEAR+1)+"…"):null),
+    renderBlockPills(blk,n=>set({oncallBlock:n,oncallTab:tab}),{st:{marginBottom:"20px"},cur:!ocIsPlanYear(),inactiveBg:"#F6EFE2"}),
     el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
       ...["schedule","mine","prefs","stats"].map(t=>{const lbs={schedule:"Schedule",mine:"My On-Calls",prefs:"Preferences",stats:"Statistics"};const active=tab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({oncallTab:t})},lbs[t]);})),
     tab==="schedule"?renderScheduleTab():tab==="mine"?renderMineTab():tab==="prefs"?renderPrefsTab():renderStatsTab()
@@ -14675,7 +14781,7 @@ function appendAccountModal(app){
 }
 function renderProfileMM(res){
   const blk=STATE.mmBlock;
-  const sessions=MM_SESSIONS.filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
+  const sessions=mmSessions().filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
   return el("div",null,
     el("div",{cls:"card"},
       el("div",{cls:"lbl"},"Select Block"),
@@ -14711,7 +14817,7 @@ function renderProfileMM(res){
 }
 function renderProfileTeach(res){
   const blk=STATE.teachBlock;
-  const sessions=TEACH_SESSIONS.filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
+  const sessions=teachSessions().filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
   return el("div",null,
     el("div",{cls:"card"},
       el("div",{cls:"lbl"},"Select Block"),
