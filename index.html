@@ -439,6 +439,20 @@ th.ov-th{text-align:center;}
 .rb-wk{font-size:.56rem;font-weight:700;opacity:.62;letter-spacing:.03em;font-style:normal;}
 .rb-flag{position:absolute;top:2px;right:3px;width:0;height:0;border-left:7px solid transparent;border-top:7px solid #b52040;}
 .rb-flag.amber{border-top-color:#A47A28;}
+.rb-cell.off{opacity:.13;}
+.rb-cell.off:hover{box-shadow:inset 0 0 0 2px rgba(201,106,74,.4);opacity:.4;}
+.rb-grid tr.rb-cline th{background:#f1e7d6;border-bottom:1px solid rgba(31,26,18,.1);padding:5px 4px;text-transform:none;letter-spacing:0;}
+.rb-grid tr.rb-cline th.rb-res{background:#f1e7d6;color:rgba(31,26,18,.45);font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;}
+.rb-cnt{font-weight:700;font-size:.72rem;color:#7a5c12;}
+.rb-cnt s{text-decoration:none;opacity:.3;font-weight:600;margin:0 1px;}
+.rb-cnt .at{color:#A47A28;}
+.rb-cnt .over{color:#b52040;}
+.rb-cnt .nil{color:rgba(31,26,18,.22);font-weight:600;}
+.rb-cnt .mat,.rb-cnt .elec{font-style:normal;font-size:.56rem;font-weight:700;vertical-align:super;margin-left:2px;}
+.rb-cnt .mat{color:#701a75;}
+.rb-cnt .elec{color:#166534;}
+.rb-grid tr.rb-cline.rot th{background:#ece4f7;}
+.rb-rotsel{font-family:inherit;font-size:.72rem;font-weight:600;padding:5px 9px;border-radius:8px;border:1px solid rgba(31,26,18,.16);background:#FEFBF3;color:#1F1A12;cursor:pointer;}
 .rb-panel{background:#FEFBF3;border-radius:16px;width:980px;max-width:96vw;max-height:90vh;overflow:hidden;box-shadow:0 24px 60px rgba(31,26,18,.3);display:flex;flex-direction:column;}
 .rb-phead{padding:20px 26px 16px;border-bottom:1px solid rgba(31,26,18,.07);display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
 .rb-pbody{display:flex;overflow:hidden;flex:1;}
@@ -10534,6 +10548,43 @@ function rbApprovedLeave(rid,blk){
 // A leave period is two weeks and never stretches to fill a longer block — the rotation
 // side absorbs any extra week. bw-1 keeps at least one week of rotation to hang it on.
 function rbLeaveWeeks(mode,bw){return(mode==="start"||mode==="end")?Math.min(2,bw-1):0;}
+// Counted off the grid, not off leave_plan: residents move their dates once the chief starts
+// building, so the plan is a request and ROTA_PLAN is what is actually happening.
+// The cap is per HALF-block, so a single per-block total would read a legal 3+2 the same as
+// an illegal 5+0 — hence two numbers. Always over the whole plan roster and never the
+// filtered rows, or a level filter would invent free slots that do not exist.
+// The line counts who is UNAVAILABLE FOR ON-CALL, which is wider than annual leave: maternity
+// is an absence however it is labelled, and a resident on elective takes no calls either.
+// The cap of 5 still governs annual leave ALONE, so the annual figure is tracked separately
+// and is what drives the colour — otherwise three electives turn a block red when there is
+// nothing to decline. Maternity and elective are tallied for the marker and the hover.
+function rbAwayHalves(blk){
+  const bw=blockWeeks(blk,PLAN_AY),half=Math.floor(bw/2);
+  const tot=[0,0],al=[0,0];let mat=0,elec=0;
+  // A span is credited to each half it touches, so whole-block cover counts in both.
+  const add=(from,weeks,isAnnual)=>{
+    if(from<=half){tot[0]++;if(isAnnual)al[0]++;}
+    if(from+weeks-1>half){tot[1]++;if(isAnnual)al[1]++;}
+  };
+  rbPlanRoster().forEach(r=>{
+    ((ROTA_PLAN[r.id]||{})[String(blk)]||[]).forEach(s=>{
+      // A segment can carry leave alongside its rotation, and the two sit in different halves,
+      // so they are credited independently rather than as an either/or.
+      if(s.leaveWeeks>0)add(s.leavePos==="start"?s.weekStart:s.weekStart+s.weeks,s.leaveWeeks,true);
+      const from=s.leavePos==="start"?s.weekStart+s.leaveWeeks:s.weekStart;
+      if(s.rot==="Annual Leave")add(from,s.weeks,true);
+      else if(s.rot==="Maternity Leave"){add(from,s.weeks,false);mat++;}
+      else if(s.rot==="Elective"){add(from,s.weeks,false);elec++;}
+    });
+  });
+  return{first:tot[0],second:tot[1],alFirst:al[0],alSecond:al[1],mat,elec};
+}
+function rbRotHeads(blk,rot){
+  return rbPlanRoster().filter(r=>((ROTA_PLAN[r.id]||{})[String(blk)]||[]).some(s=>s.rot===rot)).length;
+}
+// Block 13 is uncapped, so the cap comes from lpCapFor rather than a bare LP_CAP compare.
+function rbHalfCap(blk,half){return lpCapFor(LP_PERIODS.find(p=>p.blk===blk&&p.half===half));}
+function rbRotList(){return MANDATORY.concat(RB_EXTRA);}
 // The R4 picks name a block each, so they map straight onto a cell. Both rotation names
 // already exist in RB_EXTRA; the subspecialty and location stay in the rail as reference,
 // since a rota cell can only carry a rotation name.
@@ -10740,6 +10791,7 @@ function renderRotaBuilder(){
   const canApprove=canApproveRota();
   const selBlk=STATE.rbBlock||null;
   const lvlFilter=STATE.rbLevel||"all";
+  const rotFilter=STATE.rbRot||null;
   // allRoster, not RESIDENTS: the plan year's incoming cohort is the whole point here, and
   // it stays out of RESIDENTS until 1 October. planLevel() is null for this year's R4s,
   // who graduate before the plan year opens.
@@ -10762,7 +10814,7 @@ function renderRotaBuilder(){
 
   const wrap=el("div",null);
   wrap.appendChild(el("span",{st:{fontSize:".78rem",color:"#c96a4a",fontWeight:"600",cursor:"pointer",marginBottom:"14px",display:"inline-block"},
-    onClick:()=>set({ayCard:undefined,rbCell:null,rbBlock:null})},"← Back to Academic Year Plan"));
+    onClick:()=>set({ayCard:undefined,rbCell:null,rbBlock:null,rbRot:undefined})},"← Back to Academic Year Plan"));
   wrap.appendChild(el("div",{cls:"rb-hero"},
     el("div",{cls:"rb-lbl",st:{color:"rgba(254,251,243,.6)"}},"AY Plan "+ayLabel(PLAN_AY)+" · Master Rota Builder"),
     el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2.1rem",fontWeight:"400",lineHeight:"1.1",color:"#FEFBF3",margin:"2px 0 4px"}},"Master Rota"),
@@ -10821,6 +10873,13 @@ function renderRotaBuilder(){
   });
   pills.appendChild(el("button",{cls:"sbtn small"+(STATE.rbShort?" primary":" ghost"),
     onClick:()=>set({rbShort:!STATE.rbShort})},"Shortfalls only"));
+  // Dims rather than hides: the point is to watch one rotation across the year without
+  // losing sight of who is free to take it.
+  const rotSel=el("select",{cls:"rb-rotsel",onChange:e=>set({rbRot:e.target.value||undefined})},
+    el("option",{value:""},"All rotations"),
+    rbRotList().map(r=>el("option",{value:r},r)));
+  rotSel.value=rotFilter||"";
+  pills.appendChild(rotSel);
   secB.appendChild(el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",flexWrap:"wrap",marginBottom:"14px"}},
     el("div",{st:{maxWidth:"620px"}},
       el("h2",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.3rem",fontWeight:"400",margin:"0 0 4px"}},"The grid"),
@@ -10837,7 +10896,31 @@ function renderRotaBuilder(){
     const hr=el("tr",null,el("th",{cls:"rb-res"},"Resident"));
     blocks.forEach(b=>hr.appendChild(el("th",{st:selBlk===b?{background:"rgba(201,106,74,.16)"}:{}},
       "B"+b,el("div",{st:{fontWeight:"500",textTransform:"none",letterSpacing:"0",opacity:".6",fontSize:".6rem"}},periods[b-1].replace("-","–")))));
-    tbl.appendChild(el("thead",null,hr));
+    const lvRow=el("tr",{cls:"rb-cline"},el("th",{cls:"rb-res"},"Away · 1st · 2nd half"));
+    blocks.forEach(b=>{
+      const aw=rbAwayHalves(b);
+      // Coloured on the annual-leave figure, not the total: the cap governs leave alone.
+      const cls=(tot,alv,half)=>{const cap=rbHalfCap(b,half);return !tot?"nil":alv>cap?"over":alv===cap?"at":"";};
+      const extra=[aw.mat?aw.mat+" on maternity leave":null,aw.elec?aw.elec+" on elective (no on-calls)":null].filter(Boolean);
+      const tip="Block "+b+": "+aw.first+" unavailable in the first half, "+aw.second+" in the second."
+        +(extra.length?" Includes "+extra.join(" and ")+" — the cap of "+LP_CAP+" covers annual leave only, which here is "
+          +aw.alFirst+"·"+aw.alSecond+".":"");
+      lvRow.appendChild(el("th",{title:tip},el("div",{cls:"rb-cnt"},
+        el("span",{cls:cls(aw.first,aw.alFirst,"first")},String(aw.first)),el("s",null,"·"),
+        el("span",{cls:cls(aw.second,aw.alSecond,"second")},String(aw.second)),
+        aw.mat?el("em",{cls:"mat"},"m"):null,aw.elec?el("em",{cls:"elec"},"e"):null)));
+    });
+    const headRows=[hr,lvRow];
+    if(rotFilter){
+      const rRow=el("tr",{cls:"rb-cline rot"},el("th",{cls:"rb-res"},(ROT_ABBR[rotFilter]||rotFilter)+" on service"));
+      blocks.forEach(b=>{
+        const k=rbRotHeads(b,rotFilter);
+        rRow.appendChild(el("th",null,el("div",{cls:"rb-cnt"},
+          el("span",{cls:k?"":"nil",st:k?{color:rotColor(rotFilter).tx}:{}},k?String(k):"—"))));
+      });
+      headRows.push(rRow);
+    }
+    tbl.appendChild(el("thead",null,...headRows));
     const tb=el("tbody");
     rows.forEach(r=>{
       const lvl=planLevel(r);
@@ -10873,9 +10956,10 @@ function renderRotaBuilder(){
           kids.push(el("div",{cls:"rb-seg"},...parts));
         }
         if(flag)kids.push(el("i",{cls:"rb-flag"+(flag==="amber"?" amber":"")}));
-        const bg=plain?rotColor(segs[0].rot).bg:(selBlk===b?"rgba(201,106,74,.05)":"");
+        const off=rotFilter&&!segs.some(s=>s.rot===rotFilter);
+        const bg=off?"":(plain?rotColor(segs[0].rot).bg:(selBlk===b?"rgba(201,106,74,.05)":""));
         tr.appendChild(el("td",{st:bg?{background:bg}:{}},
-          el("div",{cls:"rb-cell",st:editable?{}:{cursor:"not-allowed",opacity:".72"},
+          el("div",{cls:"rb-cell"+(off?" off":""),st:editable?{}:(off?{cursor:"not-allowed"}:{cursor:"not-allowed",opacity:".72"}),
             onDblclick:()=>{if(editable)rbOpenCell(r.id,b);else showToast("Block "+b+" is "+planBlockState(b)+" — ask the PD to reopen it.","warning");}},...kids)));
       });
       tb.appendChild(tr);
