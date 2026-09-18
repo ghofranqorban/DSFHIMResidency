@@ -704,6 +704,9 @@ let RESIDENTS=[];
 // RESIDENTS — and so out of every current-year list — until 1 October of its start year.
 // Only the rota builder and the admin panel look at it; use allRoster() to see both.
 let INCOMING=[];
+// Newest year in promotion_log, i.e. the last year residents were promoted INTO. Only used to
+// spot a promotion that ran before the rota year opened; see levelsAY().
+let LEVELS_AY=null;
 let CONSULTANTS=[];
 let MENTORS={};
 const ROTA_PERIODS=["28/9-25/10","26/10-22/11","23/11-20/12","21/12-17/1","18/1-14/2","15/2-14/3","15/3-11/4","12/4-9/5","10/5-6/6","7/6-4/7","5/7-1/8","2/8-29/8","30/8-26/9"];
@@ -2450,13 +2453,17 @@ function initialsFromName(name){
   return (name||"").replace(/^Dr\.?\s*/i,"").trim().split(/\s+/).map(w=>w[0]).join("").toUpperCase().slice(0,2)||"??";
 }
 async function loadCoreData(){
-  const[{data:cons,error:cerr},{data:res,error:rerr},{data:profs,error:perr},{data:privs,error:pverr},{data:kpisc,error:kpierr}]=await Promise.all([
+  const[{data:cons,error:cerr},{data:res,error:rerr},{data:profs,error:perr},{data:privs,error:pverr},{data:kpisc,error:kpierr},{data:plog}]=await Promise.all([
     sb.from("consultants").select("*").eq("active",true).order("created_at"),
     sb.from("residents").select("*").eq("active",true).order("created_at"),
     sb.from("profiles").select("*"),
     sb.from("account_privileges").select("*"),
-    sb.from("kpi_scores").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR)
+    sb.from("kpi_scores").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR),
+    sb.from("promotion_log").select("academic_year").order("academic_year",{ascending:false}).limit(1)
   ]);
+  // Residents have no read policy here; levelsAY() falls back to the live year, which is what
+  // they need anyway since the plan-year roster is scheduler-only.
+  LEVELS_AY=(plog&&plog[0])?plog[0].academic_year:null;
   if(cerr||rerr){
     console.error("loadCoreData critical error",cerr||rerr);
     return false;
@@ -2634,6 +2641,16 @@ function ocData(){return ocIsPlanYear()?(ONCALL_PLAN_DATA||[]):ONCALL_DATA;}
 function ocPrefs(){return ocIsPlanYear()?(ONCALL_PREFS_PLAN||[]):ONCALL_PREFS;}
 function ocPrefsStatus(){return ocIsPlanYear()?(ONCALL_PREFS_STATUS_PLAN||{}):ONCALL_PREFS_STATUS;}
 function ocAYLabel(y){return ayLabel(y);}
+// Who is actually in the programme in the year on screen. On the live year this is today's
+// roster, untouched. On the plan year the graduating R4s drop out and the incoming cohort
+// joins at R1 — otherwise Block 1 gets built around residents who have left and surveys never
+// reach the residents who have arrived.
+function ocRoster(){
+  if(!ocIsPlanYear())return RESIDENTS;
+  const y=ocAY(),out=[];
+  allRoster().forEach(r=>{const lv=levelInAY(r,y);if(lv)out.push({...r,level:lv});});
+  return out;
+}
 function oncallDateObj(ds){const[y,m,d]=ds.split("-").map(Number);return new Date(y,m-1,d);}
 function oncallAddDays(ds,n){const dt=oncallDateObj(ds);dt.setDate(dt.getDate()+n);return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");}
 function oncallResidentDatesInBlock(blk,rid,rname){
@@ -3270,6 +3287,25 @@ function diffDays(from,to){return Math.round((new Date(to)-new Date(from))/(8640
 function cohortVisible(r){return !r.yearStarted||new Date()>=new Date(r.yearStarted,9,1);}
 // Current roster plus any cohort still waiting for 1 October.
 function allRoster(){return INCOMING.length?RESIDENTS.concat(INCOMING):RESIDENTS;}
+// Which year the stored levels describe: the live year, unless the promotion into NEXT year
+// has already been run, which is possible between 1 and 4 October because the review window
+// opens before the year does. Only that exact match counts — promotion_log also holds rows
+// from previous years, and letting one of those set the baseline would age the whole roster
+// backwards and quietly drop the R3s out of the plan year.
+function levelsAY(){return LEVELS_AY===CURRENT_ACADEMIC_YEAR+1?LEVELS_AY:CURRENT_ACADEMIC_YEAR;}
+// The level a resident holds in academic year `y`, or null if they have graduated by then or
+// have not arrived yet. Counting from `level` rather than from yearStarted is deliberate:
+// anyone held back in a promotion review has a level that no longer matches their start year.
+function levelInAY(res,y){
+  if(!res||!res.level)return null;
+  const n=4-_LVL_ORD[res.level];
+  if(!(n>=1&&n<=4))return null;
+  // A cohort created before its year opens already sits at the level it will START on, so its
+  // level describes yearStarted, not the year everyone else's level describes.
+  const base=res.yearStarted>levelsAY()?res.yearStarted:levelsAY();
+  const t=n+(y-base);
+  return t>=1&&t<=4?"R"+t:null;
+}
 function resById(id){return RESIDENTS.find(r=>r.id==id)||INCOMING.find(r=>r.id==id);}
 function anyResById(id){return resById(id)||_inactiveResById[id]||null;}
 function dname(name){return(name||"").replace(/^Dr\.\s*/i,"");}
@@ -14081,7 +14117,7 @@ function renderOncall(){
         clearLi.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;color:#9ca3af;border-bottom:1px solid #f3f4f6;";
         clearLi.onmousedown=ev=>{ev.preventDefault();commitOncallCell(null,null);};
         drop.appendChild(clearLi);
-        const sorted=sortByLevel(RESIDENTS);
+        const sorted=sortByLevel(ocRoster());
         const matches=q?sorted.filter(r=>dname(r.name).toLowerCase().includes(q.toLowerCase())):sorted;
         matches.forEach(r=>{
           const li=document.createElement("li");
@@ -14464,7 +14500,7 @@ function renderOncall(){
     // Scheduler view: who has answered, and where the demand piled up.
     let tracker=null;
     if(canEdit){
-      const roster=sortByLevel(RESIDENTS);
+      const roster=sortByLevel(ocRoster());
       const done=roster.filter(r=>oncallPrefRows(blk,r.id).some(p=>p.status==="submitted"));
       tracker=el("div",{cls:"card",st:{marginTop:"22px"}},
         el("div",{cls:"card-title"},"Submissions \u2014 "+done.length+" of "+roster.length),
@@ -14490,7 +14526,7 @@ function renderOncall(){
     }
     const blkEntries=ocData().filter(e=>e.block_number===blk);
     const allEntries=ocData();
-    const resStats=RESIDENTS.map(r=>({
+    const resStats=ocRoster().map(r=>({
       res:r,
       bReg:blkEntries.filter(e=>e.resident_id===r.id&&!e.is_extra).length,
       bExtra:blkEntries.filter(e=>e.resident_id===r.id&&e.is_extra).length,
