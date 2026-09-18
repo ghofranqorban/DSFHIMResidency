@@ -10585,6 +10585,11 @@ function rbRotHeads(blk,rot){
 // Block 13 is uncapped, so the cap comes from lpCapFor rather than a bare LP_CAP compare.
 function rbHalfCap(blk,half){return lpCapFor(LP_PERIODS.find(p=>p.blk===blk&&p.half===half));}
 function rbRotList(){return MANDATORY.concat(RB_EXTRA);}
+// One filter for everybody off the call list. Leave riding on a rotation segment counts too,
+// so a resident on Cardiology with two weeks booked still shows — the cell is partly away
+// even though its rotation name is not. Same definition rbAwayHalves counts with.
+const RB_AWAY="__away";
+function rbIsAwaySeg(s){return s.leaveWeeks>0||s.rot==="Annual Leave"||s.rot==="Maternity Leave"||s.rot==="Elective";}
 // The R4 picks name a block each, so they map straight onto a cell. Both rotation names
 // already exist in RB_EXTRA; the subspecialty and location stay in the rail as reference,
 // since a rota cell can only carry a rotation name.
@@ -10877,6 +10882,7 @@ function renderRotaBuilder(){
   // losing sight of who is free to take it.
   const rotSel=el("select",{cls:"rb-rotsel",onChange:e=>set({rbRot:e.target.value||undefined})},
     el("option",{value:""},"All rotations"),
+    el("option",{value:RB_AWAY},"Away \u2014 leave, maternity & elective"),
     rbRotList().map(r=>el("option",{value:r},r)));
   rotSel.value=rotFilter||"";
   pills.appendChild(rotSel);
@@ -10911,7 +10917,7 @@ function renderRotaBuilder(){
         aw.mat?el("em",{cls:"mat"},"m"):null,aw.elec?el("em",{cls:"elec"},"e"):null)));
     });
     const headRows=[hr,lvRow];
-    if(rotFilter){
+    if(rotFilter&&rotFilter!==RB_AWAY){
       const rRow=el("tr",{cls:"rb-cline rot"},el("th",{cls:"rb-res"},(ROT_ABBR[rotFilter]||rotFilter)+" on service"));
       blocks.forEach(b=>{
         const k=rbRotHeads(b,rotFilter);
@@ -10956,7 +10962,7 @@ function renderRotaBuilder(){
           kids.push(el("div",{cls:"rb-seg"},...parts));
         }
         if(flag)kids.push(el("i",{cls:"rb-flag"+(flag==="amber"?" amber":"")}));
-        const off=rotFilter&&!segs.some(s=>s.rot===rotFilter);
+        const off=rotFilter&&!(rotFilter===RB_AWAY?segs.some(rbIsAwaySeg):segs.some(s=>s.rot===rotFilter));
         const bg=off?"":(plain?rotColor(segs[0].rot).bg:(selBlk===b?"rgba(201,106,74,.05)":""));
         tr.appendChild(el("td",{st:bg?{background:bg}:{}},
           el("div",{cls:"rb-cell"+(off?" off":""),st:editable?{}:(off?{cursor:"not-allowed"}:{cursor:"not-allowed",opacity:".72"}),
