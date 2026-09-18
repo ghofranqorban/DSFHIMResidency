@@ -3868,7 +3868,7 @@ function renderModGrid(){
     el("div",{cls:"alert-red",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({mod:"counseling"})}, "You have "+PENDING_COUNSEL_COUNT+" counseling record"+(PENDING_COUNSEL_COUNT>1?"s":"")+" awaiting your countersignature. Click to review." )
   );
   if(isPD()&&PROMOTION_NEEDED) alerts.push(
-    el("div",{cls:"alert-yellow",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({showPromoModal:true})}, "Annual promotion review due — AY "+(CURRENT_ACADEMIC_YEAR+1)+"–"+(CURRENT_ACADEMIC_YEAR+2)+" level changes pending. Click to review." )
+    el("div",{cls:"alert-yellow",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({showPromoModal:true})}, "Annual promotion review due — AY "+promoAY()+"–"+(promoAY()+1)+" level changes pending. Click to review." )
   );
   if((isPD()||u.role==="chief")&&LEAVE_PENDING_COUNT>0) alerts.push(
     el("div",{cls:"alert-yellow",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({mod:"leave",leaveTab:"requests"})}, ""+LEAVE_PENDING_COUNT+" leave request"+(LEAVE_PENDING_COUNT>1?"s":"")+" pending your review. Click to approve or reject." )
@@ -5638,22 +5638,29 @@ function renderTeachOverview(){
 }
 // ─── OCTOBER PROMOTION ───────────────────────────────────────────────────────
 let PROMOTION_NEEDED=false;
+// The promotion belongs to the academic year opening this October, which is the calendar year.
+// CURRENT_ACADEMIC_YEAR cannot be used: it rolls over inside the Oct–Dec window (AY 2026-27
+// starts 4 Oct 2026), and once it does, PLAN_AY points a year too far, so the incoming cohort
+// stops reading as incoming and would be promoted straight past R1.
+function promoAY(){return new Date().getFullYear();}
 async function checkPromotionNeeded(){
   const m=new Date().getMonth(); // 0-based; 9=Oct,10=Nov,11=Dec
   if(m<9||m>11)return; // only Oct–Dec
-  const{data,error}=await sb.from("promotion_log").select("id").eq("academic_year",CURRENT_ACADEMIC_YEAR).maybeSingle();
+  const{data,error}=await sb.from("promotion_log").select("id").eq("academic_year",promoAY()).maybeSingle();
   if(!error&&!data){PROMOTION_NEEDED=true;render();}
 }
 function renderPromoModal(){
+  const ay=promoAY();
   const nextLvl={R1:"R2",R2:"R3",R3:"R4"};
   const lvlOrd={R4:0,R3:1,R2:2,R1:3};
-  const sorted=RESIDENTS.slice().sort((a,b)=>(lvlOrd[a.level]||9)-(lvlOrd[b.level]||9)||a.name.localeCompare(b.name));
+  // ?? not || — R4 ranks 0, which is falsy, so the graduating cohort sorted to the bottom.
+  const sorted=RESIDENTS.slice().sort((a,b)=>(lvlOrd[a.level]??9)-(lvlOrd[b.level]??9)||a.name.localeCompare(b.name));
   async function confirmPromo(){
     const btn=document.getElementById("promo_confirm_btn");
     if(btn){btn.disabled=true;btn.textContent="Saving…";}
     const changes=[];
     for(const r of sorted){
-      if(STATE.promoSkip[r.id]||r.yearStarted>=PLAN_AY)continue;
+      if(STATE.promoSkip[r.id]||r.yearStarted>=ay)continue;
       if(r.level==="R4"){
         await sb.from("residents").update({active:false}).eq("id",r.id);
         changes.push({id:r.id,name:r.name,from:"R4",to:"archived"});
@@ -5662,7 +5669,7 @@ function renderPromoModal(){
         changes.push({id:r.id,name:r.name,from:r.level,to:nextLvl[r.level]});
       }
     }
-    await sb.from("promotion_log").insert({academic_year:CURRENT_ACADEMIC_YEAR,promoted_by:STATE.user.profileId,changes:JSON.stringify(changes)});
+    await sb.from("promotion_log").insert({academic_year:ay,promoted_by:STATE.user.profileId,changes:JSON.stringify(changes)});
     PROMOTION_NEEDED=false;
     await loadCoreData();
     await loadRotations();
@@ -5670,7 +5677,7 @@ function renderPromoModal(){
   }
   return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)set({showPromoModal:false});}},
     el("div",{cls:"modal-card",st:{width:"620px",maxWidth:"100%"}},
-      el("h3",null," Promotion Review — AY "+(CURRENT_ACADEMIC_YEAR+1)+"–"+(CURRENT_ACADEMIC_YEAR+2)),
+      el("h3",null," Promotion Review — AY "+ay+"–"+(ay+1)),
       el("p",{cls:"sh",st:{margin:"6px 0 16px"}},"Everyone is promoted by default. Uncheck anyone who is being held back at their current level. R4 graduates will be archived and removed from active view; the incoming cohort already starts at its own level and is left alone."),
       el("div",{cls:"tbl-wrap"},
         el("table",null,
@@ -5684,7 +5691,7 @@ function renderPromoModal(){
             ...sorted.map(r=>{
               // The incoming cohort is added to `residents` months before its year opens,
               // already holding the level it starts on. Promoting would skip them past R1.
-              const incoming=r.yearStarted>=PLAN_AY;
+              const incoming=r.yearStarted>=ay;
               const skip=!!STATE.promoSkip[r.id];
               const proposed=incoming?el("span",{cls:"bdg",st:{background:"#f6efe2",color:"#8a6d3b"}},"Starts as "+r.level)
                 :r.level==="R4" ?el("span",{cls:"bdg",st:{background:"#fee2e2",color:"#b91c1c"}},"Archive")
