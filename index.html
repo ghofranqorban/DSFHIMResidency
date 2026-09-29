@@ -2635,9 +2635,25 @@ const ONCALL_SLOTS_FALLBACK=[
 ];
 let ONCALL_SLOT_ROWS=null;
 function ocSlotRows(){return(ONCALL_SLOT_ROWS&&ONCALL_SLOT_ROWS.length)?ONCALL_SLOT_ROWS:ONCALL_SLOTS_FALLBACK;}
-// Active slots, in scheduler-defined order.
-function ocSlots(){
-  return ocSlotRows().filter(x=>x.active!==false).slice()
+// scope_blocks is null or empty for a column that runs all year; otherwise it lists the block
+// numbers the column appears in. Block numbers, not dates — the same Block 5 in any academic
+// year, which is how the scheduler talks about them.
+function ocSlotHasDataInBlock(k,blk){
+  return(ocData()||[]).some(e=>e.slot_key===k&&e.block_number===blk);
+}
+function ocSlotInBlock(x,blk){
+  if(blk==null)return true;                       // the editor asks for every column
+  const sc=x.scope_blocks;
+  if(!sc||!sc.length)return true;                 // unscoped = every block
+  if(sc.indexOf(blk)>=0)return true;
+  // Out of scope but already filled in THIS block: still draw it. Narrowing a column's blocks
+  // must never hide an assignment that has already been made, same rule as retire-not-delete.
+  return ocSlotHasDataInBlock(x.slot_key,blk);
+}
+function ocCurBlock(){return STATE.oncallBlock||CURRENT_PERIOD;}
+// Active slots for a block, in scheduler-defined order. Omit blk to get every column.
+function ocSlots(blk){
+  return ocSlotRows().filter(x=>x.active!==false&&ocSlotInBlock(x,blk)).slice()
     .sort((a,b)=>(a.sort_order??0)-(b.sort_order??0)||(a.slot_index??1)-(b.slot_index??1)||a.slot_key.localeCompare(b.slot_key));
 }
 // Label lookup must also find RETIRED slots: a column switched off today still has assignments
@@ -2645,11 +2661,11 @@ function ocSlots(){
 function ocSlotByKey(k){return ocSlotRows().find(x=>x.slot_key===k)||ONCALL_SLOTS_FALLBACK.find(x=>x.slot_key===k)||null;}
 // A column is one or more slots sharing a group_key, drawn under a single heading and stacked.
 // That is how CTU Cover A holds two people on one Friday without becoming two columns.
-function ocColumns(){
+function ocColumns(blk){
   const out=[],at={};
-  ocSlots().forEach(x=>{
+  ocSlots(blk).forEach(x=>{
     const g=x.group_key||x.slot_key;
-    if(at[g]==null){at[g]=out.length;out.push({group_key:g,label:x.label,hours_mode:x.hours_mode,days_mode:x.days_mode,sort_order:x.sort_order,slots:[]});}
+    if(at[g]==null){at[g]=out.length;out.push({group_key:g,label:x.label,hours_mode:x.hours_mode,days_mode:x.days_mode,sort_order:x.sort_order,scope_blocks:(x.scope_blocks&&x.scope_blocks.length)?x.scope_blocks.slice():null,slots:[]});}
     out[at[g]].slots.push(x);
   });
   out.forEach(c=>c.slots.sort((a,b)=>(a.slot_index??1)-(b.slot_index??1)));
@@ -5892,7 +5908,7 @@ function exportSchedule(type,blk){
 function exportOncall(blk){
   const blockStart=blockStartDate(blk,CURRENT_ACADEMIC_YEAR);
   if(!blockStart)return;
-  const ocCols=ocColumns();
+  const ocCols=ocColumns(blk);
   const headers=["Date","Day"].concat(ocCols.flatMap(c=>c.slots.length>1?c.slots.map((_,i)=>c.label+" "+(i+1)):[c.label]));
   const byDate={};
   ONCALL_DATA.filter(e=>e.block_number===blk).forEach(e=>{
@@ -13802,7 +13818,11 @@ function ocNewKey(base){
   return k;
 }
 function ocColsOpen(){
-  _ocCols=ocColumns().map(c=>({group_key:c.group_key,label:c.label,hours_mode:c.hours_mode,days_mode:c.days_mode,slots:c.slots.map(x=>({id:x.id,slot_key:x.slot_key,slot_index:x.slot_index}))}));
+  // No block argument: the editor lists every column, including ones this block does not show.
+  _ocCols=ocColumns().map(c=>({group_key:c.group_key,label:c.label,hours_mode:c.hours_mode,days_mode:c.days_mode,
+    scope_blocks:c.scope_blocks?c.scope_blocks.slice():null,
+    scope_mode:(!c.scope_blocks||!c.scope_blocks.length)?"all":((c.scope_blocks.length===1&&c.scope_blocks[0]===ocCurBlock())?"this":"pick"),
+    slots:c.slots.map(x=>({id:x.id,slot_key:x.slot_key,slot_index:x.slot_index}))}));
   _ocColsGone=[];
   set({oncallColsOpen:true});
 }
@@ -13812,6 +13832,14 @@ function ocColsSync(){
     const l=document.getElementById("occ_l_"+i);if(l)c.label=l.value;
     const d=document.getElementById("occ_d_"+i);if(d)c.days_mode=d.value;
     const h=document.getElementById("occ_h_"+i);if(h)c.hours_mode=h.value;
+    const b=document.getElementById("occ_b_"+i);
+    if(b){
+      c.scope_mode=b.value;
+      // "pick" is left alone on purpose: the chips are the source of truth there, and the
+      // select cannot know which ones are lit.
+      if(b.value==="all")c.scope_blocks=null;
+      else if(b.value==="this")c.scope_blocks=[ocCurBlock()];
+    }
     const n=document.getElementById("occ_n_"+i);
     if(n){
       const want=Math.max(1,Math.min(6,parseInt(n.value,10)||1));
@@ -13859,13 +13887,39 @@ function _ocColsRows(){
     const del=el("button",{cls:"sbtn ghost",st:{fontSize:".74rem",padding:"3px 9px",color:"#b52040"},
       title:used?"This column already has assignments — it will be retired, and past blocks keep showing it":"Remove this column",
       onClick:()=>{ocColsSync();_ocCols[i].slots.forEach(x=>_ocColsGone.push(x));_ocCols.splice(i,1);ocColsPaint();}},used?"Retire":"Remove");
-    return el("div",{st:{display:"grid",gridTemplateColumns:OCC_GRID,gap:"8px",alignItems:"center",padding:"9px 10px",background:"#F6EFE2",borderRadius:"8px",border:"1px solid rgba(31,26,18,.07)"}},
-      el("span",{st:{fontSize:".7rem",fontWeight:"800",color:"#5C5345"}},String(i+1)),
-      lbl,num,days,hrs,
-      el("div",{st:{display:"flex",gap:"5px",alignItems:"center"}},
-        el("button",{cls:"sbtn ghost",st:{fontSize:".74rem",padding:"3px 8px"},title:"Move up",onClick:()=>mv(-1)},"↑"),
-        el("button",{cls:"sbtn ghost",st:{fontSize:".74rem",padding:"3px 8px"},title:"Move down",onClick:()=>mv(1)},"↓"),
-        del)
+    // The block scope sits on its own line rather than as a seventh control: thirteen chips
+    // never fit beside the others, and cramming them turns the row into a wall.
+    const scope=document.createElement("select");
+    scope.id="occ_b_"+i;scope.style.cssText=OCC_FIELD+"width:auto;";
+    [["all","All blocks"],["this","This block only (B"+ocCurBlock()+")"],["pick","Choose blocks\u2026"]]
+      .forEach(function(p){const o=document.createElement("option");o.value=p[0];o.textContent=p[1];if(p[0]===c.scope_mode)o.selected=true;scope.appendChild(o);});
+    scope.onchange=()=>{
+      ocColsSync();
+      // Switching to "pick" with nothing lit would save as "all"; seed it with the block on screen.
+      if(scope.value==="pick"&&(!c.scope_blocks||!c.scope_blocks.length))c.scope_blocks=[ocCurBlock()];
+      ocColsPaint();
+    };
+    const chips=c.scope_mode==="pick"?ROTA_PERIODS.map((_,k)=>{
+      const n=k+1,on=(c.scope_blocks||[]).indexOf(n)>=0;
+      // A lit chip is #9d4a2a, not the #c96a4a of the block pills above the grid: cream on
+      // #c96a4a measures 3.6:1 and fails AA at this size. #9d4a2a is the portal's darker
+      // terracotta (already used by the "asked off" chips) and measures 5.89:1.
+      return el("span",{st:{padding:"3px 9px",borderRadius:"999px",fontSize:".7rem",fontWeight:"600",cursor:"pointer",userSelect:"none",
+        border:"1px solid "+(on?"#9d4a2a":"rgba(31,26,18,.15)"),background:on?"#9d4a2a":"#FEFBF3",color:on?"#FEFBF3":"#5C5345"},
+        onClick:()=>{ocColsSync();const a=(c.scope_blocks||[]).slice();const j=a.indexOf(n);
+          if(j>=0)a.splice(j,1);else a.push(n);a.sort((p,q)=>p-q);c.scope_blocks=a;ocColsPaint();}},"B"+n);
+    }):[];
+    return el("div",{st:{padding:"9px 10px",background:"#F6EFE2",borderRadius:"8px",border:"1px solid rgba(31,26,18,.07)"}},
+      el("div",{st:{display:"grid",gridTemplateColumns:OCC_GRID,gap:"8px",alignItems:"center"}},
+        el("span",{st:{fontSize:".7rem",fontWeight:"800",color:"#5C5345"}},String(i+1)),
+        lbl,num,days,hrs,
+        el("div",{st:{display:"flex",gap:"5px",alignItems:"center"}},
+          el("button",{cls:"sbtn ghost",st:{fontSize:".74rem",padding:"3px 8px"},title:"Move up",onClick:()=>mv(-1)},"\u2191"),
+          el("button",{cls:"sbtn ghost",st:{fontSize:".74rem",padding:"3px 8px"},title:"Move down",onClick:()=>mv(1)},"\u2193"),
+          del)),
+      el("div",{st:{display:"flex",alignItems:"center",gap:"7px",flexWrap:"wrap",marginTop:"8px",paddingTop:"8px",borderTop:"1px dashed rgba(31,26,18,.13)"}},
+        el("span",{st:{fontSize:".6rem",fontWeight:"800",letterSpacing:".07em",textTransform:"uppercase",color:"#5C5345"}},"Blocks"),
+        scope,...chips)
     );
   });
 }
@@ -13873,12 +13927,15 @@ async function ocColsSave(){
   ocColsSync();
   if(!_ocCols.length){showToast("Keep at least one column.","warning");return;}
   if(_ocCols.some(c=>!c.label.trim())){showToast("Every column needs a name.","warning");return;}
+  if(_ocCols.some(c=>c.scope_mode==="pick"&&(!c.scope_blocks||!c.scope_blocks.length))){
+    showToast("Pick at least one block, or choose All blocks.","warning");return;}
   const btn=document.getElementById("occ_save");if(btn){btn.disabled=true;btn.textContent="Saving…";}
   const ins=[],upd=[];
   _ocCols.forEach((c,i)=>{
     c.slots.forEach((x,k)=>{
       const row={slot_key:x.slot_key,label:c.label.trim(),group_key:c.group_key,slot_index:k+1,
-        hours_mode:c.hours_mode,days_mode:c.days_mode,sort_order:(i+1)*10+k,active:true};
+        hours_mode:c.hours_mode,days_mode:c.days_mode,sort_order:(i+1)*10+k,active:true,
+        scope_blocks:(c.scope_blocks&&c.scope_blocks.length)?c.scope_blocks:null};
       if(x.id)upd.push(Object.assign({id:x.id},row));else ins.push(row);
     });
   });
@@ -13919,7 +13976,7 @@ function renderOncallColsModal(){
         // .sh's own rgba(31,26,18,.4) measures 2.49:1 here; overridden locally to the
         // measured --ink-55 rather than changing the class under 130 other call sites.
         el("p",{cls:"sh",st:{marginTop:"0",marginBottom:"14px",color:"#5C5345"}},
-          "A column with more than one slot stacks its people in the same cell. Retiring a column keeps it visible on past blocks that already used it."),
+          "A column with more than one slot stacks its people in the same cell. Blocks controls where it appears \u2014 every block, just this one, or the ones you pick. Retiring a column, or dropping a block, keeps it visible wherever people are already assigned."),
         _ocColsHead(),
         el("div",{id:"occ_list",st:{display:"flex",flexDirection:"column",gap:"9px"}},..._ocColsRows()),
         el("button",{cls:"sbtn ghost",st:{marginTop:"13px",fontSize:".8rem"},onClick:add},"+ Add column")
@@ -13937,7 +13994,7 @@ function renderOncallEditModal(){
   const blk=STATE.oncallBlock||CURRENT_PERIOD;
   const date=STATE.oncallEditDate;
   const isWe=isWeekendDate(date);
-  const slots=ocSlots().filter(x=>x.days_mode!=="weekend"||isWe);
+  const slots=ocSlots(blk).filter(x=>x.days_mode!=="weekend"||isWe);
   const existing={};
   ONCALL_DATA.filter(e=>e.schedule_date===date).forEach(e=>{existing[e.slot_key]={resId:e.resident_id,resName:e.resident_name||"",isExtra:e.is_extra};});
   function close(){set({oncallEditDate:null});}
@@ -14460,7 +14517,7 @@ function renderOncall(){
         return el("tr",{cls:rowCls},
           el("td",{cls:"oc-sticky-date"},dateCellContent),
           el("td",{cls:"oc-sticky-day"},el("span",{cls:"oc-day-pill "+(isToday?"today":isWe?"we":"wd")},day)),
-          ...ocColumns().map(col=>el("td",null,
+          ...ocColumns(blk).map(col=>el("td",null,
             ocColShownOn(col,date)
               ?ocColumnCell(oncallCell,sl,date,col,interactive)
               :el("span",{st:{color:"#d1d5db",fontSize:".78rem"}},"—"))),
@@ -14474,7 +14531,7 @@ function renderOncall(){
       return el("tr",null,
         el("th",{cls:"oc-sticky-date"},"Date"),
         el("th",{cls:"oc-sticky-day"},"Day"),
-        ...ocColumns().map(col=>el("th",col.days_mode==="weekend"?{cls:"ctu-h"}:null,col.label)),
+        ...ocColumns(blk).map(col=>el("th",col.days_mode==="weekend"?{cls:"ctu-h"}:null,col.label)),
         canEdit?el("th",null,""):null
       );
     }
