@@ -2875,6 +2875,18 @@ function oncallPrefDemand(blk){
   ocPrefs().filter(p=>p.block_number===blk).forEach(p=>{m[p.pref_date]=(m[p.pref_date]||0)+1;});
   return m;
 }
+// Who asked off a date, not just how many. Resolved through ocRoster() rather than
+// anyResById alone: on a plan-year block that keeps an incoming R1 who has already answered
+// from vanishing from the list, and sorts everyone by the level they will hold that year.
+// anyResById stays as the fallback for outside rotators who sit off the roster entirely.
+// R4 first, the same order every other roster list in the portal uses.
+function oncallPrefNames(blk,date){
+  const roster=ocRoster();
+  return ocPrefs().filter(p=>p.block_number===blk&&p.pref_date===date)
+    .map(p=>({res:roster.find(r=>r.id==p.resident_id)||anyResById(p.resident_id),status:p.status}))
+    .filter(x=>x.res)
+    .sort((a,b)=>(_LVL_ORD[a.res.level]??9)-(_LVL_ORD[b.res.level]??9)||a.res.name.localeCompare(b.res.name));
+}
 // Every assignment in the block that lands on a date the resident asked to avoid.
 function oncallPrefClashes(blk){
   return ocData().filter(e=>e.block_number===blk&&e.resident_id&&oncallPrefHasPick(blk,e.resident_id,e.schedule_date));
@@ -14497,6 +14509,31 @@ function renderOncall(){
           }))
         )
       :null;
+    // The heat map says how many; this says who. A count cannot tell you whether the same
+    // person is being overridden every block. Terracotta marks a resident already assigned
+    // that day \u2014 a request that was run over. Advisory only, like every other pref cue.
+    let rollup=null;
+    if(canEdit){
+      const reqDates=allDates.filter(d=>demand[d.date]);
+      rollup=el("div",{cls:"card",st:{marginTop:"22px"}},
+        el("div",{cls:"card-title"},"Who asked off which day \u2014 Block "+blk),
+        reqDates.length
+          ?el("div",null,...reqDates.map(d=>{
+              const who=oncallPrefNames(blk,d.date);
+              const onCall=new Set(ocData().filter(e=>e.block_number===blk&&e.schedule_date===d.date).map(e=>String(e.resident_id)));
+              return el("div",{st:{display:"flex",gap:"14px",padding:"9px 4px",borderBottom:"1px solid rgba(31,26,18,.07)",alignItems:"baseline",flexWrap:"wrap"}},
+                el("span",{st:{minWidth:"128px",fontWeight:"700",fontSize:".84rem",color:d.isWe?"#26523A":"#1F1A12"}},d.day.slice(0,3)+" "+fmtDate(d.date)),
+                el("span",{st:{display:"flex",gap:"6px",flexWrap:"wrap",flex:"1"}},...who.map(x=>{
+                  const hit=onCall.has(String(x.res.id));
+                  return el("span",{title:x.status==="submitted"?"":"Draft \u2014 not submitted yet",
+                    st:{fontSize:".76rem",padding:"3px 10px",borderRadius:"999px",fontWeight:hit?"700":"600",
+                        background:hit?"rgba(201,106,74,.16)":"rgba(127,184,156,.18)",
+                        color:hit?"#9d4a2a":"#26523A",opacity:x.status==="submitted"?"1":".55"}},
+                    dname(x.res.name)+(hit?" \u00b7 on call":""));
+                })));
+            }))
+          :el("p",{cls:"sh"},"Nobody has named a day in this block yet."));
+    }
     // Scheduler view: who has answered, and where the demand piled up.
     let tracker=null;
     if(canEdit){
@@ -14515,6 +14552,7 @@ function renderOncall(){
       windowStrip,
       nudge,
       calendar,
+      rollup,
       outcome,
       tracker
     );
