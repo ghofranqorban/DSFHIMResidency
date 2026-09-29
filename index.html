@@ -741,27 +741,47 @@ function blockLabel(blk,ay){
 // so the app never falls out of sync with the calendar. End dates are read from
 // ROTA_PERIODS rather than derived from a length, because a block is not always 28 days:
 // block 6 ("15/2-14/3") runs 29 days in a leap year.
+// Start and end of every block in one academic year, in order, read from that year's OWN
+// dates. The calendar year is carried forward block by block rather than guessed from the
+// month: AY 2026-27 ends on 2/10, which any month test reads as "October, so the first
+// calendar year" and places twelve months early.
+function ayBlockRanges(y){
+  const out=[];let yr=y,prev=null;
+  rotaPeriods(y).forEach((p,i)=>{
+    const[startStr,endStr]=p.split("-");
+    const[sd,sm]=startStr.split("/").map(Number);
+    const[ed,em]=endStr.split("/").map(Number);
+    let start=new Date(yr,sm-1,sd,0,0,0);
+    if(prev&&start<prev){yr++;start=new Date(yr,sm-1,sd,0,0,0);}
+    let end;
+    if(BLOCK_WEEKS_OVERRIDE[y]&&BLOCK_WEEKS_OVERRIDE[y][i+1]){
+      end=new Date(start.getFullYear(),start.getMonth(),start.getDate()+blockDays(i+1,y)-1,23,59,59);
+    }else{
+      end=new Date(yr,em-1,ed,23,59,59);
+      if(end<start)end=new Date(yr+1,em-1,ed,23,59,59);
+    }
+    yr=end.getFullYear();prev=start;
+    out.push({start,end});
+  });
+  return out;
+}
 function computeCurrentBlock(today){
   today=today||new Date();
   const m=today.getMonth();
   let y=m>=9?today.getFullYear():today.getFullYear()-1;
   const ayStart=AY_START_OVERRIDE[y];
   if(ayStart&&today<new Date(y,ayStart[1]-1,ayStart[0],0,0,0))y=y-1;
-  for(let i=0;i<ROTA_PERIODS.length;i++){
-    const[startStr,endStr]=ROTA_PERIODS[i].split("-");
-    const[sd,sm]=startStr.split("/").map(Number);
-    const[ed,em]=endStr.split("/").map(Number);
-    const startYear=(i===0&&sm===9)?y:(sm>=10?y:y+1);
-    const start=new Date(startYear,sm-1,sd,0,0,0);
-    let end;
-    if(BLOCK_WEEKS_OVERRIDE[y]&&BLOCK_WEEKS_OVERRIDE[y][i+1]){
-      end=new Date(start.getTime()+(blockDays(i+1,y)-1)*86400000);
-      end.setHours(23,59,59);
-    }else{
-      const endYear=(i===ROTA_PERIODS.length-1&&em===9)?y+1:(em>=10?y:y+1);
-      end=new Date(endYear,em-1,ed,23,59,59);
-    }
-    if(today>=start&&today<=end)return{block:i+1,academicYear:y};
+  else{
+    // A year whose last block runs into October stays the live year until that block ends,
+    // whether or not the following year's start date has been recorded yet.
+    const pr=ayBlockRanges(y-1);
+    if(pr.length&&today<=pr[pr.length-1].end)y=y-1;
+  }
+  // The year's own dates, not the shared ROTA_PERIODS: AY 2026-27 runs a week later than every
+  // year before it, and reading the shared list named the next block six days early.
+  const ranges=ayBlockRanges(y);
+  for(let i=0;i<ranges.length;i++){
+    if(today>=ranges[i].start&&today<=ranges[i].end)return{block:i+1,academicYear:y};
   }
   return{block:13,academicYear:y};
 }
@@ -1165,10 +1185,26 @@ function rotCellInfo(resId,block){
 }
 
 // ─── MASTER ROTA BUILDER ─────────────────────────────────────────────────────
-// The builder lays out the NEXT academic year in a draft table (`rota_plan`) and only
-// copies a block into `rotations` at Push Live, so the live rota stays clean while the
-// plan is still churning.
-const PLAN_AY=CURRENT_ACADEMIC_YEAR+1;
+// The builder lays out an academic year in a draft table (`rota_plan`) and only copies a
+// block into `rotations` at Push Live, so the live rota stays clean while the plan is still
+// churning.
+//
+// PLAN_AY is the year being laid out. It was once fixed at "next year", which stopped being
+// true the day the planned year opened with blocks still in draft: on 4 Oct 2026 it moved on
+// to 2027-28, and blocks 2-13 of 2026-27 could no longer be reached or published. It now
+// opens on the live year and only moves when that year is fully published or the PD moves it.
+const PLAN_FIRST_AY=2026; // first year laid out here; earlier years have no draft to open
+function planDefaultAY(){return Math.max(PLAN_FIRST_AY,CURRENT_ACADEMIC_YEAR);}
+function planYears(){return[CURRENT_ACADEMIC_YEAR,CURRENT_ACADEMIC_YEAR+1].filter(y=>y>=PLAN_FIRST_AY);}
+let PLAN_AY=planDefaultAY();
+// Set once the year has been chosen by hand or advanced, so a reload never moves it again.
+let PLAN_AY_PICKED=false;
+function planSetYear(y){
+  if(y===PLAN_AY||planYears().indexOf(y)<0)return;
+  PLAN_AY=y;PLAN_AY_PICKED=true;
+  ROTA_PLAN={};PLAN_STATUS={};PLAN_STATE="idle";
+  set({rbCell:null,rbBlock:null,rbPrefill:false});
+}
 // ROTA_PLAN[residentId][block] = [{seg,weekStart,weeks,rot,leaveWeeks,leavePos}] sorted by seg
 let ROTA_PLAN={};
 // PLAN_STATUS[block] = {state,approved_at,published_at,pushed_at}
@@ -1194,16 +1230,28 @@ function planBlockEditable(blk){
 async function loadRotaPlan(){
   if(PLAN_STATE==="loading")return;
   PLAN_STATE="loading";
+  const ay=PLAN_AY;
   // 38 residents x 13 blocks is already past PostgREST's 1000-row cap once blocks split,
   // so page it and order by the unique key.
   const[{data,error},{data:sdata,error:serr}]=await Promise.all([
     fetchAllRows(()=>sb.from("rota_plan")
       .select("resident_id,block_number,segment,week_start,weeks,rotation_name,leave_weeks,leave_position,note,source")
-      .eq("academic_year",PLAN_AY)
+      .eq("academic_year",ay)
       .order("resident_id").order("block_number").order("segment")),
-    sb.from("rota_plan_block_status").select("*").eq("academic_year",PLAN_AY)
+    sb.from("rota_plan_block_status").select("*").eq("academic_year",ay)
   ]);
+  // The year was switched while this was in flight: these rows belong to the other year.
+  if(ay!==PLAN_AY){PLAN_STATE="idle";return loadRotaPlan();}
   if(error||serr){PLAN_STATE="error";console.warn("rota_plan load error",(error||serr).message);render();return;}
+  // Nothing left to lay out in the live year, so open on the next one. Only ever on the first
+  // load: once the year has been picked by hand, it stays where it was put.
+  if(!PLAN_AY_PICKED&&ay===CURRENT_ACADEMIC_YEAR){
+    const live={};(sdata||[]).forEach(r=>{if(r.state==="published")live[r.block_number]=1;});
+    if(rotaPeriods(ay).every((_,i)=>live[i+1])){
+      PLAN_AY=ay+1;PLAN_AY_PICKED=true;PLAN_STATE="idle";
+      return loadRotaPlan();
+    }
+  }
   const plan={};
   (data||[]).forEach(r=>{
     const rid=r.resident_id,blk=String(r.block_number);
@@ -1280,18 +1328,23 @@ function planWeeksFor(resId){
   }));
   return acc;
 }
-// Everything already on record plus everything the draft would add.
+// Everything already on record plus everything the draft would add. A published block sits
+// in both places — the draft, and the copy Push Live wrote into `rotations` — so the plan
+// year's own record is taken back out, or every published block would count twice and hide
+// a shortfall that is still there.
 function projectedWeeksFor(resId){
-  const acc=histWeeksFor(resId),add=planWeeksFor(resId);
+  const acc=histWeeksFor(resId),add=planWeeksFor(resId),dup=histWeeksFor(resId,PLAN_AY);
+  Object.keys(dup).forEach(k=>{acc[k]=(acc[k]||0)-dup[k];});
   Object.keys(add).forEach(k=>{acc[k]=(acc[k]||0)+add[k];});
   return acc;
 }
-// The level a resident will hold in PLAN_AY, or null if they graduate before it starts.
-// The incoming cohort already sits in `residents` as active R1s months ahead of its start
-// date, so reading `level` straight off would promote them alongside the current R1s.
+// The level a resident holds in PLAN_AY, or null if they have graduated by then or have not
+// arrived yet. Goes through levelInAY() rather than adding one to the stored level: levels
+// move on 1 October and the rota year opens on the 4th, so "stored level + 1" is right before
+// the promotion and a year too far after it — which dropped the new R4s off the grid.
 function planLevel(res){
   if(!res)return null;
-  return res.yearStarted>=PLAN_AY?"R1":nextAYLevel(res.level);
+  return levelInAY(res,PLAN_AY);
 }
 // The programme works to half the SCFHS total as a hard floor — see SCFHS_FLOOR.
 function scfhsCap(rot){return Math.round((SCFHS_TOTAL[rot]||0)*SCFHS_FLOOR);}
@@ -3370,7 +3423,35 @@ function allRoster(){return INCOMING.length?RESIDENTS.concat(INCOMING):RESIDENTS
 // opens before the year does. Only that exact match counts — promotion_log also holds rows
 // from previous years, and letting one of those set the baseline would age the whole roster
 // backwards and quietly drop the R3s out of the plan year.
-function levelsAY(){return LEVELS_AY===CURRENT_ACADEMIC_YEAR+1?LEVELS_AY:CURRENT_ACADEMIC_YEAR;}
+function levelsAY(){
+  if(LEVELS_AY===CURRENT_ACADEMIC_YEAR+1)return LEVELS_AY;
+  const v=rosterLevelsAY();
+  return v==null?CURRENT_ACADEMIC_YEAR:v;
+}
+// The same answer read off the roster itself, for the two cases promotion_log cannot settle.
+// The chiefs build the rota but hold no read policy on promotion_log, so from 1 to 3 October
+// they would see promoted levels described as last year's. And if the promotion is run late,
+// after the rota year has opened, the levels still describe the year before. A resident at
+// level n who started in year s is in year s+n-1; the year most of the roster agrees on is
+// the one the levels describe. Anyone held back is simply outvoted. A cohort that has not
+// reached its own year yet is left out, since its level describes yearStarted instead.
+let _lvAY={src:null,val:null};
+function rosterLevelsAY(){
+  if(_lvAY.src===RESIDENTS)return _lvAY.val;
+  const votes={};let n=0;
+  RESIDENTS.forEach(r=>{
+    const lv=4-_LVL_ORD[r.level];
+    if(!r.yearStarted||!(lv>=1&&lv<=4)||r.yearStarted>CURRENT_ACADEMIC_YEAR)return;
+    const y=r.yearStarted+lv-1;
+    votes[y]=(votes[y]||0)+1;n++;
+  });
+  let best=null;
+  Object.keys(votes).forEach(y=>{if(votes[y]*2>n)best=Number(y);});
+  // No clear majority, or a year the portal has no business being in: fall back.
+  if(best!=null&&Math.abs(best-CURRENT_ACADEMIC_YEAR)>1)best=null;
+  _lvAY={src:RESIDENTS,val:best};
+  return best;
+}
 // The level a resident holds in academic year `y`, or null if they have graduated by then or
 // have not arrived yet. Counting from `level` rather than from yearStarted is deliberate:
 // anyone held back in a promotion review has a level that no longer matches their start year.
@@ -10861,6 +10942,9 @@ const RB_EXTRA=["Night Duty","Medical Consult","Outpatient Clinic","Elective","A
 // block leave. Only an approved pick prefills the builder — a merely suggested one is
 // left for the PD to approve first, and the rail already shows it as pending.
 function rbApprovedLeave(rid,blk){
+  // The leave plan and the R4 picks are collected for one year only. With the builder on any
+  // other year they describe the wrong rota and must not prefill or colour it.
+  if(PLAN_AY!==LP_AY)return null;
   const lp=LEAVE_PLAN[rid];
   if(!lp)return null;
   const hits=[];
@@ -10921,6 +11005,7 @@ function rbIsAwaySeg(s){return s.leaveWeeks>0||s.rot==="Annual Leave"||s.rot==="
 // already exist in RB_EXTRA; the subspecialty and location stay in the rail as reference,
 // since a rota cell can only carry a rotation name.
 function rbPrefillR4(rid,blk){
+  if(PLAN_AY!==LP_AY)return null;
   const p=R4_PREFS[rid];
   if(!p||p.status!=="submitted")return null;
   if(p.elective1_block===blk||p.elective2_block===blk)return{rot:"Elective",src:"elective"};
@@ -11147,6 +11232,10 @@ function renderRotaBuilder(){
   const wrap=el("div",null);
   wrap.appendChild(el("span",{st:{fontSize:".78rem",color:"#c96a4a",fontWeight:"600",cursor:"pointer",marginBottom:"14px",display:"inline-block"},
     onClick:()=>set({ayCard:undefined,rbCell:null,rbBlock:null,rbRot:undefined})},"← Back to Academic Year Plan"));
+  // Only once there are two years to choose between. Until the first planned year opens there
+  // is nothing behind it to switch to, and a toggle would only offer an empty grid.
+  if(planYears().length>1)wrap.appendChild(renderAYBar(PLAN_AY,planSetYear,
+    "You are laying out "+ayLabel(CURRENT_ACADEMIC_YEAR+1)+". Nothing here reaches residents until you publish a block."));
   wrap.appendChild(el("div",{cls:"rb-hero"},
     el("div",{cls:"rb-lbl",st:{color:"rgba(254,251,243,.6)"}},"AY Plan "+ayLabel(PLAN_AY)+" · Master Rota Builder"),
     el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2.1rem",fontWeight:"400",lineHeight:"1.1",color:"#FEFBF3",margin:"2px 0 4px"}},"Master Rota"),
@@ -11220,7 +11309,7 @@ function renderRotaBuilder(){
         "Double-click any cell to assign. A corner flag means that rotation is still below its minimum cap — ",
         el("b",{st:{color:"#A47A28"}},"amber")," for R1, ",el("b",{st:{color:"#b52040"}},"red")," for R2 and above.")),
     el("div",{st:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"10px"}},
-      canBuildRota()?el("button",{cls:"sbtn ghost",onClick:()=>set({rbPrefill:true})},"Prefill from approved plans"):null,
+      canBuildRota()&&PLAN_AY===LP_AY?el("button",{cls:"sbtn ghost",onClick:()=>set({rbPrefill:true})},"Prefill from approved plans"):null,
       pills)));
   if(loading){
     secB.appendChild(el("div",{st:{padding:"40px 0",textAlign:"center",color:"rgba(31,26,18,.4)",fontSize:".85rem"}},"Loading the plan and training history…"));
@@ -11327,9 +11416,11 @@ function rbCellPanel(){
   const split=lvOn?false:bound<bw;
   const activeSeg=split?(STATE.rbSeg||0):0;
   const cum=projectedWeeksFor(rid);
-  const lp=LEAVE_PLAN[rid]||null;
-  const gim=(GIM_PREFS[rid]&&GIM_PREFS[rid].blocks)||[];
-  const r4=R4_PREFS[rid]||null;
+  // Requests are collected for LP_AY alone; on any other year the rail shows none.
+  const prefsYear=PLAN_AY===LP_AY;
+  const lp=prefsYear?(LEAVE_PLAN[rid]||null):null;
+  const gim=prefsYear?((GIM_PREFS[rid]&&GIM_PREFS[rid].blocks)||[]):[];
+  const r4=prefsYear?(R4_PREFS[rid]||null):null;
 
   const tip=el("div",{cls:"rb-tip"},el("div",{cls:"idle"},"Hover a specialty to see its cap."));
   function showTip(k){
@@ -11509,7 +11600,7 @@ function rbCellPanel(){
         el("div",{cls:"rb-lbl"},"Block "+blk+" · "+fmtBlockRange(blk,PLAN_AY)+" – "+fmtBlockRange(blk,PLAN_AY,true)+" · "+bw+" weeks"),
         el("h2",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.3rem",fontWeight:"400",margin:"2px 0 0"}},dname(res.name)),
         el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.5)"}},
-          (res.yearStarted>=PLAN_AY?"Incoming":res.level+" now")+" · "+planLevel(res)+" in "+ayLabel(PLAN_AY))),
+          (res.yearStarted>CURRENT_ACADEMIC_YEAR?"Incoming":res.level+" now")+" · "+planLevel(res)+" in "+ayLabel(PLAN_AY))),
       el("button",{cls:"x",st:{background:"none",border:"none",fontSize:"1.5rem",color:"rgba(31,26,18,.35)",cursor:"pointer",lineHeight:"1"},
         onClick:()=>set({rbCell:null})},"×")),
     el("div",{cls:"rb-pbody"},

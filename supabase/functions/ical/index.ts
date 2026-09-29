@@ -28,22 +28,41 @@ const ROTA_PERIODS = [
   "10/5-6/6","7/6-4/7","5/7-1/8","2/8-29/8","30/8-26/9",
 ];
 
-function blockStartDate(blockNum: number, academicYear: number): Date {
-  const period = ROTA_PERIODS[blockNum - 1];
-  if (!period) return new Date(0);
-  const startStr = period.split("-")[0];
-  const [sdStr, smStr] = startStr.split("/");
-  const sd = parseInt(sdStr, 10);
-  const sm = parseInt(smStr, 10);
-  const year = sm >= 9 ? academicYear : academicYear + 1;
-  return new Date(Date.UTC(year, sm - 1, sd));
-}
+// Years whose blocks do not follow ROTA_PERIODS at all. AY 2026-27 starts 4 Oct 2026, a week
+// later than every year before it, so all 13 of its blocks shift. Without this the feed put
+// every 2026-27 rotation on phones six days early.
+// Mirrors ROTA_PERIODS_OVERRIDE in SFH_Residency_Portal.html — keep the two in step.
+const ROTA_PERIODS_OVERRIDE: Record<number, string[]> = {
+  2026: [
+    "4/10-31/10","1/11-28/11","29/11-26/12","27/12-23/1",
+    "24/1-20/2","21/2-20/3","21/3-17/4","18/4-15/5",
+    "16/5-12/6","13/6-10/7","11/7-7/8","8/8-4/9","5/9-2/10",
+  ],
+};
 
 // Blocks that do not run the usual 4 weeks, keyed by academic year then block number.
 // Mirrors BLOCK_WEEKS_OVERRIDE in SFH_Residency_Portal.html — keep the two in step.
 const BLOCK_WEEKS_OVERRIDE: Record<number, Record<number, number>> = { 2025: { 13: 5 } };
 // Years that do not start on 1 Oct, as [day, month].
 const AY_START_OVERRIDE: Record<number, [number, number]> = { 2026: [4, 10] };
+
+function rotaPeriods(academicYear: number): string[] {
+  return ROTA_PERIODS_OVERRIDE[academicYear] ?? ROTA_PERIODS;
+}
+
+function blockStartDate(blockNum: number, academicYear: number): Date {
+  const period = rotaPeriods(academicYear)[blockNum - 1];
+  if (!period) return new Date(0);
+  const startStr = period.split("-")[0];
+  const [sdStr, smStr] = startStr.split("/");
+  const sd = parseInt(sdStr, 10);
+  const sm = parseInt(smStr, 10);
+  // Months at or after the year's own start month sit in the first calendar year. A fixed 9
+  // would place block 13 of 2026-27 (5/9) in 2026 instead of 2027.
+  const startMonth = AY_START_OVERRIDE[academicYear]?.[1] ?? 9;
+  const year = sm >= startMonth ? academicYear : academicYear + 1;
+  return new Date(Date.UTC(year, sm - 1, sd));
+}
 
 function blockWeeks(blockNum: number, academicYear: number): number {
   return BLOCK_WEEKS_OVERRIDE[academicYear]?.[blockNum] ?? 4;
