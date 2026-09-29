@@ -37,6 +37,28 @@ where active
 order by level desc, name;
 
 -- ── 2. The function ─────────────────────────────────────────────────────────
+-- The live promotion_log is NOT the table in add_promotion_log.sql. Checked
+-- against the database on 30 Sep 2026, it is:
+--     id bigint not null · academic_year integer not null · executed_by uuid
+--     executed_at timestamptz default now() · details jsonb
+-- The first version of this file wrote to promoted_by / changes, which do not
+-- exist, and would have failed at midnight. Everything below uses the live names.
+
+-- id must fill itself in. If it is neither an identity column nor defaulted,
+-- give it a sequence, or every insert fails on the NOT NULL.
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'promotion_log' and column_name = 'id'
+      and (is_identity = 'YES' or column_default is not null)
+  ) then
+    create sequence if not exists promotion_log_id_seq owned by promotion_log.id;
+    perform setval('promotion_log_id_seq', coalesce((select max(id) from promotion_log), 0) + 1, false);
+    alter table promotion_log alter column id set default nextval('promotion_log_id_seq');
+  end if;
+end $$;
+
 -- One row per year is what makes a second run impossible, so make sure the
 -- table really enforces it. The live table has been edited by hand before.
 do $$
@@ -95,7 +117,7 @@ begin
    where active and level in ('R1','R2','R3') and coalesce(year_started,0) < y;
   get diagnostics n_up = row_count;
 
-  insert into promotion_log (academic_year, promoted_by, changes) values (y, null, changes);
+  insert into promotion_log (academic_year, executed_by, details) values (y, null, changes);
 
   return jsonb_build_object('ran', true, 'year', y, 'promoted', n_up, 'archived', n_out);
 end $$;
@@ -123,8 +145,26 @@ exception when others then
   raise notice 'pg_cron is not available (%). The portal will run the promotion at the first sign-in on or after 1 October instead.', sqlerrm;
 end $$;
 
--- ── 4. Check what you got ───────────────────────────────────────────────────
+-- ── 4. Rehearse the write ───────────────────────────────────────────────────
+-- The function refuses to run before 1 October, so it cannot be tried out for
+-- real today. This makes the very same insert and takes it straight back. If
+-- the table would reject tonight's row, this file stops HERE with the reason,
+-- instead of the promotion failing at midnight with nobody watching.
+do $$
+begin
+  begin
+    insert into promotion_log (academic_year, executed_by, details) values (1999, null, '[]'::jsonb);
+    raise exception 'rehearsal-ok';
+  exception when others then
+    if sqlerrm <> 'rehearsal-ok' then
+      raise exception 'promotion_log cannot take the promotion row: %', sqlerrm;
+    end if;
+  end;
+end $$;
+
+-- ── 5. Check what you got ───────────────────────────────────────────────────
 select
+  true                                                                    as log_write_rehearsed,
   exists (select 1 from pg_proc where proname = 'run_october_promotion') as function_installed,
   to_regclass('cron.job') is not null                                     as scheduler_available,
   exists (select 1 from promotion_log

@@ -5884,7 +5884,9 @@ async function runPromotion(skip){
   });
   // The log row goes in first and is the lock: a year can hold one row, so a second session
   // arriving at the same moment stops here, before it can promote anyone a second time.
-  const{error:lerr}=await sb.from("promotion_log").insert({academic_year:ay,promoted_by:STATE.user.profileId,changes:JSON.stringify(changes)});
+  // Column names are the LIVE table's (executed_by, details), which differ from the repo's
+  // add_promotion_log.sql. `details` is jsonb, so it takes the array itself, not a string.
+  const{error:lerr}=await sb.from("promotion_log").insert({academic_year:ay,executed_by:STATE.user.profileId,details:changes});
   if(lerr){console.warn("promotion not run",lerr.message);return null;}
   let failed=null;
   if(ids.archived.length){
