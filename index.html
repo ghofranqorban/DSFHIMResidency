@@ -14130,7 +14130,10 @@ function renderOncallEditModal(){
   const isWe=isWeekendDate(date);
   const slots=ocSlots(blk).filter(x=>x.days_mode!=="weekend"||isWe);
   const existing={};
-  ONCALL_DATA.filter(e=>e.schedule_date===date).forEach(e=>{existing[e.slot_key]={resId:e.resident_id,resName:e.resident_name||"",isExtra:e.is_extra};});
+  // ocData(), not ONCALL_DATA: saveOncallDay() writes to ocAY(), so reading the live year here
+  // meant the plan year showed the wrong day's people and then saved them into next year. The
+  // calendar and dashboard keep reading ONCALL_DATA directly on purpose — see its declaration.
+  ocData().filter(e=>e.schedule_date===date).forEach(e=>{existing[e.slot_key]={resId:e.resident_id,resName:e.resident_name||"",isExtra:e.is_extra};});
   function close(){set({oncallEditDate:null});}
   async function doSave(entries){
     const btn=document.getElementById("oc_save_btn");
@@ -14145,7 +14148,7 @@ function renderOncallEditModal(){
       resident_id:document.getElementById("oc_name_"+s.slot_key)?.value.trim()?null:(document.getElementById("oc_"+s.slot_key)?.value||null),
       is_extra:document.getElementById("oc_extra_"+s.slot_key)?.checked||false
     }));
-    const dayPublished=ONCALL_DATA.some(e=>e.schedule_date===date&&e.published);
+    const dayPublished=ocData().some(e=>e.schedule_date===date&&e.published);
     if(dayPublished){
       showConfirm("This day is already published and visible to residents. Save these changes to the live schedule?",()=>doSave(entries),"Save Changes","warn");
     }else{
