@@ -14129,7 +14129,19 @@ function renderOncallEditModal(){
             sel.id="oc_"+s.slot_key;sel.className="input";sel.style.cssText="font-size:.82rem;";
             if(cur.resName)sel.disabled=true,sel.style.opacity="0.4";
             const emp=document.createElement("option");emp.value="";emp.textContent="— Not assigned —";sel.appendChild(emp);
-            sortByLevel(RESIDENTS).forEach(r=>{
+            // ocRoster(), not RESIDENTS: on a plan-year block RESIDENTS still lists the R4s who
+            // graduate on 1 Oct and has none of the incoming cohort, so Block 1 gets built around
+            // people who have left. The inline cell picker already resolves it this way.
+            const _roster=sortByLevel(ocRoster());
+            // Whoever already holds the slot must stay selectable even when they are off that
+            // roster — an outside rotator, or an R4 assigned before the year rolled over. Without
+            // this their option is absent, the select falls back to "Not assigned", and saving
+            // the day silently clears an assignment nobody touched.
+            if(cur.resId&&!_roster.some(r=>r.id==cur.resId)){
+              const _off=anyResById(cur.resId);
+              if(_off)_roster.unshift(_off);
+            }
+            _roster.forEach(r=>{
               const opt=document.createElement("option");
               opt.value=r.id;opt.textContent=dname(r.name)+" ("+r.level+")";
               if(r.id==cur.resId)opt.selected=true;
