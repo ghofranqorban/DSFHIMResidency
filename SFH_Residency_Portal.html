@@ -9142,6 +9142,37 @@ async function createLoginFor(kind,record){
   showInfoModal("Login Created — "+record.name,"Username: "+data.username+"\nTemporary password: "+data.password+"\n\nGive this to "+record.name+" and ask them to change their password after first sign-in (My Account button).");
   await loadCoreData();render();
 }
+// Resetting is PD-only and confirmed first: it invalidates the password the person is
+// currently using, so a mis-click locks someone out until they are handed the new one.
+// The server enforces the same rule — this check only keeps the button from appearing.
+function canResetLogins(){return STATE.user&&STATE.user.role==="pd";}
+async function resetLoginFor(kind,record){
+  if(!canResetLogins()){showToast("Only the Program Director can reset a password.","warning");return;}
+  showConfirm(
+    "Reset the password for "+record.name+"? Their current password stops working immediately, "+
+    "and you will need to give them the new one.",
+    async()=>{
+      const{data:sess}=await sb.auth.getSession();
+      const token=sess?.session?.access_token;
+      if(!token){showToast("Your session expired \u2014 please sign in again.");return;}
+      const{data,error}=await sb.functions.invoke(CREATE_LOGIN_FN,{
+        body:{action:"reset",type:kind,recordId:record.id},
+        headers:{Authorization:"Bearer "+token}
+      });
+      if(error){showToast("Could not reset: "+(error.message||error));return;}
+      if(data?.error){showToast("Could not reset: "+data.error);return;}
+      showInfoModal("Password Reset \u2014 "+record.name,
+        "Username: "+data.username+"\nNew temporary password: "+data.password+
+        "\n\nThis is shown once. Give it to "+record.name+" and ask them to change it after signing in (My Account).");
+    },
+    "Reset Password","warn");
+}
+function resetLoginBtn(kind,record){
+  if(!canResetLogins())return null;
+  return el("button",{cls:"sbtn ghost",st:{fontSize:".72rem",padding:"3px 8px",marginLeft:"6px",color:"#b52040"},
+    title:"Set a new temporary password for "+record.name,
+    onClick:()=>resetLoginFor(kind,record)},"Reset");
+}
 function renderAdminResidents(){
   const flt=STATE.adminResFilter||"all";
   // allRoster, not RESIDENTS: an incoming cohort must be manageable before its year opens.
@@ -9245,7 +9276,9 @@ function renderAdminResidents(){
                 el("td",null,levelBadge(r.level)),
                 el("td",{cls:"sh"},mentorName(r.id)),
                 el("td",null,hasLogin?
-                  el("span",{cls:"bdg",st:{background:"#dcfce7",color:"#166534"}},"Active"):
+                  el("span",null,
+                    el("span",{cls:"bdg",st:{background:"#dcfce7",color:"#166534"}},"Active"),
+                    resetLoginBtn("resident",r)):
                   el("button",{cls:"sbtn primary",st:{fontSize:".72rem",padding:"3px 8px"},onClick:()=>createLoginFor("resident",r)}," Create Login")
                 ),
                 el("td",null,

@@ -15,8 +15,27 @@
 // 6. Creates their "profiles" row linking the login to the resident/mentor record.
 // 7. Returns the username + temporary password ONCE, to show to the PD.
 //
-// Deploy: Supabase Dashboard > Edge Functions > Deploy a new function >
-// name it exactly "admin-create-login" > paste this whole file > Deploy.
+// It also handles { action: "reset" }, which sets a NEW temporary password on an
+// account that already exists. That exists because these logins use made-up
+// @dsfh.local addresses, so no reset email can ever be delivered and there is no
+// self-service "forgot password" — without this the PD has to open the Supabase
+// dashboard every time a resident forgets theirs.
+//
+// Reset is deliberately STRICTER than create:
+//   - only "pd" may call it, NOT "chief". The chief is themselves a resident, and
+//     letting them reset arbitrary passwords would let them take over the PD's
+//     own account.
+//   - it refuses to touch a profile whose role is pd / deputy_pd / dio / ceo, so a
+//     hijacked PD session cannot capture the oversight accounts.
+//
+// NAMING: this folder is "bright-processor", not "admin-create-login", because that is
+// the routing slug the dashboard assigned when the function was first created, and the
+// CLI deploys by folder name. The two must match or `supabase functions deploy` fails
+// with "Entrypoint path does not exist". index.html calls it via CREATE_LOGIN_FN, which
+// carries the same slug.
+//
+// Deploy:  supabase functions deploy bright-processor
+// (Never pass --prune: it deletes any function not present locally.)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -63,19 +82,41 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { type, recordId, username, displayName } = body as {
-      type?: string; recordId?: number; username?: string; displayName?: string;
+    const { type, recordId, username, displayName, action } = body as {
+      type?: string; recordId?: number; username?: string; displayName?: string; action?: string;
     };
-    if (!type || !["resident", "consultant"].includes(type) || !recordId || !username) {
+    const isReset = action === "reset";
+    if (!type || !["resident", "consultant"].includes(type) || !recordId || (!isReset && !username)) {
       return json({ error: "Missing or invalid fields." }, 400);
     }
 
     const linkCol = type === "resident" ? "resident_id" : "consultant_id";
     const { data: existing } = await admin
       .from("profiles")
-      .select("id")
+      .select("id, username, role")
       .eq(linkCol, recordId)
       .maybeSingle();
+
+    if (isReset) {
+      // Only the PD. "chief" is allowed to CREATE logins above, but the chief is a
+      // resident — letting them reset passwords would let them take the PD's account.
+      if (callerProfile.role !== "pd") {
+        return json({ error: "Only the Program Director can reset a password." }, 403);
+      }
+      if (!existing) return json({ error: "This account has no login to reset." }, 400);
+      // No lateral or upward capture: a hijacked PD session must not be able to take
+      // over the deputy, DIO or CEO accounts through this endpoint.
+      if (["pd", "deputy_pd", "dio", "ceo"].includes(existing.role)) {
+        return json({ error: "This role's password cannot be reset here. Use the Supabase dashboard." }, 403);
+      }
+      const newPassword = tempPassword();
+      const { error: updErr } = await admin.auth.admin.updateUserById(existing.id, {
+        password: newPassword,
+      });
+      if (updErr) return json({ error: updErr.message }, 400);
+      return json({ username: existing.username, password: newPassword, reset: true });
+    }
+
     if (existing) return json({ error: "This account already has a login." }, 400);
 
     const email = username.trim().toLowerCase() + "@dsfh.local";
