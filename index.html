@@ -1067,21 +1067,86 @@ async function markTeachAttendance(sessionId,residentId,status){
   await loadSchedules();
 }
 // ─── ROTA (DB-backed: table `rotations`) ─────────────────────────────────────
-async function loadRotations(){
-  const{data,error}=await sb.from("rotations").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR);
-  FULL_ROTA={};ROTA_LEAVE_META={};
-  (error?[]:(data||[])).forEach(row=>{
-    // FULL_ROTA is one-rotation-per-block. Blocks split across two rotations store a
-    // second row (segment 2); rendering both is not built yet, so pin to segment 1
-    // rather than let row order decide which one silently wins.
+// One year of `rotations` rows, in the three shapes the rota views read:
+//   map  [resident][block] = the segment-1 rotation. One name per block, which is what the
+//        editors, the tracker and the exports all expect.
+//   meta [resident][block] = {weeks,position} of a half-block leave riding on that rotation.
+//   segs [resident][block] = EVERY segment, in order. The builder lays blocks out in weeks, so
+//        a block can hold two rotations; reading segment 1 alone showed half of it.
+function rotaIndex(rows){
+  const map={},meta={},segs={};
+  (rows||[]).forEach(row=>{
+    const rid=row.resident_id,b=String(row.block_number);
+    if(row.rotation_name){
+      if(!segs[rid])segs[rid]={};
+      if(!segs[rid][b])segs[rid][b]=[];
+      segs[rid][b].push({seg:row.segment||1,rot:row.rotation_name,weekStart:row.week_start||0,
+        weeks:row.weeks||0,leaveWeeks:row.leave_weeks||0,leavePos:row.leave_position||"none"});
+    }
     if((row.segment||1)!==1)return;
-    if(!FULL_ROTA[row.resident_id])FULL_ROTA[row.resident_id]={};
-    FULL_ROTA[row.resident_id][String(row.block_number)]=row.rotation_name||"";
+    if(!map[rid])map[rid]={};
+    map[rid][b]=row.rotation_name||"";
     if(row.leave_weeks>0){
-      if(!ROTA_LEAVE_META[row.resident_id])ROTA_LEAVE_META[row.resident_id]={};
-      ROTA_LEAVE_META[row.resident_id][String(row.block_number)]={weeks:row.leave_weeks,position:row.leave_position||"start"};
+      if(!meta[rid])meta[rid]={};
+      meta[rid][b]={weeks:row.leave_weeks,position:row.leave_position||"start"};
     }
   });
+  Object.keys(segs).forEach(r=>Object.keys(segs[r]).forEach(b=>segs[r][b].sort((x,y)=>x.seg-y.seg)));
+  return{map,meta,segs};
+}
+let ROTA_SEGS={};
+// Next year's PUBLISHED blocks. `rotations` only ever receives a block at Push Live, so
+// whatever is here has been released; a block still in draft lives in rota_plan and cannot
+// reach this. Held apart from FULL_ROTA on purpose: leave, the tracker, KPI and the calendar
+// read FULL_ROTA and must keep meaning the year we are living in.
+let NEXT_ROTA={map:{},meta:{},segs:{}};
+let NEXT_BLOCKS=[];
+async function loadNextRota(){
+  const{data,error}=await fetchAllRows(()=>sb.from("rotations").select("*")
+    .eq("academic_year",CURRENT_ACADEMIC_YEAR+1)
+    .order("resident_id").order("block_number").order("segment"));
+  if(error){console.warn("next-year rota load error",error.message);return;}
+  NEXT_ROTA=rotaIndex(data);
+  const seen={};
+  (data||[]).forEach(r=>{if(r.rotation_name)seen[r.block_number]=1;});
+  NEXT_BLOCKS=Object.keys(seen).map(Number).sort((a,b)=>a-b);
+  render();
+}
+// ─── ROTA VIEWING YEAR ───────────────────────────────────────────────────────
+// The Rota page can be pointed at next year once a block of it has been published, so
+// residents learn their rotation before the morning it starts. It is a VIEW of next year and
+// nothing more: every editor on the page writes to the live year, so they are all switched
+// off while it is showing. Next year is edited in the rota builder and nowhere else.
+function rotaNextReady(){return NEXT_BLOCKS.length>0;}
+function rotaAY(){return rotaNextReady()&&STATE.rotaAY===CURRENT_ACADEMIC_YEAR+1?STATE.rotaAY:CURRENT_ACADEMIC_YEAR;}
+function rotaIsNext(){return rotaAY()!==CURRENT_ACADEMIC_YEAR;}
+function rotaSetYear(y){
+  if(y===rotaAY())return;
+  set({rotaAY:y,rotaEdit:false,rotaTimeRes:undefined,
+    rotaPeriod:y===CURRENT_ACADEMIC_YEAR?CURRENT_PERIOD:(NEXT_BLOCKS[0]||1)});
+}
+function rotaMap(){return rotaIsNext()?NEXT_ROTA.map:FULL_ROTA;}
+function rotaMeta(){return rotaIsNext()?NEXT_ROTA.meta:ROTA_LEAVE_META;}
+function rotaSegs(){return rotaIsNext()?NEXT_ROTA.segs:ROTA_SEGS;}
+function rotaCanEdit(){return canEdit()&&!rotaIsNext();}
+// "Now" only means something on the live year.
+function rotaIsCur(blk){return !rotaIsNext()&&blk===CURRENT_PERIOD;}
+// Whether a block has anything to show. Every block of the live year does; next year only
+// the ones that have been published.
+function rotaBlockOpen(blk){return !rotaIsNext()||NEXT_BLOCKS.indexOf(blk)>=0;}
+// Who is on the rota in the year on screen, at the level they hold in it: next year drops
+// this year's graduates, brings in the new intake, and moves everyone else up one.
+function rotaRoster(){
+  if(!rotaIsNext())return RESIDENTS;
+  const out=[];
+  allRoster().forEach(r=>{const lv=levelInAY(r,rotaAY());if(lv)out.push({...r,level:lv});});
+  return out;
+}
+function rotaRes(id){return rotaRoster().find(r=>r.id==id)||null;}
+async function loadRotations(){
+  const{data,error}=await sb.from("rotations").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR);
+  const idx=rotaIndex(error?[]:data);
+  FULL_ROTA=idx.map;ROTA_LEAVE_META=idx.meta;ROTA_SEGS=idx.segs;
   ensureResidentAuxData();
   RESIDENTS.forEach(r=>{
     const rots=Object.values(FULL_ROTA[r.id]||{}).filter(x=>MANDATORY.includes(x));
@@ -1170,18 +1235,48 @@ async function saveRotaCells(entries,ay){
   });
   const{error}=await sb.from("rotations").upsert(rows,{onConflict:"resident_id,academic_year,block_number,segment"});
   if(error){showToast("Could not save rota: "+error.message);return false;}
+  // Publishing a block of next year lands here too, and the Rota page has to pick it up.
+  if(year===CURRENT_ACADEMIC_YEAR+1)await loadNextRota();
   await loadRotations();
   return true;
 }
+function rotaWk(from,n){return n<=1?"Wk "+from:"Wk "+from+"-"+(from+n-1);}
 // Helper: returns rotation + any split-leave metadata for a resident/block cell
 // leave_position "end" → rotation is Wk 1-2, AL is Wk 3-4 (e.g. Nephro/2wks)
 // leave_position "start" → AL is Wk 1-2, rotation is Wk 3-4 (e.g. 2wks/Nephro)
+// Reads the year the Rota page is showing. `lines` is set only for a block laid out in
+// weeks — two rotations, or one that fills part of the block — and lists every part in
+// order. The plain block and the older "rotation + half-block leave" leave it null and keep
+// the look they have always had.
 function rotCellInfo(resId,block){
-  const rot=(FULL_ROTA[resId]||{})[String(block)]||"";
-  const meta=(ROTA_LEAVE_META[resId]||{})[String(block)];
+  const rot=(rotaMap()[resId]||{})[String(block)]||"";
+  const meta=(rotaMeta()[resId]||{})[String(block)];
   const split=!!(meta&&meta.weeks>0);
   const splitLabel=split?(meta.position==="end"?"AL: Wk 3-4":"AL: Wk 1-2"):"";
-  return{rot,split,weeks:meta?.weeks||0,position:meta?.position||"none",splitLabel};
+  const segs=(rotaSegs()[resId]||{})[String(block)]||[];
+  const bw=blockWeeks(block,rotaAY());
+  let lines=null;
+  const partial=s=>s.weekStart>1||(s.weeks>0&&s.weeks<Math.min(bw,4));
+  if(segs.length>1||(segs.length===1&&!segs[0].leaveWeeks&&partial(segs[0]))){
+    lines=[];let next=1;
+    segs.forEach(s=>{
+      // Rows from before week_start existed carry none, so they follow on from the last one.
+      const n=s.weeks||(segs.length>1?Math.floor(bw/segs.length):bw);
+      const from=s.weekStart||next;
+      if(s.leaveWeeks>0){
+        const first=s.leavePos!=="end";
+        lines.push({rot:"Annual Leave",from:first?from:from+n,weeks:s.leaveWeeks});
+        lines.push({rot:s.rot,from:first?from+s.leaveWeeks:from,weeks:n});
+        next=from+n+s.leaveWeeks;
+      }else{
+        lines.push({rot:s.rot,from,weeks:n});
+        next=from+n;
+      }
+    });
+    lines.sort((a,b)=>a.from-b.from);
+    lines.forEach(l=>{l.wk=rotaWk(l.from,l.weeks);});
+  }
+  return{rot,split,weeks:meta?.weeks||0,position:meta?.position||"none",splitLabel,lines};
 }
 
 // ─── MASTER ROTA BUILDER ─────────────────────────────────────────────────────
@@ -3590,6 +3685,7 @@ function renderLogin(){
     loadPendingCounselCount();
     loadSchedules();
     loadRotations();
+    loadNextRota();
     loadLeaveRecords();
     loadAnnouncements();
     loadCalendarEvents();
@@ -4217,6 +4313,10 @@ function renderRota(){
   const tabLabels={"block":"Block View","timeline":"Resident Timeline","table":"Full Table"};
   // For residents: 3-tab view — Distribution, My Rota, Full Table
   const isResident=u.role==="resident";
+  // Offered only once a block of next year has been published; until then there is nothing
+  // behind the switch. It goes away by itself the day that year becomes the live one.
+  const yearBar=rotaNextReady()?renderAYBar(rotaAY(),rotaSetYear,
+    "You are looking at "+ayLabel(CURRENT_ACADEMIC_YEAR+1)+". Only the blocks that have been published are shown, and nothing can be changed from this page."):null;
   if(isResident){
     const resTab=STATE.rotaResTab||"my";
     return el("div",{cls:"content"},
@@ -4224,9 +4324,10 @@ function renderRota(){
         el("div",null,
           el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Rotation Schedule"),
           el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Rota Schedule"),
-          el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2))
+          el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},ayLabel(rotaAY()))
         )
       ),
+      yearBar,
       el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
         ...["dist","my","full"].map(t=>{const lbs={dist:"Distribution",my:"My Rota",full:"Full Table"};const active=resTab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({rotaResTab:t})},lbs[t]);})),
       resTab==="dist"?renderRotaBlock(RESIDENTS):
@@ -4239,9 +4340,10 @@ function renderRota(){
       el("div",null,
         el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Rotation Schedule"),
         el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Rota Schedule"),
-        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2))
+        el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},ayLabel(rotaAY()))
       )
     ),
+    yearBar,
     el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
       ...tabs.map(t=>{const active=STATE.rotaTab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({rotaTab:t})},tabLabels[t]);})),
     STATE.rotaTab==="block"?renderRotaBlock():
@@ -4251,26 +4353,63 @@ function renderRota(){
 }
 function periodPills(cur,onChange){
   return el("div",{cls:"flex-wrap",st:{marginBottom:"14px"}},
-    ...ROTA_PERIODS.map((lbl,i)=>{
+    ...rotaPeriods(rotaAY()).map((lbl,i)=>{
       const n=i+1;
-      const isCur=n===CURRENT_PERIOD;
+      const isCur=rotaIsCur(n);
       const isSel=n===cur;
+      const open=rotaBlockOpen(n);
       return el("span",{
         cls:"pill"+(isSel?" on":"")+(isCur&&!isSel?" cur":""),
+        st:open?{}:{opacity:".45"},
+        title:open?"":"Block "+n+" has not been published yet",
         onClick:()=>onChange(n)
       },"B"+n+(isCur?" ":""));
     })
   );
 }
+// One cell of a resident's year strip: block number, rotation, and any weeks note.
+function rotaStripCell(res,n){
+  const open=rotaBlockOpen(n);
+  const info=open?rotCellInfo(res.id,n):{rot:"",lines:null};
+  const rot=(info.lines?info.lines[0].rot:info.rot)||"—";
+  const wkNote=t=>el("div",{st:{fontSize:".6rem",fontWeight:"700",color:"#5C5345",marginTop:"1px"}},t);
+  return el("div",{
+    st:{...rotStyle(rot),borderRadius:"8px",padding:"8px 10px",minWidth:"70px",textAlign:"center",
+      border:rotaIsCur(n)?"2px solid #f59e0b":"2px solid transparent",cursor:"default",opacity:open?"1":".45"},
+    title:!open?"Block "+n+" has not been published yet"
+      :info.lines?info.lines.map(l=>l.rot+" ("+l.wk+")").join(" + ")
+      :rot+(info.split?" (+ "+info.weeks+"wk AL)":"")
+  },
+    el("div",{st:{fontSize:".7rem",fontWeight:"700",color:"#94a3b8"}},"B"+n),
+    ...(info.lines
+      ?info.lines.flatMap((l,i)=>[
+          el("div",{st:{fontSize:".78rem",fontWeight:"700",marginTop:i?"5px":"4px",color:rotColor(l.rot).tx}},ROT_ABBR[l.rot]||l.rot),
+          wkNote(l.wk)])
+      :[el("div",{st:{fontSize:".78rem",fontWeight:"700",marginTop:"4px"}},ROT_ABBR[rot]||rot),
+        info.split?el("div",{st:{fontSize:".6rem",fontWeight:"700",color:"#c2410c",background:"#fff7ed",borderRadius:"3px",marginTop:"3px",padding:"1px 4px"}},info.splitLabel):null])
+  );
+}
 function renderRotaBlock(resOverride){
   const p=STATE.rotaPeriod;
-  const vr=RESIDENTS;
-  // group by rotation
-  const groups={};
+  const vr=rotaRoster();
+  if(!rotaBlockOpen(p))return el("div",null,
+    el("div",{cls:"card"},
+      el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
+        el("span",{cls:"card-title",st:{margin:"0"}},"Block "+p+" — "+blockLabel(p,rotaAY()))),
+      periodPills(p,n=>set({rotaPeriod:n,rotaEdit:false}))),
+    el("div",{st:{padding:"28px 4px",fontSize:".87rem",color:"#5C5345"}},"Block "+p+" has not been published yet."));
+  // group by rotation. A block laid out in weeks puts the resident under each of its
+  // rotations, with the weeks beside the name. The editor below works on one rotation per
+  // block, so while it is open the grouping goes back to that.
+  const groups={},wkOf={};
   vr.forEach(r=>{
-    const rot=(FULL_ROTA[r.id]||{})[String(p)]||"—";
-    if(!groups[rot])groups[rot]=[];
-    groups[rot].push(r);
+    const info=rotCellInfo(r.id,p);
+    const parts=(info.lines&&!STATE.rotaEdit)?info.lines:[{rot:info.rot||"—",wk:""}];
+    parts.forEach(l=>{
+      if(!groups[l.rot])groups[l.rot]=[];
+      groups[l.rot].push(r);
+      if(l.wk)wkOf[l.rot+":"+r.id]=l.wk;
+    });
   });
   const rotKeys=Object.keys(groups).sort();
   let editVals={};
@@ -4286,8 +4425,8 @@ function renderRotaBlock(resOverride){
   return el("div",null,
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"12px"}},
-        el("span",{cls:"card-title",st:{margin:"0"}},"Block "+p+" — "+blockLabel(p,CURRENT_ACADEMIC_YEAR)),
-        canEdit()?el("button",{cls:"sbtn "+(STATE.rotaEdit?"warn":"ghost"),onClick:()=>set({rotaEdit:!STATE.rotaEdit})},STATE.rotaEdit?"Cancel":"Edit Mode"):null,
+        el("span",{cls:"card-title",st:{margin:"0"}},"Block "+p+" — "+blockLabel(p,rotaAY())),
+        rotaCanEdit()?el("button",{cls:"sbtn "+(STATE.rotaEdit?"warn":"ghost"),onClick:()=>set({rotaEdit:!STATE.rotaEdit})},STATE.rotaEdit?"Cancel":"Edit Mode"):null,
         STATE.rotaEdit?el("button",{cls:"sbtn success",onClick:saveEdit},"Save Changes"):null
       ),
       periodPills(p,n=>set({rotaPeriod:n,rotaEdit:false}))
@@ -4300,7 +4439,7 @@ function renderRotaBlock(resOverride){
         ),
         el("div",{cls:"flex-wrap"},
           ...groups[rot].map(r=>{
-            if(STATE.rotaEdit){
+            if(STATE.rotaEdit&&rotaCanEdit()){
               const curMeta=(ROTA_LEAVE_META[r.id]||{})[String(p)];
               editVals[r.id]=editVals[r.id]||{rot,split:!!(curMeta&&curMeta.weeks>0),position:curMeta?.position||"start"};
               const v=editVals[r.id];
@@ -4325,13 +4464,14 @@ function renderRotaBlock(resOverride){
                 posSel
               );
             }
-            const blockMeta=(ROTA_LEAVE_META[r.id]||{})[String(p)];
+            const blockMeta=wkOf[rot+":"+r.id]?null:(rotaMeta()[r.id]||{})[String(p)];
             const isSelf=STATE.user?.rid&&r.id===STATE.user.rid;
             return el("div",{cls:"flex-gap",st:{background:isSelf?"#fff3eb":"#F6EFE2",borderRadius:"8px",padding:"6px 10px",border:isSelf?"1.5px solid #f8c9a8":"1px solid #e2e8f0"}},
               avEl(r),
               el("div",null,
                 el("div",{cls:"name",st:{fontSize:".82rem",color:isSelf?"#c96a4a":""}},r.name),
                 el("div",{st:{fontSize:".72rem",color:"#64748b"}},r.level),
+                wkOf[rot+":"+r.id]?el("div",{st:{fontSize:".65rem",color:"#5C5345",fontWeight:"700",marginTop:"2px"}},wkOf[rot+":"+r.id]):null,
                 blockMeta&&blockMeta.weeks?el("div",{st:{fontSize:".65rem",color:"#c2410c",fontWeight:"700",marginTop:"2px"}},"+"+blockMeta.weeks+"wk AL ("+( blockMeta.position==="end"?"Wk 3-4":"Wk 1-2")+")"):null
               )
             );
@@ -4343,9 +4483,10 @@ function renderRotaBlock(resOverride){
 }
 function renderRotaTimeline(){
   const u=STATE.user;
-  const vr=(u&&u.role==="resident"&&!hasPriv(u.profileId,"edit_mm_attendance")&&!hasPriv(u.profileId,"edit_teach_attendance"))?visRes():RESIDENTS;
+  const own=u&&u.role==="resident"&&!hasPriv(u.profileId,"edit_mm_attendance")&&!hasPriv(u.profileId,"edit_teach_attendance");
+  const vr=own?rotaRoster().filter(r=>r.id===u.rid):sortByLevel(rotaRoster());
   const rid=STATE.rotaTimeRes||(vr[0]?.id);
-  const res=resById(rid)||vr[0];
+  const res=vr.find(r=>r.id==rid)||vr[0];
   if(!res)return el("div",null,"No residents available");
   return el("div",null,
     el("div",{cls:"card"},
@@ -4365,28 +4506,16 @@ function renderRotaTimeline(){
       ),
       el("div",{st:{overflowX:"auto"}},
         el("div",{st:{display:"flex",gap:"6px",minWidth:"max-content",paddingBottom:"6px"}},
-          ...ROTA_PERIODS.map((lbl,i)=>{
-            const n=i+1;
-            const info=rotCellInfo(res.id,n);
-            const rot=info.rot||"—";
-            const isCur=n===CURRENT_PERIOD;
-            return el("div",{
-              st:{...rotStyle(rot),borderRadius:"8px",padding:"8px 10px",minWidth:"70px",textAlign:"center",border:isCur?"2px solid #f59e0b":"2px solid transparent",cursor:"default"},
-              title:rot+(info.split?" (+ "+info.weeks+"wk AL)":"")
-            },
-              el("div",{st:{fontSize:".7rem",fontWeight:"700",color:"#94a3b8"}},"B"+n),
-              el("div",{st:{fontSize:".78rem",fontWeight:"700",marginTop:"4px"}},ROT_ABBR[rot]||rot),
-              info.split?el("div",{st:{fontSize:".6rem",fontWeight:"700",color:"#c2410c",background:"#fff7ed",borderRadius:"3px",marginTop:"3px",padding:"1px 4px"}},info.splitLabel):null
-            );
-          })
+          ...rotaPeriods(rotaAY()).map((lbl,i)=>rotaStripCell(res,i+1))
         )
       )
     )
   );
 }
 function renderResidentOwnRota(rid){
-  const res=resById(rid);
-  if(!res)return el("div",null,"Not found");
+  const res=rotaRes(rid);
+  if(!res)return el("div",{st:{padding:"28px 4px",fontSize:".87rem",color:"#5C5345"}},
+    rotaIsNext()?"You are not on the "+ayLabel(rotaAY())+" rota.":"Not found");
   return el("div",{cls:"card"},
     el("div",{cls:"flex-gap",st:{marginBottom:"14px"}},
       avEl(res),
@@ -4398,27 +4527,13 @@ function renderResidentOwnRota(rid){
     ),
     el("div",{st:{overflowX:"auto"}},
       el("div",{st:{display:"flex",gap:"6px",minWidth:"max-content",paddingBottom:"6px"}},
-        ...ROTA_PERIODS.map((lbl,i)=>{
-          const n=i+1;
-          const info=rotCellInfo(res.id,n);
-          const rot=info.rot||"—";
-          const isCur=n===CURRENT_PERIOD;
-          return el("div",{
-            st:{...rotStyle(rot),borderRadius:"8px",padding:"8px 10px",minWidth:"70px",textAlign:"center",
-              border:isCur?"2px solid #f59e0b":"2px solid transparent"},
-            title:rot+(info.split?" (+ "+info.weeks+"wk AL)":"")
-          },
-            el("div",{st:{fontSize:".7rem",fontWeight:"700",color:"#94a3b8"}},"B"+n),
-            el("div",{st:{fontSize:".78rem",fontWeight:"700",marginTop:"4px"}},ROT_ABBR[rot]||rot),
-            info.split?el("div",{st:{fontSize:".6rem",fontWeight:"700",color:"#c2410c",background:"#fff7ed",borderRadius:"3px",marginTop:"3px",padding:"1px 4px"}},info.splitLabel):null
-          );
-        })
+        ...rotaPeriods(rotaAY()).map((lbl,i)=>rotaStripCell(res,i+1))
       )
     )
   );
 }
 function renderRotaTable(resOverride){
-  const vr=RESIDENTS;
+  const vr=rotaRoster();
   const levels=["R4","R3","R2","R1"];
   let editVals={};
   async function saveTableEdit(){
@@ -4434,8 +4549,8 @@ function renderRotaTable(resOverride){
       el("div",{cls:"flex-gap"},
         el("span",{cls:"card-title",st:{margin:"0"}},"Full Rota Table"),
         el("button",{cls:"sbtn ghost",st:{fontSize:".78rem",marginLeft:"auto"},onClick:exportRota},"Export Excel"),
-        canEdit()?el("button",{cls:"sbtn "+(STATE.rotaEdit?"warn":"ghost"),onClick:()=>set({rotaEdit:!STATE.rotaEdit})},STATE.rotaEdit?"Cancel":"Edit Mode"):null,
-        STATE.rotaEdit?el("button",{cls:"sbtn success",onClick:saveTableEdit},"Save Changes"):null
+        rotaCanEdit()?el("button",{cls:"sbtn "+(STATE.rotaEdit?"warn":"ghost"),onClick:()=>set({rotaEdit:!STATE.rotaEdit})},STATE.rotaEdit?"Cancel":"Edit Mode"):null,
+        STATE.rotaEdit&&rotaCanEdit()?el("button",{cls:"sbtn success",onClick:saveTableEdit},"Save Changes"):null
       )
     ),
     el("div",{cls:"tbl-wrap"},
@@ -4443,9 +4558,10 @@ function renderRotaTable(resOverride){
         el("thead",null,
           el("tr",null,
             el("th",{cls:"sticky-col",st:{minWidth:"140px"}},"Resident"),
-            ...ROTA_PERIODS.map((lbl,i)=>el("th",{st:{minWidth:"70px",textAlign:"center",background:i+1===CURRENT_PERIOD?"#fff8e1":""}},
+            ...rotaPeriods(rotaAY()).map((lbl,i)=>el("th",{st:{minWidth:"70px",textAlign:"center",background:rotaIsCur(i+1)?"#fff8e1":"",opacity:rotaBlockOpen(i+1)?"1":".5"},
+              title:rotaBlockOpen(i+1)?"":"Block "+(i+1)+" has not been published yet"},
               el("div",{st:{fontSize:".72rem"}},"B"+(i+1)),
-              el("div",{st:{fontSize:".65rem",color:"#94a3b8"}},blockLabel(i+1,CURRENT_ACADEMIC_YEAR))
+              el("div",{st:{fontSize:".65rem",color:"#94a3b8"}},blockLabel(i+1,rotaAY()))
             ))
           )
         ),
@@ -4465,11 +4581,11 @@ function renderRotaTable(resOverride){
                     )
                   )
                 ),
-                ...ROTA_PERIODS.map((_,i)=>{
+                ...rotaPeriods(rotaAY()).map((_,i)=>{
                   const p=i+1;
-                  const info=rotCellInfo(r.id,p);
+                  const info=rotaBlockOpen(p)?rotCellInfo(r.id,p):{rot:"",lines:null};
                   const rot=info.rot;
-                  if(STATE.rotaEdit){
+                  if(STATE.rotaEdit&&rotaCanEdit()){
                     const key=r.id+"_"+p;
                     const curMeta=(ROTA_LEAVE_META[r.id]||{})[String(p)];
                     editVals[key]=editVals[key]||{rot,split:!!(curMeta&&curMeta.weeks>0),position:curMeta?.position||"start"};
@@ -4488,9 +4604,14 @@ function renderRotaTable(resOverride){
                     chkRow.appendChild(chk);chkRow.appendChild(document.createTextNode("½ AL"));
                     wrap.appendChild(chkRow);
                     wrap.appendChild(posSel);
-                    return el("td",{st:{background:p===CURRENT_PERIOD?"#fffbeb":"",verticalAlign:"top",paddingTop:"6px"}},wrap);
+                    return el("td",{st:{background:rotaIsCur(p)?"#fffbeb":"",verticalAlign:"top",paddingTop:"6px"}},wrap);
                   }
-                  return el("td",{st:{background:p===CURRENT_PERIOD?"#fffbeb":"",textAlign:"center",verticalAlign:"middle"}},
+                  if(info.lines)return el("td",{st:{background:rotaIsCur(p)?"#fffbeb":"",textAlign:"center",verticalAlign:"middle"}},
+                    el("div",{st:{display:"flex",flexDirection:"column",alignItems:"center",gap:"3px"}},
+                      ...info.lines.flatMap(l=>[
+                        el("span",{cls:"rot-badge",st:rotStyle(l.rot)},ROT_ABBR[l.rot]||l.rot),
+                        el("span",{st:{fontSize:".6rem",fontWeight:"700",color:"#5C5345"}},l.wk)])));
+                  return el("td",{st:{background:rotaIsCur(p)?"#fffbeb":"",textAlign:"center",verticalAlign:"middle"}},
                     rot?el("div",{st:{display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}},
                       el("span",{cls:"rot-badge",st:rotStyle(rot)},ROT_ABBR[rot]||rot),
                       info.split?el("span",{st:{fontSize:".6rem",fontWeight:"700",color:"#c2410c",background:"#fff7ed",borderRadius:"3px",padding:"1px 5px",border:"1px solid #fed7aa"}},info.splitLabel):null
@@ -5999,11 +6120,12 @@ function exportRota(){
   const headers=["Resident","Level",...ROTA_PERIODS.map((_,i)=>"B"+(i+1))];
   const rows=[];
   levels.forEach(lv=>{
-    RESIDENTS.filter(r=>r.level===lv).forEach(r=>{
+    rotaRoster().filter(r=>r.level===lv).forEach(r=>{
       const cols=ROTA_PERIODS.map((_,i)=>{
-        const rot=(FULL_ROTA[r.id]||{})[String(i+1)]||"";
-        const meta=(ROTA_LEAVE_META[r.id]||{})[String(i+1)];
-        return rot+(meta&&meta.weeks>0?" (½ AL)":"");
+        if(!rotaBlockOpen(i+1))return "";
+        const info=rotCellInfo(r.id,i+1);
+        if(info.lines)return info.lines.map(l=>l.rot+" ("+l.wk+")").join(" / ");
+        return info.rot+(info.split?" (½ AL)":"");
       });
       rows.push([r.name,r.level,...cols]);
     });
@@ -6012,7 +6134,7 @@ function exportRota(){
   ws["!cols"]=[{wch:24},{wch:6},...ROTA_PERIODS.map(()=>({wch:14}))];
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,"Rota");
-  XLSX.writeFile(wb,"Rota_AY"+CURRENT_ACADEMIC_YEAR+"_"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2)+".xlsx");
+  XLSX.writeFile(wb,"Rota_AY"+rotaAY()+"_"+(rotaAY()+1).toString().slice(2)+".xlsx");
 }
 function exportSchedule(type,blk){
   const isMM=type==="mm";
@@ -15470,6 +15592,7 @@ function renderCalModal(){
         loadPendingCounselCount();
         loadSchedules();
         loadRotations();
+        loadNextRota();
         loadLeaveRecords();
         loadAnnouncements();
         loadCalendarEvents();
