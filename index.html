@@ -4123,7 +4123,11 @@ function renderModGrid(){
   // Oncall reminder — next upcoming oncall for this user
   if(u.rid){
     const ocToday=toLocalYMD(new Date());
-    const nextOc=ONCALL_DATA.filter(e=>e.resident_id===u.rid&&e.schedule_date>=ocToday).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date))[0];
+    // Same (canEditOncall()||e.published) gate as the on-call grid. Without it the most
+    // prominent place in the portal -- the first card a resident sees on login -- announced a
+    // shift from an unpublished block. ONCALL_DATA rather than ocData() is deliberate here:
+    // the dashboard always means the year we are living in.
+    const nextOc=ONCALL_DATA.filter(e=>e.resident_id===u.rid&&(canEditOncall()||e.published)&&e.schedule_date>=ocToday).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date))[0];
     if(nextOc){
       const ocSlot=ocSlotByKey(nextOc.slot_key);
       const ocLabel=ocSlot?ocSlot.label:nextOc.slot_key;
