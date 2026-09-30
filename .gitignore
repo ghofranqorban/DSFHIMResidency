@@ -3,3 +3,6 @@
 supabase/new_passwords.csv
 supabase/*.csv
 design/
+
+# Supabase CLI scratch files, written by `supabase functions deploy`
+supabase/.temp/
