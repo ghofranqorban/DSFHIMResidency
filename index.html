@@ -2781,6 +2781,10 @@ function brLastRevealed(){
 // The row in force changes with the clock, not only with a reload.
 function brSync(){BEST_STATUS=brRow(brPeriod());}
 function brIso(local){return local?new Date(local).toISOString():null;}
+// The line the home page shows in front of the announcement time. The PD writes it; this is
+// only what stands in when nothing has been written.
+const BR_DEFAULT_LINE="Announced at the departmental meeting";
+function brAnnounceLine(row){const t=row&&row.announcement_note?String(row.announcement_note).trim():"";return t||BR_DEFAULT_LINE;}
 function brLocalInput(iso){
   if(!iso)return "";
   const d=new Date(iso),p=n=>String(n).padStart(2,"0");
@@ -2946,11 +2950,14 @@ async function brSaveRow(fields,failMsg){
 }
 // `deadline` and `announceAt` arrive as datetime-local text. They go to the database as full
 // timestamps: sent bare, Postgres reads them as UTC and every time lands three hours late.
-async function brOpenVoting(deadline,announceAt){
-  return brSaveRow({voting_open:true,voting_deadline:brIso(deadline),announced:false,announced_at:brIso(announceAt)});
+// The wording is sent only when the PD typed one, so a database without the column still
+// takes the dates.
+function brNoteFields(note){return note==null?{}:{announcement_note:String(note).trim()||null};}
+async function brOpenVoting(deadline,announceAt,note){
+  return brSaveRow(Object.assign({voting_open:true,voting_deadline:brIso(deadline),announced:false,announced_at:brIso(announceAt)},brNoteFields(STATE.brNoteInput!=null?note:null)));
 }
-async function brSaveDates(announceAt){
-  return brSaveRow({voting_open:false,announced:false,announced_at:brIso(announceAt)});
+async function brSaveDates(announceAt,note){
+  return brSaveRow(Object.assign({voting_open:false,announced:false,announced_at:brIso(announceAt)},brNoteFields(STATE.brNoteInput!=null?note:null)));
 }
 async function brCloseVoting(){return brSaveRow({voting_open:false});}
 // Locks the winners. With an announcement time still ahead they stay sealed until then;
@@ -10343,7 +10350,7 @@ function renderBestResidentBanner(){
     const endDateStr=!qEnd?"":toAnn?brWhen(qEnd):qEnd.toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
     cardsEl=el("div",{st:{textAlign:"center"}},
       el("div",{st:{fontFamily:"sans-serif",fontSize:"10px",letterSpacing:"3px",fontWeight:"700",color:"#B8860B",marginBottom:"6px"}}," STARS OF "+quarterLabel(q).split(" ")[0]+" · COMING SOON"),
-      el("div",{st:{fontWeight:"900",fontSize:"16px",color:"#3d2b1f",marginBottom:"16px"}}, !qEnd?"Announcement date to be confirmed":toAnn?"Announced at the departmental meeting":"Results announced by ",!qEnd?null:el("span",{st:{color:"#B8860B"}}," "+endDateStr)
+      el("div",{st:{fontWeight:"900",fontSize:"16px",color:"#3d2b1f",marginBottom:"16px"}}, !qEnd?"Announcement date to be confirmed":toAnn?brAnnounceLine(actRow):"Results announced by ",!qEnd?null:el("span",{st:{color:"#B8860B"}}," "+endDateStr)
       ),
       qEnd?timerRow:null,
       el("div",{cls:"cdb-cards",st:{marginTop:"20px"}},
@@ -12710,7 +12717,22 @@ function renderBestResident(){
         el("input",{type:"datetime-local",value:STATE[key]!=null?STATE[key]:(fallback||""),
           onInput:e=>{STATE[key]=e.target.value;},st:{maxWidth:"220px"}}));
       const annVal=()=>STATE.brAnnounceInput!=null?STATE.brAnnounceInput:brLocalInput(st&&st.announced_at);
-      const clear=()=>{STATE.brDeadlineInput=null;STATE.brAnnounceInput=null;};
+      const noteVal=()=>STATE.brNoteInput!=null?STATE.brNoteInput:((st&&st.announcement_note)||"");
+      const clear=()=>{STATE.brDeadlineInput=null;STATE.brAnnounceInput=null;STATE.brNoteInput=null;};
+      // What the home page says in front of the time. Saved with whatever button is pressed
+      // in the open form, and on its own from the other states.
+      const shownAs=()=>"Shown as: \u201c"+(noteVal().trim()||BR_DEFAULT_LINE)+(annVal()?" \u00b7 "+brWhen(brIso(annVal())):"")+"\u201d";
+      const noteField=(withSave)=>{
+        const preview=el("div",{cls:"sh",st:{fontSize:".76rem",marginTop:"6px"}},shownAs());
+        return el("div",{st:{marginTop:"14px"}},
+        el("label",null,"Home page wording (before the time)"),
+        el("div",{st:{display:"flex",gap:"10px",alignItems:"center",flexWrap:"wrap"}},
+          el("input",{type:"text",value:noteVal(),placeholder:BR_DEFAULT_LINE,maxlength:"120",
+            onInput:e=>{STATE.brNoteInput=e.target.value;preview.textContent=shownAs();},st:{maxWidth:"420px",flex:"1"}}),
+          withSave?el("button",{cls:"sbtn ghost",async onClick(){
+            if(await brSaveRow({announcement_note:noteVal().trim()||null},"Could not save the wording")){STATE.brNoteInput=null;showToast("Home page wording saved.","success");}
+          }},"Save wording"):null),
+        preview);};
       const closed=!!st&&!st.announced&&!isOpen&&(totalV>0||(!!st.voting_deadline&&new Date(st.voting_deadline)<brNow()));
       if(announced){
         pdControls=el("div",green,
@@ -12724,7 +12746,8 @@ function renderBestResident(){
             "Best Senior: ",el("strong",null,sr?dname(sr.name):"—")," · ",Math.round(st.senior_score)+"/100"),
           el("div",{st:{fontSize:".87rem",color:"#1F1A12",marginBottom:"12px"}},
             "Best Junior: ",el("strong",null,jr?dname(jr.name):"—")," · ",Math.round(st.junior_score)+"/100"),
-          el("div",{st:{display:"flex",gap:"12px",flexWrap:"wrap"}},
+          noteField(true),
+          el("div",{st:{display:"flex",gap:"12px",flexWrap:"wrap",marginTop:"14px"}},
             el("button",{cls:"sbtn ghost",onClick(){showConfirm("Show the winners to everyone now, instead of waiting for "+annWhen+"?",async()=>{await brRevealNow();},"Reveal now","primary");}},"Reveal now"),
             el("button",{cls:"sbtn ghost",onClick(){showConfirm("Unlock the winners? They go back to being undecided and nothing will be revealed until you lock them again.",async()=>{await brUnlockWinners();},"Unlock","warn");}},"Unlock")),
           note("Only you can see these names. Everyone else sees a countdown, and the winners appear by themselves at the announcement time."));
@@ -12736,6 +12759,7 @@ function renderBestResident(){
             cd?el("span",{cls:"pill",st:{background:"#f5c518",color:"#3d2b1f"}},cd):null),
           annWhen?el("div",{cls:"sh",st:{fontSize:".82rem",marginBottom:"12px"}},"Winners announced "+annWhen+"."):null,
           el("button",{cls:"sbtn ghost",onClick(){showConfirm("Close voting now? Votes will be locked and no further votes can be submitted.",async()=>{await brCloseVoting();},"Close Voting","warn");}},"Close Voting"),
+          noteField(true),
           note("When voting has closed you lock the winners. They stay hidden until the announcement time."));
       }else if(closed){
         pdControls=el("div",yellow,
@@ -12756,6 +12780,7 @@ function renderBestResident(){
                 later?"Lock winners":"Announce now","primary");
             }},"Lock winners"),
             el("button",{cls:"sbtn ghost",onClick(){showConfirm("Reopen voting?",async()=>{await brSaveRow({voting_open:true,voting_deadline:null});},"Reopen","warn");}},"Reopen voting")),
+          noteField(true),
           note("Winners are worked out from the attendance, quiz marks and presentations of "+brScope(P)+" (50%), plus the votes (50%)."));
       }else{
         pdControls=el("div",yellow,
@@ -12764,12 +12789,13 @@ function renderBestResident(){
             field("Voting closes (optional)","brDeadlineInput",""),
             field("Winners announced on","brAnnounceInput",brLocalInput(st&&st.announced_at)),
             el("button",{cls:"sbtn primary",st:{background:"#B8860B"},async onClick(){
-              if(await brOpenVoting(STATE.brDeadlineInput||null,annVal()||null))clear();
+              if(await brOpenVoting(STATE.brDeadlineInput||null,annVal()||null,noteVal()))clear();
             }},"Open Voting"),
             el("button",{cls:"sbtn ghost",async onClick(){
               if(!annVal()){showToast("Enter the announcement date first.","warning");return;}
-              if(await brSaveDates(annVal())){clear();showToast("Announcement date saved. The home page now counts down to it.","success");}
+              if(await brSaveDates(annVal(),noteVal())){clear();showToast("Announcement date saved. The home page now counts down to it.","success");}
             }},"Save date only")),
+          noteField(false),
           note("Residents and consultants can vote once. Leave the closing time blank to close voting yourself. Times are your local time."));
       }
     }
