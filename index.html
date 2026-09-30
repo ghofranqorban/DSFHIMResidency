@@ -6030,18 +6030,21 @@ function exportSchedule(type,blk){
   XLSX.writeFile(wb,(isMM?"MM":"AcademicDay")+"_Schedule_Block"+blk+".xlsx");
 }
 function exportOncall(blk){
-  const blockStart=blockStartDate(blk,CURRENT_ACADEMIC_YEAR);
+  // ocAY(), not CURRENT_ACADEMIC_YEAR: exporting from the plan year silently handed back the
+  // live year's schedule, on the live year's block dates. Both have to follow the toggle.
+  const ay=ocAY();
+  const blockStart=blockStartDate(blk,ay);
   if(!blockStart)return;
   const ocCols=ocColumns(blk);
   const headers=["Date","Day"].concat(ocCols.flatMap(c=>c.slots.length>1?c.slots.map((_,i)=>c.label+" "+(i+1)):[c.label]));
   const byDate={};
-  ONCALL_DATA.filter(e=>e.block_number===blk).forEach(e=>{
+  ocData().filter(e=>e.block_number===blk).forEach(e=>{
     if(!byDate[e.schedule_date])byDate[e.schedule_date]={};
     byDate[e.schedule_date][e.slot_key]=e;
   });
   const rows=[];
   const DN=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-  for(let i=0;i<blockDays(blk,CURRENT_ACADEMIC_YEAR);i++){
+  for(let i=0;i<blockDays(blk,ay);i++){
     const d=new Date(blockStart.getTime()+i*86400000);
     const ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
     const day=DN[d.getDay()];
@@ -6054,7 +6057,7 @@ function exportOncall(blk){
   ws["!cols"]=headers.map((_,i)=>({wch:i<2?12:20}));
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,"On-Call");
-  XLSX.writeFile(wb,"OnCall_Block"+blk+".xlsx");
+  XLSX.writeFile(wb,"OnCall_AY"+ay+"-"+String(ay+1).slice(2)+"_Block"+blk+".xlsx");
 }
 function exportQuizAll(){
   const vr=visRes();
