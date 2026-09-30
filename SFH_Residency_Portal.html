@@ -2624,7 +2624,7 @@ async function loadCoreData(){
   RESIDENTS=mapped.filter(cohortVisible);
   INCOMING=mapped.filter(r=>!cohortVisible(r));
   CHIEF_RES_ID=RESIDENTS.find(r=>r.chiefRole==="chief")?.id||null;
-  sb.from("residents").select("id,name,level").eq("active",false).then(({data:ir})=>{_inactiveResById={};(ir||[]).forEach(r=>{_inactiveResById[r.id]=r;});});
+  sb.from("residents").select("id,name,level,year_started").eq("active",false).then(({data:ir})=>{_inactiveResById={};(ir||[]).forEach(r=>{_inactiveResById[r.id]=r;});render();});
   CO_CHIEF_RES_ID=RESIDENTS.find(r=>r.chiefRole==="cochief")?.id||null;
   MENTORS={};
   (res||[]).forEach(r=>{if(r.mentor_id)MENTORS[r.id]=r.mentor_id;});
@@ -2714,56 +2714,257 @@ async function deleteCalendarEvent(id){
   await loadCalendarEvents();
 }
 // ─── BEST RESIDENT DATA LAYER ────────────────────────────────────────────────
+// ─── BEST RESIDENT: WHICH QUARTER ────────────────────────────────────────────
+// A quarter is not finished when its last month ends. It is voted on and announced in the
+// weeks AFTER, and by then the calendar has moved on, the October promotion has changed
+// every level, and the rota year may have rolled over. So the module follows its own
+// period: the quarter that has ended stays the one on screen until its winners are revealed.
+// Its academic year is the calendar's, never CURRENT_ACADEMIC_YEAR, which follows the rota
+// and turns over a few days into October.
+// The server's clock, not the device's. The difference is measured each time the status is
+// fetched, so a phone set to the wrong time, or wound forward on purpose, changes nothing.
+let BR_CLOCK=0;
+function brNow(){return new Date(Date.now()+BR_CLOCK);}
+function brIsLead(){const r=STATE.user&&STATE.user.role;return r==="pd"||r==="deputy_pd";}
+function brCalPeriod(d){
+  d=d||brNow();const m=d.getMonth()+1,y=d.getFullYear();
+  if(m>=10)return{ay:y,q:1};
+  if(m<=3)return{ay:y-1,q:2};
+  if(m<=6)return{ay:y-1,q:3};
+  return{ay:y-1,q:4};
+}
+function brPrevPeriod(p){return p.q===1?{ay:p.ay-1,q:4}:{ay:p.ay,q:p.q-1};}
+function brQuarterEnd(p){
+  const e={1:[p.ay,11,31],2:[p.ay+1,2,31],3:[p.ay+1,5,30],4:[p.ay+1,8,30]}[p.q];
+  return new Date(e[0],e[1],e[2],23,59,59);
+}
+// How long a finished quarter waits for its announcement before the module moves on
+// without one.
+const BR_GRACE_DAYS=45;
+let BEST_ROWS=[];
+// Votes are secret. The database gives each person their OWN vote and, for everyone else's,
+// only how many votes each candidate has. Who cast them never reaches the browser.
+// BEST_VOTES therefore holds at most one row: the vote of whoever is signed in.
+let BEST_TALLY=null; // {ay,q,total,senior:{residentId:n},junior:{residentId:n}}
+function brTallyFromRows(rows,p){
+  const t={ay:p.ay,q:p.q,total:0,senior:{},junior:{}};
+  (rows||[]).forEach(v=>{
+    if(v.academic_year!==p.ay||v.quarter!==p.q)return;
+    t.total++;
+    if(v.voted_senior_id!=null)t.senior[v.voted_senior_id]=(t.senior[v.voted_senior_id]||0)+1;
+    if(v.voted_junior_id!=null)t.junior[v.voted_junior_id]=(t.junior[v.voted_junior_id]||0)+1;
+  });
+  return t;
+}
+function brRow(p){return BEST_ROWS.find(r=>r.academic_year===p.ay&&r.quarter===p.q)||null;}
+// announced_at is the moment the winners become visible. With `announced` set and that moment
+// still ahead, the winners are chosen but sealed.
+function brRevealed(row){return !!(row&&row.announced&&(!row.announced_at||new Date(row.announced_at)<=brNow()));}
+function brSealed(row){return !!(row&&row.announced&&!brRevealed(row));}
+function brPeriod(){
+  const cal=brCalPeriod(),prev=brPrevPeriod(cal);
+  const since=(brNow()-brQuarterEnd(prev))/86400000;
+  if(since<=BR_GRACE_DAYS&&!brRevealed(brRow(prev)))return prev;
+  return cal;
+}
+// The quarter is over and is now being voted on or waiting to be announced.
+function brEnded(p){return brNow()>brQuarterEnd(p);}
+function brLastRevealed(){
+  return BEST_ROWS.filter(r=>brRevealed(r)&&r.senior_resident_id)
+    .sort((a,b)=>b.academic_year-a.academic_year||b.quarter-a.quarter)[0]||null;
+}
+// The row in force changes with the clock, not only with a reload.
+function brSync(){BEST_STATUS=brRow(brPeriod());}
+function brIso(local){return local?new Date(local).toISOString():null;}
+function brLocalInput(iso){
+  if(!iso)return "";
+  const d=new Date(iso),p=n=>String(n).padStart(2,"0");
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+"T"+p(d.getHours())+":"+p(d.getMinutes());
+}
+// Always Riyadh time, whatever the device is set to.
+function brWhen(iso){
+  const d=new Date(iso);
+  const f=o=>d.toLocaleString("en-GB",Object.assign({timeZone:"Asia/Riyadh"},o));
+  return f({weekday:"long"})+" "+f({day:"numeric"})+" "+f({month:"long"})+" · "
+    +f({hour:"numeric",minute:"2-digit",hour12:true}).toUpperCase();
+}
+// Everyone who was a resident in academic year `ay`, at the level they held in it. After the
+// October promotion the stored levels are a year ahead and that year's R4s are archived, so
+// both are put back: levels through levelInAY(), graduates from the archive.
+function brRoster(ay){
+  const out=[];
+  allRoster().forEach(r=>{const lv=levelInAY(r,ay);if(lv)out.push({...r,level:lv});});
+  Object.values(_inactiveResById).forEach(r=>{
+    if(r.level==="R4"&&r.year_started===ay-3&&!out.some(x=>x.id===r.id))
+      out.push({id:r.id,name:r.name,level:"R4",yearStarted:r.year_started,ph:initialsFromName(r.name),graduated:true});
+  });
+  return out;
+}
+function brPerson(id,ay){
+  if(id==null)return null;
+  return brRoster(ay).find(r=>r.id==id)||anyResById(id);
+}
+// Quizzes of a year other than the live one. QUIZZES holds the live year only.
+let BR_QUIZ={ay:null,list:[]};
+async function loadBrQuizzes(ay){
+  if(ay===CURRENT_ACADEMIC_YEAR||BR_QUIZ.ay===ay)return;
+  const{data:qd,error}=await sb.from("quizzes").select("*").eq("academic_year",ay).order("date");
+  if(error){console.warn("best resident: quizzes of "+ay+" not loaded",error.message);return;}
+  const ids=(qd||[]).map(q=>q.id);
+  let sc=[];
+  if(ids.length){
+    const r=await fetchAllRows(()=>sb.from("quiz_scores").select("*").in("quiz_id",ids).order("id"));
+    if(!r.error)sc=r.data||[];
+  }
+  const by={};
+  sc.forEach(x=>{if(!by[x.quiz_id])by[x.quiz_id]={};by[x.quiz_id][x.resident_id]=x.score;});
+  BR_QUIZ={ay,list:(qd||[]).map(q=>({id:q.id,block:q.block_number,max:q.max_score,published:q.published,sc:by[q.id]||{}}))};
+}
+function brQuizzes(ay){return ay===CURRENT_ACADEMIC_YEAR?QUIZZES:(BR_QUIZ.ay===ay?BR_QUIZ.list:[]);}
+// A quarter is its blocks, as everywhere else in the portal: QUARTER_BLOCKS.
+function brBlocks(p){return QUARTER_BLOCKS[p.q]||[];}
+function brScope(p){
+  const b=brBlocks(p);
+  return quarterLabel(p.q)+", blocks "+b[0]+"–"+b[b.length-1]+" of "+ayLabel(p.ay);
+}
+// Attendance of ONE QUARTER of one academic year, read from the raw rows, which hold every
+// year. MM_ATT and TEACH_ATT cannot be used: they hold whichever year those modules happen
+// to be showing.
+let _brAtt={mm:null,te:null,key:null,out:null};
+function brAttendance(p){
+  const key=p.ay+":"+p.q;
+  if(_brAtt.mm===MM_ATT_RAW&&_brAtt.te===TEACH_ATT_RAW&&_brAtt.key===key)return _brAtt.out;
+  const blocks=brBlocks(p);
+  const tally=(raw,byId)=>{
+    // one mark per resident per session date, as the attendance grids count it
+    const cell={};
+    raw.forEach(a=>{
+      const x=byId[a.session_id];
+      if(!x||x.academic_year!==p.ay||blocks.indexOf(x.block_number)<0)return;
+      cell[x.block_number+"|"+x.session_date+"|"+a.resident_id]=[a.resident_id,a.status];
+    });
+    const t={};
+    Object.values(cell).forEach(([rid,st])=>{
+      if(!st||st==="O")return;
+      const o=t[rid]||(t[rid]={total:0,att:0,score:0});
+      o.total++;
+      if(st==="P"||st==="E"){o.att++;o.score+=1;}else if(st==="L"){o.att++;o.score+=0.5;}
+    });
+    return t;
+  };
+  const mm=tally(MM_ATT_RAW,MM_SESSION_BY_ID),te=tally(TEACH_ATT_RAW,TEACH_SESSION_BY_ID);
+  // What the quarter actually offered. A part nobody could have earned — no quiz was set,
+  // say — is left out of the score for everyone, instead of counting as a zero for all.
+  const held={
+    quiz:brQuizzes(p.ay).some(q=>q.published&&blocks.indexOf(q.block)>=0),
+    mm:Object.keys(mm).length>0,
+    teach:Object.keys(te).length>0,
+    pres:MM_SESSIONS.some(m=>m.academic_year===p.ay&&blocks.indexOf(m.block_number)>=0&&(m.presenter_resident_id!=null||m.moderator_resident_id!=null))
+  };
+  const out={mm,te,held};
+  _brAtt={mm:MM_ATT_RAW,te:TEACH_ATT_RAW,key,out};
+  return out;
+}
+// The KPI half of the score: attendance, quiz marks and presentations of the quarter being
+// judged, and of nothing else. Same weights as kpiOngoingScore(), which reads the whole of
+// the live year and so could not tell one quarter from another.
+function brKpiParts(id,p){
+  const at=brAttendance(p),blocks=brBlocks(p);
+  const mm=at.mm[id]||{total:0,att:0,score:0},te=at.te[id]||{total:0,att:0,score:0};
+  const mmPct=mm.total?Math.round(mm.score/mm.total*100):null;
+  const tPct=te.total?Math.round(te.score/te.total*100):null;
+  const sat=brQuizzes(p.ay).filter(q=>q.published&&q.sc[id]!=null&&blocks.indexOf(q.block)>=0);
+  const qAvg=sat.length?Math.round(sat.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/sat.length):null;
+  const ses=MM_SESSIONS.filter(m=>m.academic_year===p.ay&&blocks.indexOf(m.block_number)>=0
+    &&(m.presenter_resident_id===id||m.moderator_resident_id===id));
+  const pres=ses.length>0;
+  const h=at.held;
+  const total=(h.quiz?KPI_W.quiz:0)+(h.mm?KPI_W.mm:0)+(h.teach?KPI_W.teach:0)+(h.pres?KPI_W.pres:0);
+  const raw=(h.quiz?(qAvg||0)*KPI_W.quiz/100:0)+(h.mm?(mmPct||0)*KPI_W.mm/100:0)
+    +(h.teach?(tPct||0)*KPI_W.teach/100:0)+(h.pres&&pres?KPI_W.pres:0);
+  return{qAvg,nQuiz:sat.length,mmPct,mmAtt:mm.att,mmTotal:mm.total,tPct,tAtt:te.att,tTotal:te.total,
+    pres,presCount:ses.length,held:h,score:total?Math.round(raw/total*100):0};
+}
 async function loadBestResident(){
-  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
-  const[vRes,wRes]=await Promise.all([
-    sb.from("best_resident_votes").select("*").eq("academic_year",ay).eq("quarter",q),
-    sb.from("best_resident_winners").select("*").eq("academic_year",ay).eq("quarter",q).single()
+  // best_resident_status() hands sealed winners to nobody but the PD and deputy, and
+  // reports the server's time. Where it is not installed the table is read directly and the
+  // device's clock is trusted, which is how the module always worked.
+  let rows=null;
+  const st=await sb.rpc("best_resident_status");
+  if(!st.error&&st.data&&Array.isArray(st.data.rows)){
+    rows=st.data.rows;
+    if(st.data.now)BR_CLOCK=new Date(st.data.now).getTime()-Date.now();
+  }else{
+    const{data,error}=await sb.from("best_resident_winners").select("*").order("academic_year").order("quarter");
+    rows=error?[]:(data||[]);
+  }
+  BEST_ROWS=rows;
+  const p=brPeriod();
+  const[vRes,tRes]=await Promise.all([
+    sb.from("best_resident_votes").select("*").eq("academic_year",p.ay).eq("quarter",p.q),
+    sb.rpc("best_resident_tally",{ay:p.ay,q:p.q}),
+    loadBrQuizzes(p.ay)
   ]);
-  if(!vRes.error&&vRes.data)BEST_VOTES=vRes.data;
-  BEST_STATUS=(!wRes.error&&wRes.data)?wRes.data:null;
+  const seen=(!vRes.error&&vRes.data)?vRes.data:[];
+  const mine=STATE.user&&STATE.user.profileId;
+  // Keep the signed-in person's own vote and nothing else, whatever came back.
+  BEST_VOTES=seen.filter(v=>v.profile_id===mine);
+  const td=tRes&&!tRes.error?tRes.data:null;
+  // Where the counting function is not installed, count what the table returned.
+  BEST_TALLY=td&&typeof td==="object"
+    ?{ay:p.ay,q:p.q,total:Number(td.total)||0,senior:td.senior||{},junior:td.junior||{}}
+    :brTallyFromRows(seen,p);
+  brSync();
   render();
 }
 async function brCastVote(seniorId,juniorId){
   if(!brVotingIsOpen()){showToast("Voting is currently closed","warning");return;}
-  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
+  const p=brPeriod();
   const pid=STATE.user?.profileId;
   if(!pid)return;
   const{error}=await sb.from("best_resident_votes").upsert({
-    profile_id:pid,academic_year:ay,quarter:q,
+    profile_id:pid,academic_year:p.ay,quarter:p.q,
     voted_senior_id:seniorId?parseInt(seniorId,10):null,
     voted_junior_id:juniorId?parseInt(juniorId,10):null
   },{onConflict:"profile_id,academic_year,quarter"});
   if(error){showToast("Could not save vote: "+error.message);return;}
   await loadBestResident();
 }
-async function brOpenVoting(deadline){
-  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
-  const row={academic_year:ay,quarter:q,voting_open:true,voting_deadline:deadline||null,announced:false};
-  const{error}=await sb.from("best_resident_winners").upsert(row,{onConflict:"academic_year,quarter"});
-  if(error){showToast("Error: "+error.message);return;}
+async function brSaveRow(fields,failMsg){
+  const p=brPeriod();
+  const{error}=await sb.from("best_resident_winners")
+    .upsert(Object.assign({academic_year:p.ay,quarter:p.q},fields),{onConflict:"academic_year,quarter"});
+  if(error){showToast((failMsg||"Error")+": "+error.message);return false;}
   await loadBestResident();
+  return true;
 }
-async function brCloseVoting(){
-  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
-  const{error}=await sb.from("best_resident_winners").upsert({academic_year:ay,quarter:q,voting_open:false},{onConflict:"academic_year,quarter"});
-  if(error){showToast("Error: "+error.message);return;}
-  await loadBestResident();
+// `deadline` and `announceAt` arrive as datetime-local text. They go to the database as full
+// timestamps: sent bare, Postgres reads them as UTC and every time lands three hours late.
+async function brOpenVoting(deadline,announceAt){
+  return brSaveRow({voting_open:true,voting_deadline:brIso(deadline),announced:false,announced_at:brIso(announceAt)});
 }
-async function brAnnounceWinners(seniorId,juniorId,seniorScore,juniorScore){
-  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
-  const{error}=await sb.from("best_resident_winners").upsert({
-    academic_year:ay,quarter:q,voting_open:false,
+async function brSaveDates(announceAt){
+  return brSaveRow({voting_open:false,announced:false,announced_at:brIso(announceAt)});
+}
+async function brCloseVoting(){return brSaveRow({voting_open:false});}
+// Locks the winners. With an announcement time still ahead they stay sealed until then;
+// without one they are shown at once.
+async function brAnnounceWinners(seniorId,juniorId,seniorScore,juniorScore,announceAt){
+  const at=brIso(announceAt);
+  return brSaveRow({
+    voting_open:false,
     senior_resident_id:seniorId?parseInt(seniorId,10):null,
     junior_resident_id:juniorId?parseInt(juniorId,10):null,
     senior_score:seniorScore,junior_score:juniorScore,
-    announced:true,announced_at:new Date().toISOString()
-  },{onConflict:"academic_year,quarter"});
-  if(error){showToast("Error announcing: "+error.message);return;}
-  await loadBestResident();
+    announced:true,announced_at:at&&new Date(at)>brNow()?at:brNow().toISOString()
+  },"Error announcing");
 }
+async function brRevealNow(){return brSaveRow({announced:true,announced_at:brNow().toISOString()});}
+async function brUnlockWinners(){return brSaveRow({announced:false});}
+// Every year: a Hall of Fame that forgot last year's winners each October is not one.
 async function loadBestResidentAll(){
-  const{data,error}=await sb.from("best_resident_winners").select("*").eq("academic_year",CURRENT_ACADEMIC_YEAR).order("quarter");
+  const{data,error}=await sb.from("best_resident_winners").select("*")
+    .order("academic_year",{ascending:false}).order("quarter",{ascending:false});
   if(!error&&data)return data;
   return[];
 }
@@ -3611,25 +3812,31 @@ function kpiOngoingScore(id){
   return Math.round(raw/ongoingTotal*100);
 }
 function ini(name){const n=dname(name);const parts=n.trim().split(/\s+/);if(parts.length>=2)return(parts[0][0]+(parts[parts.length-1][0]||"")).toUpperCase();return n.slice(0,2).toUpperCase();}
+function brTally(){
+  const p=brPeriod(),t=BEST_TALLY;
+  return t&&t.ay===p.ay&&t.q===p.q?t:null;
+}
 function brVoteCountFor(resId,role){
-  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
-  const col=role==="senior"?"voted_senior_id":"voted_junior_id";
-  return BEST_VOTES.filter(v=>v.academic_year===ay&&v.quarter===q&&v[col]==resId).length;
+  const t=brTally();
+  return t?Number((role==="senior"?t.senior:t.junior)[resId])||0:0;
 }
 function brTotalVoters(){
-  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
-  return BEST_VOTES.filter(v=>v.academic_year===ay&&v.quarter===q).length;
+  const t=brTally();
+  return t?t.total:0;
 }
 function brMyVote(){
-  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
-  return BEST_VOTES.find(v=>v.academic_year===ay&&v.quarter===q&&v.profile_id===STATE.user?.profileId)||null;
+  const p=brPeriod();
+  return BEST_VOTES.find(v=>v.academic_year===p.ay&&v.quarter===p.q&&v.profile_id===STATE.user?.profileId)||null;
 }
+// Ranked on the roster, levels and KPI data of the quarter's OWN year. Senior and junior are
+// what each resident was during the quarter, not what the promotion has made them since.
 function brComputeRankings(){
-  const seniors=sortByLevel(RESIDENTS.filter(r=>r.level==="R3"||r.level==="R4"));
-  const juniors=sortByLevel(RESIDENTS.filter(r=>r.level==="R1"||r.level==="R2"));
+  const p=brPeriod(),roster=brRoster(p.ay);
+  const seniors=sortByLevel(roster.filter(r=>r.level==="R3"||r.level==="R4"));
+  const juniors=sortByLevel(roster.filter(r=>r.level==="R1"||r.level==="R2"));
   const totalVoters=brTotalVoters();
   function score(res,col){
-    const kpi=kpiOngoingScore(res.id);
+    const kpi=brKpiParts(res.id,p).score;
     const votes=brVoteCountFor(res.id,col);
     const votePct=totalVoters>0?Math.round(votes/totalVoters*100):0;
     const final=Math.round(kpi*0.5+votePct*0.5);
@@ -3639,14 +3846,21 @@ function brComputeRankings(){
   const jRanked=juniors.map(r=>score(r,"junior")).sort((a,b)=>b.final-a.final);
   return{sRanked,jRanked};
 }
+// Live rankings stay open while the quarter is running. Once it has ended they are the
+// result, so they close to everyone but the programme leadership until the winners are out.
+function brRankVisible(){
+  if(brIsLead())return true;
+  const p=brPeriod();
+  return !brEnded(p)||brRevealed(brRow(p));
+}
 function brVotingIsOpen(){
   if(!BEST_STATUS||!BEST_STATUS.voting_open)return false;
-  if(BEST_STATUS.voting_deadline){const dl=new Date(BEST_STATUS.voting_deadline);if(dl<new Date())return false;}
+  if(BEST_STATUS.voting_deadline){const dl=new Date(BEST_STATUS.voting_deadline);if(dl<brNow())return false;}
   return true;
 }
 function brDeadlineCountdown(){
   if(!BEST_STATUS?.voting_deadline)return null;
-  const diff=new Date(BEST_STATUS.voting_deadline)-new Date();
+  const diff=new Date(BEST_STATUS.voting_deadline)-brNow();
   if(diff<=0)return"Voting closed";
   const d=Math.floor(diff/86400000);
   const h=Math.floor((diff%86400000)/3600000);
@@ -4265,8 +4479,9 @@ function renderModGrid(){
   );
 
   // ── Confetti celebration when winner is newly announced ──────────────────
-  const seenKey="br_seen_"+currentQuarter()+"_"+CURRENT_ACADEMIC_YEAR;
-  const justAnnounced=BEST_STATUS?.announced&&!localStorage.getItem(seenKey);
+  const brWon=brLastRevealed();
+  const seenKey=brWon?"br_seen_"+brWon.quarter+"_"+brWon.academic_year:"";
+  const justAnnounced=!!brWon&&!localStorage.getItem(seenKey);
   if(justAnnounced){
     localStorage.setItem(seenKey,"1");
     setTimeout(()=>{
@@ -10012,11 +10227,19 @@ function renderProfileCounsel(res){
 }
 // ─── BEST RESIDENT BANNER (home page) ────────────────────────────────────────
 function renderBestResidentBanner(){
-  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
+  brSync();
+  // Three things the banner can be about, in this order: a quarter that has ended and is
+  // waiting for its announcement; the last winners, who stay up until the next are
+  // announced; or, with neither, the quarter now running.
+  const act=brPeriod(),actRow=brRow(act),won=brLastRevealed();
+  const pending=brEnded(act);
+  const W=pending?null:won;
+  const head=W?{ay:W.academic_year,q:W.quarter}:act;
+  const q=head.q,ay=head.ay;
   const qLabel=quarterLabel(q);
   const qMonths=quarterMonthsLabel(q);
   const isOpen=brVotingIsOpen();
-  const announced=BEST_STATUS?.announced;
+  const announced=!!W;
   const cd=brDeadlineCountdown();
 
   // Sparkle particles
@@ -10034,9 +10257,9 @@ function renderBestResidentBanner(){
   );
 
   let cardsEl;
-  if(announced&&BEST_STATUS.senior_resident_id){
-    const sr=resById(BEST_STATUS.senior_resident_id);
-    const jr=resById(BEST_STATUS.junior_resident_id);
+  if(announced&&W.senior_resident_id){
+    const sr=brPerson(W.senior_resident_id,ay);
+    const jr=brPerson(W.junior_resident_id,ay);
     function wCard(cls,typeLabel,crown,res,score){
       if(!res)return null;
       return el("div",{cls:"star-card "+cls,onClick:()=>set({mod:"best_resident",brTab:"rank"})},
@@ -10057,14 +10280,18 @@ function renderBestResidentBanner(){
       );
     }
     cardsEl=el("div",{cls:"star-cards-row"},
-      wCard("sc-senior"," Best Senior Resident","",sr,BEST_STATUS.senior_score),
-      wCard("sc-junior"," Best Junior Resident","",jr,BEST_STATUS.junior_score)
+      wCard("sc-senior"," Best Senior Resident","",sr,W.senior_score),
+      wCard("sc-junior"," Best Junior Resident","",jr,W.junior_score)
     );
   } else {
     // Not yet announced — Design B: centered countdown + slightly hazy cards
-    const qEnd=quarterEndDate(q,ay);
-    const now=new Date();
-    const msLeft=Math.max(0,new Date(qEnd)-now);
+    // A running quarter counts down to its end. A finished one counts down to the moment
+    // its winners are revealed, once the PD has set it; until then there is nothing to count.
+    // A time that has passed with no winners locked is no longer a time to count down to.
+    const annAt=actRow&&actRow.announced_at?new Date(actRow.announced_at):null;
+    const qEnd=pending?(annAt&&(annAt>brNow()||actRow.announced)?annAt:null):brQuarterEnd(act);
+    const now=brNow();
+    const msLeft=qEnd?Math.max(0,qEnd-now):0;
     const dLeft=Math.floor(msLeft/86400000);
     const hLeft=Math.floor((msLeft%86400000)/3600000);
     const mLeft=Math.floor((msLeft%3600000)/60000);
@@ -10088,22 +10315,29 @@ function renderBestResidentBanner(){
       const nums=document.querySelectorAll(".cdb-num");
       if(!nums.length)return;
       function tick(){
-        const m2=Math.max(0,new Date(qEnd)-new Date());
+        const m2=Math.max(0,qEnd-brNow());
         const d2=Math.floor(m2/86400000);
         const h2=Math.floor((m2%86400000)/3600000);
         const mn2=Math.floor((m2%3600000)/60000);
         const s2=Math.floor((m2%60000)/1000);
         [d2,h2,mn2,s2].forEach((v,i)=>{if(nums[i])nums[i].textContent=pad2(v);});
         if(m2>0&&document.querySelector(".cdb-num"))requestAnimationFrame(tick);
+        // The moment has arrived with the page open. The winners are not in the browser yet —
+        // the database holds them back until now — so they are fetched. Asked again every two
+        // seconds for a minute, in case this clock runs a little ahead of the server's.
+        else if(m2<=0&&pending&&actRow&&actRow.announced&&!window._brWait&&(window._brTries||0)<30){
+          window._brTries=(window._brTries||0)+1;
+          window._brWait=setTimeout(()=>{window._brWait=null;loadBestResident();},2000);
+        }
       }
       tick();
     },0);
-    const endDateStr=new Date(qEnd).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
+    const endDateStr=!qEnd?"":pending?brWhen(qEnd):qEnd.toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
     cardsEl=el("div",{st:{textAlign:"center"}},
       el("div",{st:{fontFamily:"sans-serif",fontSize:"10px",letterSpacing:"3px",fontWeight:"700",color:"#B8860B",marginBottom:"6px"}}," STARS OF "+quarterLabel(q).split(" ")[0]+" · COMING SOON"),
-      el("div",{st:{fontWeight:"900",fontSize:"16px",color:"#3d2b1f",marginBottom:"16px"}}, "Results announced by ",el("span",{st:{color:"#B8860B"}}," "+endDateStr)
+      el("div",{st:{fontWeight:"900",fontSize:"16px",color:"#3d2b1f",marginBottom:"16px"}}, !qEnd?"Announcement date to be confirmed":pending?"Announced at the departmental meeting":"Results announced by ",!qEnd?null:el("span",{st:{color:"#B8860B"}}," "+endDateStr)
       ),
-      timerRow,
+      qEnd?timerRow:null,
       el("div",{cls:"cdb-cards",st:{marginTop:"20px"}},
         el("div",{cls:"cdb-pending-card",st:{cursor:"pointer"},onClick:()=>set({mod:"best_resident",brTab:"vote"})},
           el("div",{st:{fontSize:"22px"}},""),
@@ -12436,88 +12670,126 @@ function renderCommittees(){
 function renderBestResident(){
   const u=STATE.user;
   const tab=STATE.brTab||"vote";
-  const q=currentQuarter(),ay=CURRENT_ACADEMIC_YEAR;
-  const isPD_=isPD()||u.role==="deputy_pd";
+  brSync();
+  const P=brPeriod(),q=P.q,ay=P.ay;
+  const isPD_=brIsLead();
   const isOpen=brVotingIsOpen();
-  const announced=BEST_STATUS?.announced;
+  const sealed=brSealed(BEST_STATUS);
+  const announced=brRevealed(BEST_STATUS);
+  const ended=brEnded(P);
+  const annWhen=BEST_STATUS&&BEST_STATUS.announced_at?brWhen(BEST_STATUS.announced_at):"";
   const myVote=brMyVote();
   const {sRanked,jRanked}=brComputeRankings();
 
   // ── Vote tab ──
   function renderVoteTab(){
-    const seniors=sortByLevel(RESIDENTS.filter(r=>r.level==="R3"||r.level==="R4"));
-    const juniors=sortByLevel(RESIDENTS.filter(r=>r.level==="R1"||r.level==="R2"));
+    const roster=brRoster(ay);
+    const seniors=sortByLevel(roster.filter(r=>r.level==="R3"||r.level==="R4"));
+    const juniors=sortByLevel(roster.filter(r=>r.level==="R1"||r.level==="R2"));
 
-    // PD controls
+    // PD controls. Five states, in the order a quarter passes through them.
     let pdControls=null;
     if(isPD_){
       const cd=brDeadlineCountdown();
-      if(!BEST_STATUS||(!BEST_STATUS.voting_open&&!announced)){
-        // Open voting form
-        let _deadline=STATE.brDeadlineInput||"";
-        pdControls=el("div",{cls:"card",st:{background:"#fff8e6",border:"2px solid #f5c518",marginBottom:"20px",maxWidth:"640px"}},
-          el("div",{cls:"card-title",st:{color:"#B8860B"}}," Open Voting — "+quarterLabel(q)),
-          el("div",{st:{display:"flex",gap:"12px",alignItems:"flex-end",flexWrap:"wrap"}},
-            el("div",null,
-              el("label",null,"Auto-close deadline (optional)"),
-              el("input",{type:"datetime-local",value:_deadline,
-                onInput:e=>{STATE.brDeadlineInput=e.target.value;},
-                st:{maxWidth:"220px"}})
-            ),
-            el("button",{cls:"sbtn primary",st:{background:"#B8860B"},async onClick(){
-              await brOpenVoting(STATE.brDeadlineInput||null);
-              STATE.brDeadlineInput="";
-            }}," Open Voting")
-          ),
-          el("p",{cls:"sh",st:{marginTop:"8px",fontSize:".78rem"}},"Residents and consultants can vote once. Leave deadline blank to close manually.")
-        );
-      } else if(BEST_STATUS.voting_open&&!announced){
-        // Close + announce
-        const totalV=brTotalVoters();
-        const topSr=sRanked[0];const topJr=jRanked[0];
-        pdControls=el("div",{cls:"card",st:{background:"#fff8e6",border:"2px solid #f5c518",marginBottom:"20px",maxWidth:"640px"}},
-          el("div",{cls:"card-title",st:{color:"#B8860B"}}," Voting is Open — "+quarterLabel(q)),
+      const st=BEST_STATUS;
+      const totalV=brTotalVoters();
+      const topSr=sRanked[0],topJr=jRanked[0];
+      const yellow={cls:"card",st:{background:"#fff8e6",border:"2px solid #f5c518",borderRadius:"12px",padding:"18px 20px",marginBottom:"20px",maxWidth:"640px"}};
+      const green={cls:"card",st:{background:"#f0f9ec",border:"2px solid #7ab648",borderRadius:"12px",padding:"18px 20px",marginBottom:"20px",maxWidth:"640px"}};
+      const note=t=>el("p",{cls:"sh",st:{marginTop:"10px",fontSize:".78rem"}},t);
+      const field=(label,key,fallback)=>el("div",null,
+        el("label",null,label),
+        el("input",{type:"datetime-local",value:STATE[key]!=null?STATE[key]:(fallback||""),
+          onInput:e=>{STATE[key]=e.target.value;},st:{maxWidth:"220px"}}));
+      const annVal=()=>STATE.brAnnounceInput!=null?STATE.brAnnounceInput:brLocalInput(st&&st.announced_at);
+      const clear=()=>{STATE.brDeadlineInput=null;STATE.brAnnounceInput=null;};
+      const closed=!!st&&!st.announced&&!isOpen&&(totalV>0||(!!st.voting_deadline&&new Date(st.voting_deadline)<brNow()));
+      if(announced){
+        pdControls=el("div",green,
+          el("div",{st:{fontWeight:"800",fontSize:".95rem",color:"#2a6020"}},"Winners Announced — "+quarterLabel(q)),
+          el("div",{cls:"sh",st:{fontSize:".8rem"}},"Announced on "+brWhen(st.announced_at)));
+      }else if(sealed){
+        const sr=brPerson(st.senior_resident_id,ay),jr=brPerson(st.junior_resident_id,ay);
+        pdControls=el("div",green,
+          el("div",{st:{fontWeight:"800",fontSize:".95rem",color:"#2a6020"}},"Winners locked — hidden until "+annWhen),
+          el("div",{st:{fontSize:".87rem",color:"#1F1A12",margin:"10px 0 2px"}},
+            "Best Senior: ",el("strong",null,sr?dname(sr.name):"—")," · ",Math.round(st.senior_score)+"/100"),
+          el("div",{st:{fontSize:".87rem",color:"#1F1A12",marginBottom:"12px"}},
+            "Best Junior: ",el("strong",null,jr?dname(jr.name):"—")," · ",Math.round(st.junior_score)+"/100"),
+          el("div",{st:{display:"flex",gap:"12px",flexWrap:"wrap"}},
+            el("button",{cls:"sbtn ghost",onClick(){showConfirm("Show the winners to everyone now, instead of waiting for "+annWhen+"?",async()=>{await brRevealNow();},"Reveal now","primary");}},"Reveal now"),
+            el("button",{cls:"sbtn ghost",onClick(){showConfirm("Unlock the winners? They go back to being undecided and nothing will be revealed until you lock them again.",async()=>{await brUnlockWinners();},"Unlock","warn");}},"Unlock")),
+          note("Only you can see these names. Everyone else sees a countdown, and the winners appear by themselves at the announcement time."));
+      }else if(isOpen){
+        pdControls=el("div",yellow,
+          el("div",{cls:"card-title",st:{color:"#B8860B"}},"Voting is Open — "+quarterLabel(q)),
           el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"12px"}},
             el("div",{cls:"sh",st:{fontWeight:"700",fontSize:".85rem"}},"Total votes cast: "+totalV),
-            cd?el("span",{cls:"pill",st:{background:"#f5c518",color:"#3d2b1f"}},cd):null
-          ),
-          el("div",{st:{display:"flex",gap:"12px",flexWrap:"wrap"}},
-            el("button",{cls:"sbtn ghost",async onClick(){showConfirm("Close voting now? Votes will be locked and no further votes can be submitted.",async()=>{await brCloseVoting();},"Close Voting","warn");}}," Close Voting"),
-            el("button",{cls:"sbtn primary",st:{background:"#2a7a4a"},async onClick(){
-              if(!topSr||!topJr){showToast("No votes yet — cannot announce.","warning");return;}
-              showConfirm("Announce "+dname(topSr.res.name)+" (Senior) and "+dname(topJr.res.name)+" (Junior) as winners? This will show results to all users.",async()=>{
-                await brAnnounceWinners(topSr.res.id,topJr.res.id,topSr.final,topJr.final);
-              },"Announce","primary");
-            }}," Announce Winners")
-          ),
-          el("p",{cls:"sh",st:{marginTop:"8px",fontSize:".78rem"}},"Winners are computed from live KPI (50%) + votes (50%). Announcing locks the results and shows the Stars banner to everyone.")
-        );
-      } else if(announced){
-        pdControls=el("div",{cls:"card",st:{background:"#f0f9ec",border:"2px solid #7ab648",marginBottom:"20px",maxWidth:"640px"}},
-          el("div",{st:{display:"flex",gap:"10px",alignItems:"center"}},
-            el("span",{st:{fontSize:"22px"}},""),
-            el("div",null,
-              el("div",{st:{fontWeight:"800",fontSize:".95rem",color:"#2a6020"}},"Winners Announced — "+quarterLabel(q)),
-              el("div",{cls:"sh",st:{fontSize:".8rem"}},"Announced on "+new Date(BEST_STATUS.announced_at).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"}))
-            )
-          )
-        );
+            cd?el("span",{cls:"pill",st:{background:"#f5c518",color:"#3d2b1f"}},cd):null),
+          annWhen?el("div",{cls:"sh",st:{fontSize:".82rem",marginBottom:"12px"}},"Winners announced "+annWhen+"."):null,
+          el("button",{cls:"sbtn ghost",onClick(){showConfirm("Close voting now? Votes will be locked and no further votes can be submitted.",async()=>{await brCloseVoting();},"Close Voting","warn");}},"Close Voting"),
+          note("When voting has closed you lock the winners. They stay hidden until the announcement time."));
+      }else if(closed){
+        pdControls=el("div",yellow,
+          el("div",{cls:"card-title",st:{color:"#B8860B"}},"Voting has closed — lock the winners"),
+          el("div",{cls:"sh",st:{fontWeight:"700",fontSize:".85rem",marginBottom:"10px"}},"Total votes cast: "+totalV),
+          el("div",{st:{fontSize:".87rem",color:"#1F1A12",marginBottom:"2px"}},
+            "Best Senior: ",el("strong",null,topSr?dname(topSr.res.name):"—"),topSr?" · "+topSr.final+"/100":""),
+          el("div",{st:{fontSize:".87rem",color:"#1F1A12",marginBottom:"14px"}},
+            "Best Junior: ",el("strong",null,topJr?dname(topJr.res.name):"—"),topJr?" · "+topJr.final+"/100":""),
+          el("div",{st:{display:"flex",gap:"12px",alignItems:"flex-end",flexWrap:"wrap"}},
+            field("Announce the winners on","brAnnounceInput",brLocalInput(st.announced_at)),
+            el("button",{cls:"sbtn primary",st:{background:"#2a7a4a"},onClick(){
+              if(!topSr||!topJr){showToast("There is nobody to rank yet.","warning");return;}
+              const at=annVal(),later=at&&new Date(at)>brNow();
+              showConfirm("Lock "+dname(topSr.res.name)+" (Senior) and "+dname(topJr.res.name)+" (Junior) as the winners? "
+                +(later?"They stay hidden until "+brWhen(brIso(at))+".":"No future announcement time is set, so they will be shown to everyone immediately."),
+                async()=>{if(await brAnnounceWinners(topSr.res.id,topJr.res.id,topSr.final,topJr.final,at))clear();},
+                later?"Lock winners":"Announce now","primary");
+            }},"Lock winners"),
+            el("button",{cls:"sbtn ghost",onClick(){showConfirm("Reopen voting?",async()=>{await brSaveRow({voting_open:true,voting_deadline:null});},"Reopen","warn");}},"Reopen voting")),
+          note("Winners are worked out from the attendance, quiz marks and presentations of "+brScope(P)+" (50%), plus the votes (50%)."));
+      }else{
+        pdControls=el("div",yellow,
+          el("div",{cls:"card-title",st:{color:"#B8860B"}},"Open Voting — "+quarterLabel(q)),
+          el("div",{st:{display:"flex",gap:"12px",alignItems:"flex-end",flexWrap:"wrap"}},
+            field("Voting closes (optional)","brDeadlineInput",""),
+            field("Winners announced on","brAnnounceInput",brLocalInput(st&&st.announced_at)),
+            el("button",{cls:"sbtn primary",st:{background:"#B8860B"},async onClick(){
+              if(await brOpenVoting(STATE.brDeadlineInput||null,annVal()||null))clear();
+            }},"Open Voting"),
+            el("button",{cls:"sbtn ghost",async onClick(){
+              if(!annVal()){showToast("Enter the announcement date first.","warning");return;}
+              if(await brSaveDates(annVal())){clear();showToast("Announcement date saved. The home page now counts down to it.","success");}
+            }},"Save date only")),
+          note("Residents and consultants can vote once. Leave the closing time blank to close voting yourself. Times are your local time."));
       }
     }
 
     // Vote form
     let voteSection;
-    if(!isOpen&&!announced){
+    if(sealed||(!isOpen&&!announced&&ended&&brTotalVoters()>0)){
+      // Voted on and closed. What is left is the wait.
+      voteSection=el("div",{cls:"card",st:{maxWidth:"640px"}},
+        el("div",{st:{textAlign:"center",padding:"24px 0"}},
+          el("div",{st:{fontWeight:"700",fontSize:"1rem",color:"#3d2b1f",marginBottom:"6px"}},"Voting has closed"),
+          el("div",{st:{fontSize:".87rem",color:"#5C5345"}},annWhen
+            ?"The Stars of "+quarterLabel(q)+" will be announced at the departmental meeting, "+annWhen+"."
+            :"The Stars of "+quarterLabel(q)+" will be announced soon.")
+        )
+      );
+    } else if(!isOpen&&!announced){
       voteSection=el("div",{cls:"card",st:{maxWidth:"640px"}},
         el("div",{st:{textAlign:"center",padding:"24px 0",color:"#8a7060"}},
           el("div",{st:{fontSize:"36px",marginBottom:"10px"}},""),
           el("div",{st:{fontWeight:"700",fontSize:"1rem",color:"#3d2b1f",marginBottom:"6px"}},"Voting is not open yet"),
-          el("div",{cls:"sh"},"The Program Director will open voting before end of "+quarterLabel(q)+". Check back soon.")
+          el("div",{cls:"sh"},ended?"The Program Director will open voting for "+quarterLabel(q)+" shortly. Check back soon."
+            :"The Program Director will open voting before end of "+quarterLabel(q)+". Check back soon.")
         )
       );
     } else if(announced){
-      const sr=resById(BEST_STATUS.senior_resident_id);
-      const jr=resById(BEST_STATUS.junior_resident_id);
+      const sr=brPerson(BEST_STATUS.senior_resident_id,ay);
+      const jr=brPerson(BEST_STATUS.junior_resident_id,ay);
       voteSection=el("div",{cls:"card",st:{maxWidth:"640px",background:"linear-gradient(135deg,#fffbf0,#fff8e6)",border:"2px solid #f5c518"}},
         el("div",{st:{textAlign:"center",padding:"16px 0 8px"}},
           el("div",{st:{fontSize:"32px",marginBottom:"8px"}},""),
@@ -12549,14 +12821,14 @@ function renderBestResident(){
           )
         ),
         el("div",{cls:"sh",st:{fontSize:".8rem",maxWidth:"640px"}},"You voted for: ",
-          el("strong",null,myVote.voted_senior_id?(dname(resById(myVote.voted_senior_id)?.name||"")||"—")+" (Senior)":"—"), " · ",
-          el("strong",null,myVote.voted_junior_id?(dname(resById(myVote.voted_junior_id)?.name||"")||"—")+" (Junior)":"—")
+          el("strong",null,myVote.voted_senior_id?(dname(brPerson(myVote.voted_senior_id,ay)?.name||"")||"—")+" (Senior)":"—"), " · ",
+          el("strong",null,myVote.voted_junior_id?(dname(brPerson(myVote.voted_junior_id,ay)?.name||"")||"—")+" (Junior)":"—")
         )
       );
     } else {
       // Active voting form
       const selfRid=u.rid;
-      const selfRes=selfRid?resById(selfRid):null;
+      const selfRes=selfRid?brPerson(selfRid,ay):null;
       const selfLevel=selfRes?.level;
       let _snrSel=STATE.brVoteSenior||"";
       let _jnrSel=STATE.brVoteJunior||"";
@@ -12595,6 +12867,13 @@ function renderBestResident(){
 
   // ── Rankings tab ──
   function renderRankTab(){
+    if(!brRankVisible())return el("div",{cls:"card",st:{maxWidth:"640px"}},
+      el("div",{st:{textAlign:"center",padding:"24px 0"}},
+        el("div",{st:{fontWeight:"700",fontSize:"1rem",color:"#3d2b1f",marginBottom:"6px"}},"Rankings are closed until the announcement"),
+        el("div",{st:{fontSize:".87rem",color:"#5C5345"}},annWhen
+          ?quarterLabel(q)+" has ended. The final rankings open with the winners, "+annWhen+"."
+          :quarterLabel(q)+" has ended. The final rankings open when the winners are announced.")
+      ));
     const totalVoters=brTotalVoters();
     function rankSection(ranked,cls,title,avCls,col){
       return el("div",{cls:cls},
@@ -12619,9 +12898,9 @@ function renderBestResident(){
     }
     return el("div",null,
       el("div",{cls:"card",st:{background:"#fff8e6",border:"1.5px solid #f5c518",marginBottom:"20px",maxWidth:"100%"}},
-        el("div",{st:{fontSize:".83rem",color:"#7a5800",fontFamily:"sans-serif"}}, " Rankings = ",el("strong",null,"KPI 50%"), " (ongoing score, current data) + ",
+        el("div",{st:{fontSize:".83rem",color:"#7a5800",fontFamily:"sans-serif"}}, " Rankings = ",el("strong",null,"KPI 50%"), " (attendance, quizzes and presentations of "+brScope(P)+") + ",
           el("strong",null,"Votes 50%"), " ("+totalVoters+" vote"+(totalVoters!==1?"s":"")+" cast so far). Final score shown on right. ",
-          (announced?"Winners have been announced.":"Scores update live — keep pushing!")
+          (announced?"Winners have been announced.":ended?"The quarter has ended, so the KPI half is final. Only the votes can still change.":"Scores update live — keep pushing!")
         )
       ),
       el("div",{st:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"20px"}},
@@ -12639,7 +12918,7 @@ function renderBestResident(){
       STATE.brHofLoaded=true;
       loadBestResidentAll().then(data=>{set({brAllWinners:data});});
     }
-    const withWinners=allWinners.filter(w=>w.announced&&w.senior_resident_id);
+    const withWinners=allWinners.filter(w=>brRevealed(w)&&w.senior_resident_id);
     if(withWinners.length===0){
       return el("div",{cls:"card",st:{textAlign:"center",padding:"40px 0",color:"#8a7060"}},
         el("div",{st:{fontSize:"40px",marginBottom:"10px"}},""),
@@ -12649,8 +12928,8 @@ function renderBestResident(){
     }
     return el("div",{st:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"16px"}},
       ...withWinners.map(w=>{
-        const sr=resById(w.senior_resident_id);
-        const jr=resById(w.junior_resident_id);
+        const sr=brPerson(w.senior_resident_id,w.academic_year);
+        const jr=brPerson(w.junior_resident_id,w.academic_year);
         return el("div",{cls:"hof-card"},
           el("div",{cls:"hof-q-label"}," "+quarterLabel(w.quarter)+" · AY "+w.academic_year+"–"+(w.academic_year+1)),
           el("div",{st:{marginBottom:"10px"}},
@@ -12683,19 +12962,20 @@ function renderBestResident(){
   );
 }
 function renderBrDetailModal(){
-  const res=resById(STATE.brDetailRid);
+  const brP=brPeriod(),brAy=brP.ay;
+  const res=brPerson(STATE.brDetailRid,brAy);
   const close=()=>set({brDetailRid:null});
   if(!res)return null;
-  const k=calcKPI(res.id);
+  const k=brKpiParts(res.id,brP);
   const col=(res.level==="R3"||res.level==="R4")?"senior":"junior";
   const votes=brVoteCountFor(res.id,col);
   const totalVoters=brTotalVoters();
   const votePct=totalVoters>0?Math.round(votes/totalVoters*100):0;
-  const kpi=kpiOngoingScore(res.id);
+  const kpi=k.score;
   const final=Math.round(kpi*0.5+votePct*0.5);
   const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
   const rows=[
-    {label:"Quiz Average",val:k.qAvg,w:KPI_W.quiz,sub:QUIZZES.filter(q=>q.published&&q.sc[res.id]!=null).length+" quizzes"},
+    {label:"Quiz Average",val:k.qAvg,w:KPI_W.quiz,sub:k.nQuiz+" quizzes"},
     {label:"MM Attendance",val:k.mmPct,w:KPI_W.mm,sub:k.mmAtt+"/"+k.mmTotal+" sessions"},
     {label:"Academic Day Attendance",val:k.tPct,w:KPI_W.teach,sub:k.tAtt+"/"+k.tTotal+" sessions"},
     {label:"Presenter / Moderator",val:k.pres?100:0,w:KPI_W.pres,sub:k.presCount+" session"+(k.presCount!==1?"s":"")},
@@ -12710,7 +12990,7 @@ function renderBrDetailModal(){
           el("div",{cls:"sh",st:{fontSize:".8rem"}},res.level+" · "+(col==="senior"?"Senior":"Junior")+" category")
         )
       ),
-      el("div",{st:{fontSize:".68rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".08em",color:"rgba(31,26,18,.35)",marginBottom:"8px"}},"KPI Ongoing Score — "+kpi+"%"),
+      el("div",{st:{fontSize:".68rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".08em",color:"rgba(31,26,18,.35)",marginBottom:"8px"}},"KPI score · "+brScope(brP)+" — "+kpi+"%"),
       ...rows.map(r=>el("div",{st:{marginBottom:"10px"}},
         el("div",{st:{display:"flex",justifyContent:"space-between",fontSize:".82rem",marginBottom:"3px"}},
           el("span",null,r.label+" ("+r.w+"% weight)"),
