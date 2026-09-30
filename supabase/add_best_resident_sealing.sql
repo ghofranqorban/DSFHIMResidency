@@ -6,10 +6,11 @@
 -- rankings on screen did not hide the data behind them. This closes that.
 --
 -- After this file:
---   * A vote can be read by the person who cast it and by NOBODY else, the PD
---     included. The voting form promises "no one sees who you voted for", and
---     this is what makes it true. Everything the portal needs from other
---     people's votes is a COUNT, and best_resident_tally() gives counts only.
+--   * A vote can be read by the person who cast it and by the Program Director,
+--     and by nobody else: not the deputy, not consultants, not the observers.
+--     The voting form tells voters exactly that. Everything the portal needs
+--     from other people's votes is a COUNT, and best_resident_tally() gives
+--     counts only.
 --   * Locked winners cannot be read by anyone but the PD and deputy until the
 --     announcement time. The names do not reach a resident's browser at all.
 --   * A vote is accepted only while voting is open, checked here and not just
@@ -108,11 +109,12 @@ begin
   alter table public.best_resident_votes   enable row level security;
   alter table public.best_resident_winners enable row level security;
 
-  -- votes: your own, and only your own. There is deliberately no rule that lets
-  -- anyone read, or delete, another person's vote.
+  -- votes: your own. The one exception is the Program Director (role pd, and
+  -- that role only), who may read them all. Nobody may delete another
+  -- person's vote.
   create policy br_votes_read on public.best_resident_votes
     for select to authenticated
-    using (profile_id = auth.uid());
+    using (profile_id = auth.uid() or coalesce(app_role() = 'pd', false));
 
   create policy br_votes_cast on public.best_resident_votes
     for insert to authenticated

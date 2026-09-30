@@ -2746,6 +2746,11 @@ let BEST_ROWS=[];
 // only how many votes each candidate has. Who cast them never reaches the browser.
 // BEST_VOTES therefore holds at most one row: the vote of whoever is signed in.
 let BEST_TALLY=null; // {ay,q,total,senior:{residentId:n},junior:{residentId:n}}
+// Who voted for whom. One account may read it: the Program Director. Not the deputy, not
+// the observers. The database enforces the same rule, so for anyone else this stays empty
+// whatever the page asks for. The voting form tells voters exactly this.
+let BEST_BALLOTS=[];
+function brSeesBallots(){return !!(STATE.user&&STATE.user.role==="pd");}
 function brTallyFromRows(rows,p){
   const t={ay:p.ay,q:p.q,total:0,senior:{},junior:{}};
   (rows||[]).forEach(v=>{
@@ -2909,6 +2914,7 @@ async function loadBestResident(){
   const mine=STATE.user&&STATE.user.profileId;
   // Keep the signed-in person's own vote and nothing else, whatever came back.
   BEST_VOTES=seen.filter(v=>v.profile_id===mine);
+  BEST_BALLOTS=brSeesBallots()?seen:[];
   const td=tRes&&!tRes.error?tRes.data:null;
   // Where the counting function is not installed, count what the table returned.
   BEST_TALLY=td&&typeof td==="object"
@@ -12848,7 +12854,7 @@ function renderBestResident(){
               el("option",{value:""},"— Select a resident —"),
               ...juniors.filter(r=>r.id!==selfRid).map(r=>el("option",{value:r.id},dname(r.name)+" ("+r.level+")"))
             ),
-            el("div",{cls:"sh",st:{fontSize:".78rem",marginTop:"6px"}},"R1 and R2 residents · Anonymous — no one sees who you voted for")
+            el("div",{cls:"sh",st:{fontSize:".78rem",marginTop:"6px"}},"R1 and R2 residents · Your vote is confidential")
           )
         ),
         el("button",{cls:"sbtn primary",
@@ -12858,7 +12864,7 @@ function renderBestResident(){
             await brCastVote(_snrSel,_jnrSel);
           }
         }," Submit My Vote"),
-        el("p",{cls:"sh",st:{marginTop:"10px",fontSize:".78rem"}},"Votes are anonymous and counted equally regardless of your role.")
+        el("p",{cls:"sh",st:{marginTop:"10px",fontSize:".78rem"}},"Votes are confidential and count equally whatever your role.")
       );
     }
 
@@ -12910,6 +12916,35 @@ function renderBestResident(){
     );
   }
 
+  // ── Votes cast: the Program Director only ──
+  function renderBallotsTab(){
+    const rows=BEST_BALLOTS.filter(v=>v.academic_year===ay&&v.quarter===q).map(v=>{
+      const p=PROFILE_BY_ID[v.profile_id]||null;
+      const sr=brPerson(v.voted_senior_id,ay),jr=brPerson(v.voted_junior_id,ay);
+      const role=p?({pd:"Program Director",deputy_pd:"Deputy PD",consultant:"Consultant",resident:"Resident",chief:"Chief Resident",dio:"DIO",ceo:"CEO"})[p.role]||p.role:"";
+      return{name:p?(p.display_name||p.username||"Unknown account"):"Unknown account",role,
+        senior:sr?dname(sr.name)+" ("+sr.level+")":"—",junior:jr?dname(jr.name)+" ("+jr.level+")":"—",at:v.created_at};
+    }).sort((a,b)=>dname(a.name).localeCompare(dname(b.name)));
+    const head=el("div",{st:{marginBottom:"18px",maxWidth:"640px"}},
+      el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",fontWeight:"700",color:"#1F1A12",marginBottom:"4px"}},
+        rows.length+" vote"+(rows.length===1?"":"s")+" cast — "+quarterLabel(q)),
+      el("div",{st:{fontSize:".87rem",color:"#5C5345",lineHeight:"1.5"}},
+        "Only you can open this page. Residents, consultants, the deputy and the observers cannot, and the database refuses them the same information."));
+    if(!rows.length)return el("div",null,head,
+      el("div",{st:{padding:"24px 0",fontSize:".87rem",color:"#5C5345"}},"No votes have been cast yet."));
+    const th=t=>el("th",null,t);
+    return el("div",null,head,
+      el("div",{cls:"tbl-wrap"},
+        el("table",null,
+          el("thead",null,el("tr",null,th("Voter"),th("Role"),th("Best Senior"),th("Best Junior"),th("Voted on"))),
+          el("tbody",null,...rows.map(r=>el("tr",null,
+            el("td",{st:{fontWeight:"600"}},dname(r.name)),
+            el("td",null,r.role),
+            el("td",null,r.senior),
+            el("td",null,r.junior),
+            el("td",{st:{whiteSpace:"nowrap"}},r.at?brWhen(r.at):"")))))));
+  }
+
   // ── Hall of Fame tab ──
   function renderHofTab(){
     let allWinners=STATE.brAllWinners||[];
@@ -12957,8 +12992,8 @@ function renderBestResident(){
       )
     ),
     el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"28px"}},
-      ...["vote","rank","hof"].map(t=>{const lbs={vote:"Vote",rank:"Live Rankings",hof:"Hall of Fame"};const active=tab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({brTab:t,...(t==="hof"?{brHofLoaded:false}:{})})},lbs[t]);})),
-    tab==="vote"?renderVoteTab():tab==="rank"?renderRankTab():renderHofTab()
+      ...["vote","rank","hof"].concat(brSeesBallots()?["ballots"]:[]).map(t=>{const lbs={vote:"Vote",rank:"Live Rankings",hof:"Hall of Fame",ballots:"Votes cast"};const active=tab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({brTab:t,...(t==="hof"?{brHofLoaded:false}:{})})},lbs[t]);})),
+    tab==="vote"?renderVoteTab():tab==="rank"?renderRankTab():tab==="ballots"&&brSeesBallots()?renderBallotsTab():renderHofTab()
   );
 }
 function renderBrDetailModal(){
