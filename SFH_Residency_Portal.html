@@ -10291,11 +10291,13 @@ function renderBestResidentBanner(){
     );
   } else {
     // Not yet announced — Design B: centered countdown + slightly hazy cards
-    // A running quarter counts down to its end. A finished one counts down to the moment
-    // its winners are revealed, once the PD has set it; until then there is nothing to count.
-    // A time that has passed with no winners locked is no longer a time to count down to.
+    // Once the PD has set the announcement, that is the moment to count down to, whether or
+    // not the quarter has ended. Without one, a running quarter counts down to its own end,
+    // and a finished one has nothing to count until the date is set. A time that has passed
+    // with no winners locked is no longer a time to count down to.
     const annAt=actRow&&actRow.announced_at?new Date(actRow.announced_at):null;
-    const qEnd=pending?(annAt&&(annAt>brNow()||actRow.announced)?annAt:null):brQuarterEnd(act);
+    const toAnn=!!annAt&&(annAt>brNow()||!!actRow.announced);
+    const qEnd=toAnn?annAt:(pending?null:brQuarterEnd(act));
     const now=brNow();
     const msLeft=qEnd?Math.max(0,qEnd-now):0;
     const dLeft=Math.floor(msLeft/86400000);
@@ -10331,17 +10333,17 @@ function renderBestResidentBanner(){
         // The moment has arrived with the page open. The winners are not in the browser yet —
         // the database holds them back until now — so they are fetched. Asked again every two
         // seconds for a minute, in case this clock runs a little ahead of the server's.
-        else if(m2<=0&&pending&&actRow&&actRow.announced&&!window._brWait&&(window._brTries||0)<30){
+        else if(m2<=0&&toAnn&&actRow.announced&&!window._brWait&&(window._brTries||0)<30){
           window._brTries=(window._brTries||0)+1;
           window._brWait=setTimeout(()=>{window._brWait=null;loadBestResident();},2000);
         }
       }
       tick();
     },0);
-    const endDateStr=!qEnd?"":pending?brWhen(qEnd):qEnd.toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
+    const endDateStr=!qEnd?"":toAnn?brWhen(qEnd):qEnd.toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
     cardsEl=el("div",{st:{textAlign:"center"}},
       el("div",{st:{fontFamily:"sans-serif",fontSize:"10px",letterSpacing:"3px",fontWeight:"700",color:"#B8860B",marginBottom:"6px"}}," STARS OF "+quarterLabel(q).split(" ")[0]+" · COMING SOON"),
-      el("div",{st:{fontWeight:"900",fontSize:"16px",color:"#3d2b1f",marginBottom:"16px"}}, !qEnd?"Announcement date to be confirmed":pending?"Announced at the departmental meeting":"Results announced by ",!qEnd?null:el("span",{st:{color:"#B8860B"}}," "+endDateStr)
+      el("div",{st:{fontWeight:"900",fontSize:"16px",color:"#3d2b1f",marginBottom:"16px"}}, !qEnd?"Announcement date to be confirmed":toAnn?"Announced at the departmental meeting":"Results announced by ",!qEnd?null:el("span",{st:{color:"#B8860B"}}," "+endDateStr)
       ),
       qEnd?timerRow:null,
       el("div",{cls:"cdb-cards",st:{marginTop:"20px"}},
