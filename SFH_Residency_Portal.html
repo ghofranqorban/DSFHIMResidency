@@ -14502,7 +14502,12 @@ function renderOncall(){
   }
   // Index block data by date+slot
   const byDate={};
-  const blkEntriesAll=ocData().filter(e=>e.block_number===blk);
+  // (canEdit||e.published) mirrors the calendar's seeAll gate. RLS is what actually protects
+  // this — oncall_schedule_select allows a row only when published, or the reader is
+  // pd/chief/edit_oncall — but the grid used to draw every row it was handed, so the one time
+  // a blanket "using (true)" policy survived alongside the real one (fix_oncall_draft_leak.sql)
+  // residents saw a draft block in full. Two gates, not one.
+  const blkEntriesAll=ocData().filter(e=>e.block_number===blk&&(canEdit||e.published));
   blkEntriesAll.forEach(e=>{
     if(!byDate[e.schedule_date])byDate[e.schedule_date]={};
     byDate[e.schedule_date][e.slot_key]=e;
@@ -14512,7 +14517,8 @@ function renderOncall(){
   const blkDateEnd=allDates[allDates.length-1]?.date;
   const todayStr=toLocalYMD(new Date());
   // Resident's own oncall across all blocks in current year
-  const myEntries=u.rid?ocData().filter(e=>e.resident_id===u.rid).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date)):[];
+  // Same gate on "My On-Calls": a resident must not be told about their own draft shifts either.
+  const myEntries=u.rid?ocData().filter(e=>e.resident_id===u.rid&&(canEdit||e.published)).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date)):[];
   function oncallCell(entry,date,slotKey,interactive){
     const ie=STATE.oncallInlineEdit;
     if(canEdit&&ie&&ie.date===date&&ie.slotKey===slotKey){
