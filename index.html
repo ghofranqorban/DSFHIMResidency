@@ -3777,6 +3777,11 @@ function levelInAY(res,y){
 function resById(id){return RESIDENTS.find(r=>r.id==id)||INCOMING.find(r=>r.id==id);}
 function anyResById(id){return resById(id)||_inactiveResById[id]||null;}
 function dname(name){return(name||"").replace(/^Dr\.\s*/i,"");}
+// Every resident and mentor is stored as "Dr. Name". A name typed without it gets it; a name
+// that already has it, in any spelling ("Dr.", "dr", "DR  ", even "Dr. Dr."), comes out with
+// exactly one. Only a leading "Dr" followed by a dot or a space counts, so Drake and Driss
+// keep their names.
+function drName(name){let n=String(name||"").trim();while(/^dr(\.|\s)\s*/i.test(n))n=n.replace(/^dr(\.|\s)\s*/i,"").trim();return n?"Dr. "+n:"";}
 const _LVL_ORD={R4:0,R3:1,R2:2,R1:3};
 function sortByLevel(arr){return arr.slice().sort((a,b)=>(_LVL_ORD[a.level]??9)-(_LVL_ORD[b.level]??9)||a.name.localeCompare(b.name));}
 function consultById(id){return CONSULTANTS.find(c=>c.id===id);}
@@ -9438,7 +9443,7 @@ function renderAdminResidents(){
     return levelsAY()+offset;
   }
   async function addResident(){
-    const name=document.getElementById("ar_name").value.trim();
+    const name=drName(document.getElementById("ar_name").value);
     const user=loginName(document.getElementById("ar_user").value);
     const level=document.getElementById("ar_level").value;
     const mentor=parseInt(document.getElementById("ar_mentor").value)||null;
@@ -9506,11 +9511,18 @@ function renderAdminResidents(){
                   el("td",null,
                     el("div",{cls:"flex-gap"},
                       el("button",{cls:"sbtn success",st:{fontSize:".75rem",padding:"3px 8px"},onClick:async()=>{
-                        const name=document.getElementById("er_name_"+r.id).value.trim()||r.name;
+                        const name=drName(document.getElementById("er_name_"+r.id).value)||r.name;
                         const level=document.getElementById("er_level_"+r.id).value;
                         const m=parseInt(document.getElementById("er_mentor_"+r.id).value)||null;
                         const{error}=await sb.from("residents").update({name,level,mentor_id:m}).eq("id",r.id);
                         if(error){showToast("Could not save: "+error.message);return;}
+                        // The login carries its own copy of the name (the greeting, the voter
+                        // list). Keep it in step, or the two drift apart after a rename.
+                        const prof=PROFILE_BY_RESIDENT[r.id];
+                        if(prof&&prof.id&&name!==r.name){
+                          const{error:perr}=await sb.from("profiles").update({display_name:name}).eq("id",prof.id);
+                          if(perr)showToast("Name saved, but the login still shows the old one: "+perr.message,"warning");
+                        }
                         await loadCoreData();
                         set({adminEditResId:null});
                       }},"Save"),
@@ -9567,7 +9579,7 @@ function renderAdminResidents(){
 }
 function renderAdminMentors(){
   async function addMentor(){
-    const name=document.getElementById("am_name").value.trim();
+    const name=drName(document.getElementById("am_name").value);
     const user=loginName(document.getElementById("am_user").value);
     const errEl=document.getElementById("am_err");
     errEl.textContent="";
