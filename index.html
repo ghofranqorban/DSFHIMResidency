@@ -409,7 +409,7 @@ th.ov-th{text-align:center;}
 /* Winner: a gold medallion with a travelling glint, inside a foil frame that runs round the row.
    Everything moves with transform / opacity / one angle only, and stands still for reduced motion. */
 @property --hpa{syntax:"<angle>";initial-value:0deg;inherits:false;}
-.hp-row.win{overflow:hidden;grid-template-columns:70px minmax(0,1fr);border-radius:12px;box-shadow:none;}
+.hp-row.win{position:relative;overflow:hidden;grid-template-columns:70px minmax(0,1fr);border-radius:12px;box-shadow:none;}
 .hp-row.win::before{content:'';position:absolute;inset:0;border-radius:12px;padding:2.5px;pointer-events:none;z-index:3;
   background:conic-gradient(from var(--hpa),#8a6420,#F6E7B8,#A47A28 25%,#CBA155,#8a6420 55%,#F6E7B8 75%,#8a6420);
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
