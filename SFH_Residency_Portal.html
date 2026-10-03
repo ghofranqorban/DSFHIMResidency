@@ -9357,16 +9357,40 @@ function renderAdmin(){
     renderAdminAccounts()
   );
 }
+// A username becomes the e-mail address of the login (name@dsfh.local), so it can hold only
+// what an e-mail address can: lower-case letters, digits, dots, dashes and underscores. Spaces
+// become dots, capitals become small, anything else is dropped. "Mohammad Safwat" ->
+// "mohammad.safwat". Used wherever a username is typed or sent, so a name that is accepted in
+// the form is one the login can actually be created with.
+function loginName(raw){return String(raw||"").trim().toLowerCase().replace(/\s+/g,".").replace(/[^a-z0-9._-]/g,"").replace(/\.{2,}/g,".").replace(/^[._-]+|[._-]+$/g,"");}
+const LOGIN_NAME_RULE="Username: letters and numbers only, at least 3 characters \u2014 dots, dashes or underscores may join them (e.g. mohammad.safwat).";
+// supabase-js reports a function's refusal as "Edge Function returned a non-2xx status code"
+// and keeps the reason in the response. Dig the reason out, or the PD is left guessing.
+async function fnErrorText(error){
+  try{if(error&&error.context&&typeof error.context.json==="function"){const j=await error.context.json();if(j&&j.error)return j.error;}}catch(e){}
+  return (error&&error.message)||String(error);
+}
 async function createLoginFor(kind,record){
-  // kind: "resident" | "consultant" const{data:sess}=await sb.auth.getSession();
+  // kind: "resident" | "consultant"
+  const{data:sess}=await sb.auth.getSession();
   const token=sess?.session?.access_token;
   if(!token){showToast("Your session expired — please sign in again.");return;}
+  const uname=loginName(record.user);
+  if(!uname||uname.length<3){showToast("\u201c"+(record.user||"")+"\u201d cannot be used as a login. "+LOGIN_NAME_RULE,"error");return;}
+  // The record keeps the name the login is actually made with, so what the PD hands over
+  // and what the person types at sign-in are the same thing.
+  if(uname!==record.user){
+    const table=kind==="resident"?"residents":"consultants";
+    const{error:uerr}=await sb.from(table).update({username:uname}).eq("id",record.id);
+    if(uerr){showToast("Could not tidy the username first: "+uerr.message,"error");return;}
+    record.user=uname;
+  }
   const{data,error}=await sb.functions.invoke(CREATE_LOGIN_FN,{
-    body:{type:kind,recordId:record.id,username:record.user,displayName:record.name},
+    body:{type:kind,recordId:record.id,username:uname,displayName:record.name},
     headers:{Authorization:"Bearer "+token}
   });
-  if(error){showToast("Could not create login: "+(error.message||error));return;}
-  if(data?.error){showToast("Could not create login: "+data.error);return;}
+  if(error){showToast("Could not create login: "+(await fnErrorText(error)),"error");return;}
+  if(data?.error){showToast("Could not create login: "+data.error,"error");return;}
   showInfoModal("Login Created — "+record.name,"Username: "+data.username+"\nTemporary password: "+data.password+"\n\nGive this to "+record.name+" and ask them to change their password after first sign-in (My Account button).");
   await loadCoreData();render();
 }
@@ -9387,7 +9411,7 @@ async function resetLoginFor(kind,record){
         body:{action:"reset",type:kind,recordId:record.id},
         headers:{Authorization:"Bearer "+token}
       });
-      if(error){showToast("Could not reset: "+(error.message||error));return;}
+      if(error){showToast("Could not reset: "+(await fnErrorText(error)),"error");return;}
       if(data?.error){showToast("Could not reset: "+data.error);return;}
       showInfoModal("Password Reset \u2014 "+record.name,
         "Username: "+data.username+"\nNew temporary password: "+data.password+
@@ -9406,18 +9430,22 @@ function renderAdminResidents(){
   // allRoster, not RESIDENTS: an incoming cohort must be manageable before its year opens.
   const all=allRoster();
   const filtered=flt==="all"?all:all.filter(r=>r.level.toLowerCase()===flt);
+  // Counted from the year the stored levels describe, not the rota year: between the
+  // 1 October promotion and the rota rollover a few days later the two differ, and a new
+  // R1 added then was recorded as last year's intake.
   function levelYearStarted(level){
     const offset={R1:0,R2:-1,R3:-2,R4:-3}[level]||0;
-    return CURRENT_ACADEMIC_YEAR+offset;
+    return levelsAY()+offset;
   }
   async function addResident(){
     const name=document.getElementById("ar_name").value.trim();
-    const user=document.getElementById("ar_user").value.trim();
+    const user=loginName(document.getElementById("ar_user").value);
     const level=document.getElementById("ar_level").value;
     const mentor=parseInt(document.getElementById("ar_mentor").value)||null;
     const errEl=document.getElementById("ar_err");
     errEl.textContent="";
     if(!name||!user){errEl.textContent="Name and username are required.";return;}
+    if(user.length<3){errEl.textContent=LOGIN_NAME_RULE;return;}
     const{error}=await sb.from("residents").insert({
       name,username:user,level,mentor_id:mentor,year_started:levelYearStarted(level),active:true
     });
@@ -9437,7 +9465,7 @@ function renderAdminResidents(){
       STATE.adminShowAddRes?el("div",{cls:"inline-form",st:{marginBottom:"14px"}},
         el("div",{cls:"grid-3",st:{marginBottom:"10px"}},
           el("div",null,el("label",null,"Name"),el("input",{id:"ar_name",placeholder:"Dr. Name"})),
-          el("div",null,el("label",null,"Username"),el("input",{id:"ar_user",placeholder:"username"})),
+          el("div",null,el("label",null,"Username"),el("input",{id:"ar_user",placeholder:"e.g. mohammad.safwat"})),
           el("div",null,el("label",null,"Level"),el("select",{id:"ar_level"},
             ["R1","R2","R3","R4"].map(l=>el("option",{value:l},l))
           ))
@@ -9540,10 +9568,11 @@ function renderAdminResidents(){
 function renderAdminMentors(){
   async function addMentor(){
     const name=document.getElementById("am_name").value.trim();
-    const user=document.getElementById("am_user").value.trim();
+    const user=loginName(document.getElementById("am_user").value);
     const errEl=document.getElementById("am_err");
     errEl.textContent="";
     if(!name||!user){errEl.textContent="Name and username are required.";return;}
+    if(user.length<3){errEl.textContent=LOGIN_NAME_RULE;return;}
     const{error}=await sb.from("consultants").insert({name,username:user,active:true});
     if(error){errEl.textContent="Could not add mentor: "+error.message;return;}
     await loadCoreData();
