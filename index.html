@@ -2867,16 +2867,16 @@ function brAttendance(p){
   const held={
     quiz:brQuizzes(p.ay).some(q=>q.published&&blocks.indexOf(q.block)>=0),
     mm:Object.keys(mm).length>0,
-    teach:Object.keys(te).length>0,
-    pres:MM_SESSIONS.some(m=>m.academic_year===p.ay&&blocks.indexOf(m.block_number)>=0&&(m.presenter_resident_id!=null||m.moderator_resident_id!=null))
+    teach:Object.keys(te).length>0
   };
   const out={mm,te,held};
   _brAtt={mm:MM_ATT_RAW,te:TEACH_ATT_RAW,key,out};
   return out;
 }
-// The KPI half of the score: attendance, quiz marks and presentations of the quarter being
-// judged, and of nothing else. Same weights as kpiOngoingScore(), which reads the whole of
-// the live year and so could not tell one quarter from another.
+// The KPI half of the score: morning-meeting and teaching attendance and quiz marks of the
+// quarter being judged, and of nothing else. Presenting or moderating is not counted. The
+// three parts share the same weights as in kpiOngoingScore(), which reads the whole of the
+// live year and so could not tell one quarter from another.
 function brKpiParts(id,p){
   const at=brAttendance(p),blocks=brBlocks(p);
   const mm=at.mm[id]||{total:0,att:0,score:0},te=at.te[id]||{total:0,att:0,score:0};
@@ -2884,15 +2884,12 @@ function brKpiParts(id,p){
   const tPct=te.total?Math.round(te.score/te.total*100):null;
   const sat=brQuizzes(p.ay).filter(q=>q.published&&q.sc[id]!=null&&blocks.indexOf(q.block)>=0);
   const qAvg=sat.length?Math.round(sat.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/sat.length):null;
-  const ses=MM_SESSIONS.filter(m=>m.academic_year===p.ay&&blocks.indexOf(m.block_number)>=0
-    &&(m.presenter_resident_id===id||m.moderator_resident_id===id));
-  const pres=ses.length>0;
   const h=at.held;
-  const total=(h.quiz?KPI_W.quiz:0)+(h.mm?KPI_W.mm:0)+(h.teach?KPI_W.teach:0)+(h.pres?KPI_W.pres:0);
+  const total=(h.quiz?KPI_W.quiz:0)+(h.mm?KPI_W.mm:0)+(h.teach?KPI_W.teach:0);
   const raw=(h.quiz?(qAvg||0)*KPI_W.quiz/100:0)+(h.mm?(mmPct||0)*KPI_W.mm/100:0)
-    +(h.teach?(tPct||0)*KPI_W.teach/100:0)+(h.pres&&pres?KPI_W.pres:0);
+    +(h.teach?(tPct||0)*KPI_W.teach/100:0);
   return{qAvg,nQuiz:sat.length,mmPct,mmAtt:mm.att,mmTotal:mm.total,tPct,tAtt:te.att,tTotal:te.total,
-    pres,presCount:ses.length,held:h,score:total?Math.round(raw/total*100):0};
+    held:h,score:total?Math.round(raw/total*100):0};
 }
 async function loadBestResident(){
   // best_resident_status() hands sealed winners to nobody but the PD and deputy, and
@@ -3085,8 +3082,8 @@ function oncallResidentDatesInBlock(blk,rid,rname){
   const key=rname?rname.trim().toLowerCase():null;
   return ocData().filter(e=>e.block_number===blk&&(rid?e.resident_id===rid:(e.resident_name||"").trim().toLowerCase()===key)).map(e=>e.schedule_date).filter((d,i,a)=>a.indexOf(d)===i).sort();
 }
-// Weekday and weekend on-call days for one resident: this block, and the whole year on
-// screen so far. Weekend is Friday and Saturday, weekdays Sunday to Thursday, as everywhere
+// Weekday and weekend on-call days for one resident in one block. (The year total is
+// tallied too but not shown: the PD found it too much for the card.) Weekend is Friday and Saturday, weekdays Sunday to Thursday, as everywhere
 // in the module (isWeekendDate). A date counts once however many slots it fills.
 function oncallDayCounts(blk,rid,rname){
   const key=rname?rname.trim().toLowerCase():null;
@@ -3143,8 +3140,7 @@ function oncallSpotlight(blk,targetDate,rid,rname,blockStart,blockEnd,anchorEl){
   const label=rid?dname(anyResById(rid)?.name||""):rname;
   let html="<div class='oc-dp-name'>"+label+" \u2014 "+dates.length+" on-call day"+(dates.length===1?"":"s")+" this block</div>";
   const c=oncallDayCounts(blk,rid,rname);
-  html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.78);'>This block: "+c.block.wd+" weekday \u00b7 "+c.block.we+" weekend</div>";
-  html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.78);margin-bottom:4px;'>"+ayLabel(ocAY())+" so far: "+c.year.wd+" weekday \u00b7 "+c.year.we+" weekend</div>";
+  html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.78);margin-bottom:4px;'>"+c.block.wd+" weekday \u00b7 "+c.block.we+" weekend</div>";
   lines.forEach(l=>{html+="<div class='oc-dp-line "+(l.type==="leave"?"oc-dp-leave":"oc-dp-warn")+"'>"+(l.type==="leave"?"\uD83C\uDF34 ":"\u26A0 ")+l.text+"</div>";});
   if(!lines.length)html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.55);'>No conflicts detected</div>";
   const fsOpen=document.getElementById("oc-fullscreen")?.classList.contains("open");
@@ -13094,7 +13090,6 @@ function renderBrDetailModal(){
     {label:"Quiz Average",val:k.qAvg,w:KPI_W.quiz,sub:k.nQuiz+" quizzes"},
     {label:"MM Attendance",val:k.mmPct,w:KPI_W.mm,sub:k.mmAtt+"/"+k.mmTotal+" sessions"},
     {label:"Academic Day Attendance",val:k.tPct,w:KPI_W.teach,sub:k.tAtt+"/"+k.tTotal+" sessions"},
-    {label:"Presenter / Moderator",val:k.pres?100:0,w:KPI_W.pres,sub:k.presCount+" session"+(k.presCount!==1?"s":"")},
   ];
   return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
     el("div",{cls:"modal-card",st:{width:"460px",maxWidth:"100%",position:"relative"}},
