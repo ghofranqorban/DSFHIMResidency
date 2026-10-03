@@ -372,6 +372,35 @@ th.ov-th{text-align:center;}
 .hof-winner-name{font-size:15px;font-weight:700;color:#1F1A12;}
 .hof-winner-score{font-size:11px;color:rgba(31,26,18,.4);font-family:'Inter','Segoe UI',system-ui,sans-serif;}
 .hof-divider{height:1px;background:rgba(31,26,18,.08);margin:10px 0;}
+/* Hall of Fame podium: top three per category, the bar is the final score made of KPI + each group's votes.
+   Text stays on solid ink (#1F1A12 / #5C5345); the four fills are darker than the brand terracotta and gold
+   so the white points inside them stay legible. */
+.hp-card{grid-column:1/-1;background:#F6EFE2;border-radius:14px;padding:26px 30px;position:relative;overflow:hidden;}
+.hp-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#A47A28,#CBA155);}
+.hp-q{font-size:10px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:#5C5345;font-family:'Inter','Segoe UI',system-ui,sans-serif;}
+.hp-key{display:flex;gap:20px;flex-wrap:wrap;font-size:12.5px;color:#1F1A12;margin:12px 0 4px;font-family:'Inter','Segoe UI',system-ui,sans-serif;}
+.hp-lead{font-size:12.5px;color:#5C5345;margin:2px 0 22px;line-height:1.5;max-width:70ch;font-family:'Inter','Segoe UI',system-ui,sans-serif;}
+.hp-cols{display:flex;gap:46px;flex-wrap:wrap;}
+.hp-col{flex:1 1 300px;min-width:0;}
+.hp-col h3{font-family:'Playfair Display',Georgia,serif;font-size:15px;font-weight:700;margin:0 0 10px;color:#1F1A12;}
+.hp-row{display:grid;grid-template-columns:34px minmax(0,1fr);gap:0 12px;padding:13px 0;border-top:1px solid rgba(31,26,18,.12);}
+.hp-rk{font-family:'Playfair Display',Georgia,serif;font-weight:700;line-height:1;color:rgba(31,26,18,.55);font-size:22px;text-align:center;padding-top:2px;}
+.hp-rk.first{font-size:30px;color:#8a6420;}
+.hp-line{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+.hp-nm{font-family:'Playfair Display',Georgia,serif;font-weight:700;line-height:1.2;font-size:16px;color:#1F1A12;}
+.hp-nm.first{font-size:19px;}
+.hp-meta{font-size:11.5px;color:#5C5345;font-variant-numeric:tabular-nums;white-space:nowrap;font-family:'Inter','Segoe UI',system-ui,sans-serif;}
+.hp-meta b{color:#1F1A12;font-weight:700;}
+.hp-bar{display:flex;gap:2px;height:22px;margin-top:8px;min-width:120px;}
+.hp-bar div{min-width:24px;border-radius:4px;color:#FEFBF3;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums;font-family:'Inter','Segoe UI',system-ui,sans-serif;}
+.hp-k{background:#3a3225;}.hp-c{background:#8a6420;}.hp-r{background:#a94e2c;}.hp-n{background:#26523A;}
+.hp-stats{display:grid;grid-template-columns:.8fr 1.35fr 1.2fr 1fr;gap:6px;margin-top:9px;}
+.hp-st{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.hp-lb{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:#5C5345;white-space:nowrap;font-family:'Inter','Segoe UI',system-ui,sans-serif;}
+.hp-vl{font-size:12px;font-weight:600;color:#1F1A12;font-variant-numeric:tabular-nums;white-space:nowrap;font-family:'Inter','Segoe UI',system-ui,sans-serif;}
+.hp-vl em{font-style:normal;font-weight:500;color:#5C5345;}
+.hp-sw{display:inline-block;width:8px;height:8px;border-radius:2px;margin-inline-end:5px;}
+@media (max-width:560px){.hp-card{padding:22px 18px}.hp-cols{gap:30px}}
 .cdb-timer{display:inline-flex;gap:8px;align-items:flex-end;margin-bottom:4px;}
 .cdb-block{background:#FEFBF3;border-radius:10px;padding:12px 16px 10px;box-shadow:0 2px 12px rgba(31,26,18,.08);min-width:68px;text-align:center;position:relative;overflow:hidden;}
 .cdb-block::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:#A47A28;}
@@ -2966,13 +2995,15 @@ async function brSaveDates(announceAt,note){
 async function brCloseVoting(){return brSaveRow({voting_open:false});}
 // Locks the winners. With an announcement time still ahead they stay sealed until then;
 // without one they are shown at once.
-async function brAnnounceWinners(seniorId,juniorId,seniorScore,juniorScore,announceAt){
+async function brAnnounceWinners(seniorId,juniorId,seniorScore,juniorScore,announceAt,podium){
   const at=brIso(announceAt);
   return brSaveRow({
     voting_open:false,
     senior_resident_id:seniorId?parseInt(seniorId,10):null,
     junior_resident_id:juniorId?parseInt(juniorId,10):null,
     senior_score:seniorScore,junior_score:juniorScore,
+    // saved only where the podium column exists (supabase/add_best_resident_podium.sql)
+    ...(podium&&BEST_ROWS.some(r=>"podium" in r)?{podium}:{}),
     announced:true,announced_at:at&&new Date(at)>brNow()?at:brNow().toISOString()
   },"Error announcing");
 }
@@ -3866,6 +3897,56 @@ function brSplitFor(resId,role){
   const s=m[resId];
   return s&&(Number(s.consultant)>0||Number(s.nurse)>0)?s:null;
 }
+// ─── HALL OF FAME PODIUM ─────────────────────────────────────────────────────
+// The first three of each category as they stand when the winners are locked, with where each
+// person's votes came from. Saved with the winners (best_resident_winners.podium) so the Hall of
+// Fame never recomputes them from a roster or a year that has since moved on.
+function brPodiumSnapshot(){
+  const t=brTally(),{sRanked,jRanked}=brComputeRankings();
+  const by=o=>({resident:Number(o&&o.resident)||0,consultant:Number(o&&o.consultant)||0,nurse:Number(o&&o.nurse)||0});
+  const pick=(arr,m)=>arr.slice(0,3).filter((x,i)=>i===0||x.final>0||x.votes>0)
+    .map(x=>({id:x.res.id,final:x.final,kpi:x.kpi,votes:x.votes,by:by(m&&m[x.res.id])}));
+  return{v:1,total:t?t.total:0,groups:by(t&&t.by),senior:pick(sRanked,t&&t.sBy),junior:pick(jRanked,t&&t.jBy)};
+}
+// The final score is 50% KPI + 50% votes. Split into the four things it is made of, in whole
+// points that add up to the score shown (largest remainder, so no point is lost to rounding).
+function brPodiumParts(p,total){
+  const v=g=>total>0?(Number(p.by[g])||0)/total*50:0;
+  const ex={k:p.kpi*0.5,c:v("consultant"),r:v("resident"),n:v("nurse")};
+  const fl={};Object.keys(ex).forEach(k=>{fl[k]=Math.floor(ex[k]+1e-9);});
+  const need=p.final-Object.values(fl).reduce((a,b)=>a+b,0),pri=["k","r","c","n"];
+  pri.slice().sort((a,b)=>((ex[b]-fl[b])-(ex[a]-fl[a]))||(pri.indexOf(a)-pri.indexOf(b))).slice(0,Math.max(need,0)).forEach(k=>{fl[k]++;});
+  return fl;
+}
+function brPodiumCard(w){
+  const d=w.podium,ay=w.academic_year,G=d.groups||{},total=Number(d.total)||0;
+  const GN={c:"consultant",r:"resident",n:"nurse"};
+  const key=el("div",{cls:"hp-key"},...[["k","KPI"],["c","Consultants' votes"],["r","Residents' votes"],["n","Nurses' votes"]]
+    .map(([c,l])=>el("span",null,el("i",{cls:"hp-sw hp-"+c}),l)));
+  const cell=(c,lab,...val)=>el("div",{cls:"hp-st"},el("span",{cls:"hp-lb"},el("i",{cls:"hp-sw hp-"+c}),lab),el("span",{cls:"hp-vl"},...val));
+  const col=(title,list)=>{
+    const top=(list[0]&&list[0].final)||1;
+    return el("div",{cls:"hp-col"},el("h3",null,title),...list.map((p,i)=>{
+      const r=brPerson(p.id,ay),first=i===0,pt=brPodiumParts(p,total);
+      const grp=(c,lab)=>{const n=Number(p.by[GN[c]])||0,g=Number(G[GN[c]])||0;
+        return cell(c,lab,...(g?[n+"/"+g+" ",el("em",null,Math.round(n/g*100)+"%")]:["–"]));};
+      return el("div",{cls:"hp-row"},
+        el("div",{cls:"hp-rk"+(first?" first":"")},String(i+1)),
+        el("div",null,
+          el("div",{cls:"hp-line"},
+            el("span",{cls:"hp-nm"+(first?" first":"")},r?dname(r.name):"—"),
+            el("span",{cls:"hp-meta"},el("b",null,p.final+"/100"))),
+          el("div",{cls:"hp-bar",st:{width:Math.round(p.final/top*100)+"%"}},
+            ...["k","c","r","n"].filter(k=>pt[k]>0).map(k=>el("div",{cls:"hp-"+k,st:{flex:String(pt[k])}},String(pt[k])))),
+          el("div",{cls:"hp-stats"},cell("k","KPI",p.kpi+"%"),grp("c","Consultants"),grp("r","Residents"),grp("n","Nurses"))));
+    }));
+  };
+  return el("div",{cls:"hp-card"},
+    el("div",{cls:"hp-q"},quarterLabel(w.quarter)+" · AY "+ay+"–"+(ay+1)),
+    key,
+    el("div",{cls:"hp-lead"},total+" votes cast in all ("+brGroupText(G)+"). Final score = 50% KPI + 50% votes. Numbers inside the bars are points out of 100. Ties are broken by KPI, then by votes."),
+    el("div",{cls:"hp-cols"},col("Best Senior Resident",d.senior||[]),col("Best Junior Resident",d.junior||[])));
+}
 function brTotalVoters(){
   const t=brTally();
   return t?t.total:0;
@@ -3888,8 +3969,9 @@ function brComputeRankings(){
     const final=Math.round(kpi*0.5+votePct*0.5);
     return{res,kpi,votes,votePct,final};
   }
-  const sRanked=seniors.map(r=>score(r,"senior")).sort((a,b)=>b.final-a.final);
-  const jRanked=juniors.map(r=>score(r,"junior")).sort((a,b)=>b.final-a.final);
+  const byRank=(a,b)=>(b.final-a.final)||(b.kpi-a.kpi)||(b.votes-a.votes); // a tie goes to the higher KPI, then to more votes
+  const sRanked=seniors.map(r=>score(r,"senior")).sort(byRank);
+  const jRanked=juniors.map(r=>score(r,"junior")).sort(byRank);
   return{sRanked,jRanked};
 }
 // Live rankings stay open while the quarter is running. Once it has ended they are the
@@ -12845,12 +12927,12 @@ function renderBestResident(){
               const at=annVal(),later=at&&new Date(at)>brNow();
               showConfirm("Lock "+dname(topSr.res.name)+" (Senior) and "+dname(topJr.res.name)+" (Junior) as the winners? "
                 +(later?"They stay hidden until "+brWhen(brIso(at))+".":"No future announcement time is set, so they will be shown to everyone immediately."),
-                async()=>{if(await brAnnounceWinners(topSr.res.id,topJr.res.id,topSr.final,topJr.final,at))clear();},
+                async()=>{if(await brAnnounceWinners(topSr.res.id,topJr.res.id,topSr.final,topJr.final,at,brPodiumSnapshot()))clear();},
                 later?"Lock winners":"Announce now","primary");
             }},"Lock winners"),
             el("button",{cls:"sbtn ghost",onClick(){showConfirm("Reopen voting?",async()=>{await brSaveRow({voting_open:true,voting_deadline:null});},"Reopen","warn");}},"Reopen voting")),
           noteField(true),
-          note("Winners are worked out from the attendance, quiz marks and presentations of "+brScope(P)+" (50%), plus the votes (50%)."));
+          note("Winners are worked out from the morning meeting and teaching attendance and quiz marks of "+brScope(P)+" (50%), plus the votes (50%). The first three of each category are saved with the winners and appear in the Hall of Fame once they are announced."));
       }else{
         pdControls=el("div",yellow,
           el("div",{cls:"card-title",st:{color:"#B8860B"}},"Open Voting — "+quarterLabel(q)),
@@ -13074,6 +13156,7 @@ function renderBestResident(){
     }
     return el("div",{st:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"16px"}},
       ...withWinners.map(w=>{
+        if(w.podium&&w.podium.senior&&w.podium.senior.length)return brPodiumCard(w);
         const sr=brPerson(w.senior_resident_id,w.academic_year);
         const jr=brPerson(w.junior_resident_id,w.academic_year);
         return el("div",{cls:"hof-card"},
