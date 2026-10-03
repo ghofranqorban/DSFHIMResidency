@@ -42,6 +42,8 @@ body{background:#FEFBF3;color:#1F1A12;min-height:100vh;}
 .nav{display:none;}
 /* ── Cards & content ── */
 .content{max-width:1040px;margin:0 auto;padding:32px 28px;}
+/* The On-Call grid has up to ten columns and was cut off on a laptop inside the 1040px column, so its Schedule tab may use the screen. */
+.content.content-wide{max-width:1360px;}
 .card{background:transparent;border-radius:0;box-shadow:none;padding:22px 0;margin-bottom:0;border:none;border-bottom:1px solid rgba(31,26,18,.07);}
 .card:last-child{border-bottom:none;}
 .card-title{font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:1.05rem;color:#1F1A12;margin-bottom:14px;}
@@ -115,7 +117,7 @@ tr:hover .sticky-col{background:#fdf9f5;}
 /* ── On-Call Schedule table ── */
 .oncall-tbl{width:100%;border-collapse:collapse;}
 .oncall-tbl thead tr{background:#1F1A12;}
-.oncall-tbl thead th{color:rgba(254,251,243,.6);font-weight:700;padding:12px 14px;text-align:left;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;border-bottom:none;background:#1F1A12;white-space:nowrap;position:sticky;top:0;z-index:4;}
+.oncall-tbl thead th{color:rgba(254,251,243,.6);font-weight:700;padding:10px 10px;text-align:left;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;border-bottom:none;background:#1F1A12;white-space:normal;line-height:1.25;position:sticky;top:0;z-index:4;}
 .oncall-tbl th.oc-sticky-date{position:sticky;left:0;z-index:5;background:#1F1A12;min-width:60px;width:60px;}
 .oncall-tbl th.oc-sticky-day{position:sticky;left:60px;z-index:5;background:#1F1A12;border-right:1px solid rgba(254,251,243,.08);min-width:90px;width:90px;}
 .oncall-tbl td.oc-sticky-date{position:sticky;left:0;z-index:2;background:inherit;border-right:1px solid rgba(31,26,18,.07);min-width:60px;width:60px;padding:10px 8px;}
@@ -129,7 +131,11 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .oncall-tbl tbody tr.oc-we:hover td{background:rgba(127,184,156,.08)!important;}
 .oncall-tbl tbody tr.oc-today{background:#fff9f6!important;box-shadow:inset 4px 0 0 #c96a4a;}
 .oncall-tbl tbody tr.oc-today:hover td{background:#fff4ef!important;}
-.oncall-tbl td{padding:10px 14px;vertical-align:middle;}
+.oncall-tbl td{padding:9px 10px;vertical-align:middle;}
+/* The schedule's columns share the width they are given, so the whole grid fits a laptop; a phone still scrolls it (min-width 820). */
+#oncall-sched-tbl{table-layout:fixed;}
+#oncall-sched-tbl th:empty{width:36px;padding:0;}
+.oncall-tbl th.oc-sticky-day,.oncall-tbl td.oc-sticky-day{min-width:100px;width:100px;}
 .oc-today-badge{display:inline-block;background:#c96a4a;color:#fff;font-size:.58rem;font-weight:700;padding:2px 7px;border-radius:20px;margin-left:7px;vertical-align:middle;letter-spacing:.05em;}
 .oc-day-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.73rem;font-weight:700;white-space:nowrap;}
 .oc-day-pill.wd{background:rgba(31,26,18,.08);color:rgba(31,26,18,.55);}
@@ -362,6 +368,13 @@ th.ov-th{text-align:center;}
 .star-card.sc-won .star-score-unit{font-size:11px;color:#5C5345;letter-spacing:0;margin-top:3px;}
 .stars-more{display:inline-flex;align-items:center;gap:8px;margin-top:22px;font:700 13px 'Inter','Segoe UI',system-ui,sans-serif;color:#FEFBF3;background:#c96a4a;border:0;border-radius:8px;padding:9px 18px;cursor:pointer;}
 .stars-more:hover{background:#b5593a;}
+/* On-Call tabs: four tabs are wider than a phone, so they used to push the whole page sideways. On a
+   phone the strip is tighter, never wraps a tab onto three lines, and scrolls inside itself if it must. */
+@media (max-width:600px){
+  .oc-tabs{overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+  .oc-tabs::-webkit-scrollbar{display:none;}
+  .oc-tab{padding:10px 11px!important;font-size:.8rem!important;white-space:nowrap;flex:0 0 auto;}
+}
 .bc-tiles{display:flex;gap:10px;flex-wrap:wrap;}
 .bc-list{display:none;}
 @media (max-width:600px){
@@ -16000,7 +16013,7 @@ function renderOncall(){
     );
   }
   const blkPeriodOC=blockLabel(blk,ocAY());
-  return el("div",{cls:"content"},
+  return el("div",{cls:"content"+(tab==="schedule"?" content-wide":"")},
     el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
       el("div",null,
         el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"On-Call Schedule"),
@@ -16010,8 +16023,8 @@ function renderOncall(){
     ),
     renderAYBar(ocAY(),ocSetYear,ONCALL_PLAN_DATA===null&&ocIsPlanYear()?("Loading "+ocAYLabel(CURRENT_ACADEMIC_YEAR+1)+"…"):null),
     renderBlockPills(blk,n=>set({oncallBlock:n,oncallTab:tab}),{st:{marginBottom:"20px"},cur:!ocIsPlanYear(),inactiveBg:"#F6EFE2"}),
-    el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
-      ...["schedule","mine","prefs","stats"].map(t=>{const lbs={schedule:"Schedule",mine:"My On-Calls",prefs:"Preferences",stats:"Statistics"};const active=tab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({oncallTab:t})},lbs[t]);})),
+    el("div",{cls:"oc-tabs",st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
+      ...["schedule","mine","prefs","stats"].map(t=>{const lbs={schedule:"Schedule",mine:"My On-Calls",prefs:"Preferences",stats:"Statistics"};const active=tab===t;return el("div",{cls:"oc-tab",st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({oncallTab:t})},lbs[t]);})),
     tab==="schedule"?renderScheduleTab():tab==="mine"?renderMineTab():tab==="prefs"?renderPrefsTab():renderStatsTab()
   );
 }
