@@ -17,6 +17,14 @@ colors:
   sage: "#7FB89C"
   alert-red: "#b52040"
   excused-violet: "#7c3aed"
+  terracotta-ink: "#a94e2c"
+  podium-kpi: "#3a3225"
+  podium-consultants: "#8a6420"
+  podium-residents: "#a94e2c"
+  podium-nurses: "#26523A"
+  gold-ink: "#7a5818"
+  gold-tag-ink: "#5e430f"
+  medal-ink: "#4a3510"
 typography:
   display:
     fontFamily: "'Playfair Display', Georgia, serif"
@@ -171,6 +179,21 @@ A warm earth palette — clay, gold, and two weights of paper — with a small, 
 ### Tertiary — status only
 - **Success Green** (`#2a7a5a`) Present · **Honors Gold** (`#A47A28`) Late · **Alert Red** (`#b52040`) Absent · **Excused Violet** (`#7c3aed`) Excused · **Ink at 30%** Outside rotation. **Sage** (`#7FB89C`) marks weekends and confirmations. These five are the attendance vocabulary and are used at ~8–10% tint for backgrounds with a darkened text pair.
 
+### Podium (Hall of Fame only)
+
+The Hall of Fame podium draws each person's final score as one bar made of four parts, so it needs four fills that can be told apart at 22px tall. They are **data colours, not accents**, and they exist only inside `.hp-bar` and its key. Each is dark enough for cream text (`#FEFBF3`) at 11px bold, and each clears 4.5:1 against its own label.
+
+| Part | Token | Hex | Cream text on fill | Fill on Parchment |
+|---|---|---|---|---|
+| KPI | `podium-kpi` | `#3a3225` | 12.2:1 | 11.0:1 |
+| Consultants' votes | `podium-consultants` | `#8a6420` | 5.2:1 | 4.7:1 |
+| Residents' votes | `podium-residents` (= `terracotta-ink`) | `#a94e2c` | 5.3:1 | 4.8:1 |
+| Nurses' votes | `podium-nurses` | `#26523A` | 8.6:1 | 7.8:1 |
+
+The segment order is always KPI, consultants, residents, nurses. The three vote colours are darker than the brand terracotta, gold and green so the numbers inside them stay legible.
+
+The **winner** gets its own treatment, which is the Earned Gold at full strength: a gold medallion (`#CBA155` to `#E9D3A0` highlights, numeral `medal-ink` `#4a3510`, 4.9:1), a gold wash behind the row, a foil frame that travels round the row, and a "Winner" tag in `gold-tag-ink` (`#5e430f`, 5.6:1). The rank numeral on the winner row is `gold-ink` (`#7a5818`). Text on the wash stays on Ink. All of it moves with transform, opacity and one angle only, and stands still under `prefers-reduced-motion`.
+
 ### Named Rules
 
 **The One Clay Rule.** Terracotta means *active, primary, or now* — nothing else. It is never used to decorate, never to fill a large area outside a gradient, and never to distinguish two things that are both inactive.
@@ -178,6 +201,8 @@ A warm earth palette — clay, gold, and two weights of paper — with a small, 
 **The Earned Gold Rule.** Gold appears only where a thing was earned (rank 1, senior star, Hall of Fame) or formally set by authority (a deadline, the current block). Gold used for ordinary emphasis breaks the ranking language.
 
 **The No Pure Values Rule.** No `#ffffff` and no `#000000` anywhere on a surface a user reads. Cream and Ink are the extremes. (White is permitted only as text on saturated status fills.)
+
+**The Podium Exception.** Inside the Hall of Fame podium bar, and only there, terracotta and gold are *category* colours (residents' votes, consultants' votes), not signals of "active" or "earned". This is a deliberate exception to the One Clay Rule and the Earned Gold Rule, made so the four parts of a score are distinguishable. It does not extend to any other chart or table: elsewhere terracotta still means active, and gold still means earned. Because consultants' votes use gold, the winner's earned gold is carried by the medallion, the wash and the foil frame, never by a bar segment.
 
 ## Typography
 
