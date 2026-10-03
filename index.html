@@ -15142,7 +15142,9 @@ function renderOncall(){
         nm.onmouseleave=()=>oncallClearSpotlight();
       }
       cell.appendChild(nm);
-      if(res&&oncallPrefHasPick(blk,res.id,date)){
+      // The "Asked off" mark is for whoever builds the schedule. On the published grid a
+      // resident sees only who is on call, not which colleagues asked not to be.
+      if(res&&canEditOncall()&&oncallPrefHasPick(blk,res.id,date)){
         const pf=document.createElement("span");
         pf.style.cssText="font-size:.63rem;background:rgba(201,106,74,.13);color:#a94e2c;border:1px solid rgba(169,78,44,.35);border-radius:4px;padding:1px 5px;display:inline-block;margin-top:2px;white-space:nowrap;font-weight:700;";
         pf.textContent="Asked off";
