@@ -332,6 +332,37 @@ th.ov-th{text-align:center;}
 .sc-senior .star-score-num{color:#A47A28;}
 .sc-junior .star-score-num{color:#c96a4a;}
 .star-score-unit{font-size:9px;color:rgba(31,26,18,.35);font-family:'Inter','Segoe UI',system-ui,sans-serif;letter-spacing:1px;margin-top:1px;}
+/* After the announcement: the winners carry the Hall of Fame look (gold medallion, travelling foil
+   frame) and the whole band gets a faint field of twinkling stars. Motion is transform, opacity and
+   one angle only, and stops for reduced motion. See DESIGN.md, Podium. */
+.stars-banner.won > *:not(.band-stars){position:relative;z-index:1;}
+.band-stars{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;}
+.band-stars i{position:absolute;display:block;background:#CBA155;opacity:0;clip-path:polygon(50% 0,60% 40%,100% 50%,60% 60%,50% 100%,40% 60%,0 50%,40% 40%);animation:band-tw var(--d,4s) ease-in-out var(--l,0s) infinite;}
+@keyframes band-tw{0%,100%{opacity:0;transform:scale(.5) rotate(0deg);}50%{opacity:var(--o,.4);transform:scale(1) rotate(40deg);}}
+.stars-banner.won .star-cards-row{max-width:760px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;}
+.star-card.sc-won{border:0;border-radius:14px;padding:18px 20px;gap:14px;cursor:pointer;background:linear-gradient(90deg,rgba(203,161,85,.26),rgba(203,161,85,.08)),#fffdf6;}
+.star-card.sc-won:hover{transform:none;box-shadow:0 8px 22px rgba(122,88,24,.18);}
+.star-card.sc-won .star-card-glow{display:none;}
+@property --bsa{syntax:"<angle>";initial-value:0deg;inherits:false;}
+.star-card.sc-won::before{content:'';position:absolute;inset:0;width:auto;height:auto;border-radius:14px;padding:2.5px;pointer-events:none;z-index:3;
+  background:conic-gradient(from var(--bsa),#8a6420,#F6E7B8,#A47A28 25%,#CBA155,#8a6420 55%,#F6E7B8 75%,#8a6420);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);animation:band-spin 6s linear infinite;}
+@keyframes band-spin{to{--bsa:360deg;}}
+.star-card.sc-won .star-av-ring{width:58px;height:58px;font:700 32px/1 'Playfair Display',Georgia,serif;color:#4a3510;position:relative;overflow:hidden;
+  background:conic-gradient(from 210deg,#8a6420,#E9D3A0 18%,#CBA155 34%,#8a6420 52%,#D9B66E 70%,#F3E3B4 82%,#8a6420);
+  box-shadow:0 0 0 2px #fffdf6,0 0 0 3.5px #A47A28,0 6px 14px rgba(122,88,24,.35),inset 0 0 0 2px rgba(255,255,255,.35);}
+.star-card.sc-won .star-av-ring::after{content:'';position:absolute;inset:-20%;background:linear-gradient(110deg,transparent 40%,rgba(255,255,255,.85) 50%,transparent 60%);transform:translateX(-130%);animation:band-glint 4.2s ease-in-out 1s infinite;}
+@keyframes band-glint{0%{transform:translateX(-130%);}35%,100%{transform:translateX(130%);}}
+.star-card.sc-won .star-type-lbl{font-size:10px;letter-spacing:.16em;color:#5C5345;}
+.star-card.sc-won .star-winner-name{font-family:'Playfair Display',Georgia,serif;font-size:23px;line-height:1.15;}
+.star-card.sc-won .star-winner-level{font-size:12px;color:#5C5345;}
+.star-card.sc-won .star-score-col{align-items:flex-end;}
+.star-card.sc-won .star-score-num{font-size:28px;color:#7a5818;}
+.star-card.sc-won .star-score-unit{font-size:11px;color:#5C5345;letter-spacing:0;margin-top:3px;}
+.stars-more{display:inline-flex;align-items:center;gap:8px;margin-top:22px;font:700 13px 'Inter','Segoe UI',system-ui,sans-serif;color:#FEFBF3;background:#c96a4a;border:0;border-radius:8px;padding:9px 18px;cursor:pointer;}
+.stars-more:hover{background:#b5593a;}
+@media (prefers-reduced-motion:reduce){.band-stars i{animation:none;opacity:calc(var(--o,.4)*.6);transform:none;}.star-card.sc-won::before,.star-card.sc-won .star-av-ring::after{animation:none;}}
 .stars-pending-card{background:#F6EFE2;border-radius:10px;padding:16px 18px;border:1px solid rgba(31,26,18,.07);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;opacity:.5;filter:blur(1px);}
 .stars-voting-strip{margin-top:14px;display:flex;align-items:center;gap:10px;background:rgba(164,122,40,.05);border:1px solid rgba(164,122,40,.2);border-radius:8px;padding:10px 14px;max-width:640px;flex-wrap:wrap;}
 .vote-pulse-dot{width:8px;height:8px;border-radius:50%;background:#c96a4a;flex-shrink:0;animation:vPulse 1.5s ease-in-out infinite;}
@@ -10534,6 +10565,17 @@ function renderProfileCounsel(res){
   );
 }
 // ─── BEST RESIDENT BANNER (home page) ────────────────────────────────────────
+// A faint field of stars behind the band once winners are announced. Positions are seeded, so the
+// field is the same on every render; each star only fades and scales.
+function brBandStars(n){
+  let seed=11;const rnd=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
+  const kids=[];
+  for(let i=0;i<n;i++){
+    const sz=6+rnd()*11;
+    kids.push(el("i",{style:"left:"+(rnd()*100)+"%;top:"+(rnd()*100)+"%;width:"+sz+"px;height:"+sz+"px;--d:"+(3+rnd()*3.5)+"s;--l:"+(-rnd()*6)+"s;--o:"+(.22+rnd()*.3)}));
+  }
+  return el("div",{cls:"band-stars"},...kids);
+}
 function renderBestResidentBanner(){
   brSync();
   // Three things the banner can be about, in this order: a quarter that has ended and is
@@ -10570,10 +10612,10 @@ function renderBestResidentBanner(){
     const jr=brPerson(W.junior_resident_id,ay);
     function wCard(cls,typeLabel,crown,res,score){
       if(!res)return null;
-      return el("div",{cls:"star-card "+cls,onClick:()=>set({mod:"best_resident",brTab:"rank"})},
+      return el("div",{cls:"star-card sc-won "+cls,onClick:()=>set({mod:"best_resident",brTab:"hof",brHofLoaded:false})},
         el("div",{cls:"star-card-glow"}),
         el("div",{cls:"star-av-wrap"},
-          el("div",{cls:"star-av-ring"},ini(res.name)),
+          el("div",{cls:"star-av-ring"},"1"),
           el("div",{cls:"star-crown"},crown)
         ),
         el("div",{cls:"star-info"},
@@ -10675,10 +10717,13 @@ function renderBestResidentBanner(){
     el("button",{cls:"sbtn primary",st:{fontSize:".78rem",padding:"5px 12px"},onClick:()=>set({mod:"best_resident",brTab:"vote"})},"Vote →")
   ):null;
 
-  return el("div",{cls:"stars-banner"},
-    spark({left:"12%",top:"30%"}),spark({left:"27%",top:"65%",width:"4px",height:"4px",background:"#e8a000",animationDelay:".8s"}),
-    spark({left:"45%",top:"20%",animationDelay:"1.5s"}),spark({right:"18%",top:"40%",animationDelay:".3s"}),
-    header,cardsEl,votingStrip
+  const isWon=announced&&!!W.senior_resident_id;
+  const moreBtn=isWon?el("button",{cls:"stars-more",onClick:()=>set({mod:"best_resident",brTab:"hof",brHofLoaded:false})},"See the full podium ",el("span",null,"→")):null;
+  return el("div",{cls:"stars-banner"+(isWon?" won":"")},
+    ...(isWon?[brBandStars(44)]:[
+      spark({left:"12%",top:"30%"}),spark({left:"27%",top:"65%",width:"4px",height:"4px",background:"#e8a000",animationDelay:".8s"}),
+      spark({left:"45%",top:"20%",animationDelay:"1.5s"}),spark({right:"18%",top:"40%",animationDelay:".3s"})]),
+    header,cardsEl,moreBtn,votingStrip
   );
 }
 
