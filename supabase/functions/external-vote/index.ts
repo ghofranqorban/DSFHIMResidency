@@ -16,7 +16,8 @@
 // WHO THEY VOTED FOR is matched to residents.name, ignoring case, "Dr." and spacing. A name that
 // matches nobody, or more than one resident, is refused with 422 and the reason, never guessed.
 //
-// One vote per person per quarter: the same name again replaces the earlier vote.
+// One vote per person per quarter: the same name again replaces the earlier vote. A vote with no
+// usable name is kept as "(anonymous)", one per submission.
 //
 // Body:    { "name": "Dr. Someone", "senior": "Dr. Omar H", "junior": "Dr. Ibtihal",
 //            "submittedAt": "2026-10-03T18:20:00Z" }       (submittedAt optional)
@@ -79,9 +80,17 @@ Deno.serve(async (req: Request) => {
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: "Body must be JSON" }, 400); }
 
-  const voterName = String(body.name ?? "").trim().slice(0, 120);
-  const voterKey = norm(voterName);
-  if (!voterKey) return json({ error: "The voter's name is missing" }, 422);
+  let voterName = String(body.name ?? "").trim().slice(0, 120);
+  let voterKey = norm(voterName);
+  if (!voterKey) {
+    // No usable name (blank, ".", "-"): someone who would rather not give one. The vote counts, as
+    // "(anonymous)", and is keyed on WHEN it was submitted, so sending the same row again replaces
+    // that vote and never doubles it. Without a submission time it cannot be told apart: refused.
+    const when = body.submittedAt ? new Date(String(body.submittedAt)) : null;
+    if (!when || isNaN(when.getTime())) return json({ error: "The voter's name is missing" }, 422);
+    voterName = "(anonymous)";
+    voterKey = "anonymous " + when.toISOString();
+  }
 
   const sb = createClient(
     Deno.env.get("SUPABASE_URL")!,
