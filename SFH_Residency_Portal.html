@@ -15218,9 +15218,13 @@ function calOpenPop(cell,ymd,existing){
 function renderCalendar(){
   const u=STATE.user;
   const canEdit=canEditCalendarEvents();
-  // PD/chief can step back from a single resident and look at the whole programme.
-  const program=canEdit&&STATE.calResId==="program";
-  const rid=program?null:(canEdit?(STATE.calResId||u.rid||(RESIDENTS[0]&&RESIDENTS[0].id)||null):(u.rid||null));
+  // PD, chief and consultants can step back from a single resident and look at the whole
+  // programme. Anyone who is themselves on the schedule opens on their own month; a PD or
+  // consultant, who has no schedule of their own, opens on the whole programme rather than
+  // on whichever resident sorts first. Only PD and chief may edit events.
+  const canBrowse=canEdit||u.role==="consultant";
+  const program=canBrowse&&(STATE.calResId==="program"||(!STATE.calResId&&!u.rid));
+  const rid=program?null:(canBrowse?(STATE.calResId||u.rid||null):(u.rid||null));
   const res=rid?anyResById(rid):null;
   const hidden=calHiddenSrc(program);
   const EV=calBuildEvents(rid,program);
@@ -15287,7 +15291,7 @@ function renderCalendar(){
   };
   return el("div",{cls:"content"},
     el("div",{cls:"cl-hero"},
-      el("div",{cls:"lbl"},program?"Programme view":(canEdit&&res&&res.id!==u.rid?"Viewing "+dname(res.name):"My Schedule")),
+      el("div",{cls:"lbl"},program?"Programme view":(canBrowse&&res&&res.id!==u.rid?"Viewing "+dname(res.name):"My Schedule")),
       el("h1",null,"Calendar"),
       el("p",null,program?"Every session, deadline and programme event across the whole residency.":"Rotation, on-call, morning meetings, academic day and leave — one view.")
     ),
@@ -15307,7 +15311,7 @@ function renderCalendar(){
     el("div",{cls:"cl-nav"},
       el("h2",null,CAL_MONTHS[mi]+" "+my),
       mk!==todayStr.slice(0,7)?el("button",{cls:"sbtn ghost",st:{fontSize:".75rem"},onClick:()=>set({calMonth:null})},"Today"):null,
-      canEdit?el("select",{cls:"input",st:{width:"auto",fontSize:".8rem",padding:"6px 10px"},onChange:e=>set({calResId:e.target.value==="program"?"program":Number(e.target.value)})},
+      canBrowse?el("select",{cls:"input",st:{width:"auto",fontSize:".8rem",padding:"6px 10px"},onChange:e=>set({calResId:e.target.value==="program"?"program":Number(e.target.value)})},
         el("option",{value:"program",...(program?{selected:""}:{})},"Whole programme"),
         ...RESIDENTS.map(r=>el("option",{value:String(r.id),...(r.id===rid?{selected:""}:{})},dname(r.name)+" · "+(r.level||"")))
       ):null,
