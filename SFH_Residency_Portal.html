@@ -383,7 +383,7 @@ th.ov-th{text-align:center;}
 .hp-cols{display:flex;gap:46px;flex-wrap:wrap;}
 .hp-col{flex:1 1 300px;min-width:0;}
 .hp-col h3{font-family:'Playfair Display',Georgia,serif;font-size:15px;font-weight:700;margin:0 0 10px;color:#1F1A12;}
-.hp-row{display:grid;grid-template-columns:34px minmax(0,1fr);gap:0 12px;padding:13px 0;border-top:1px solid rgba(31,26,18,.12);}
+.hp-row{display:grid;grid-template-columns:44px minmax(0,1fr);gap:0 12px;padding:13px 0;border-top:1px solid rgba(31,26,18,.12);}
 .hp-rk{font-family:'Playfair Display',Georgia,serif;font-weight:700;line-height:1;color:rgba(31,26,18,.55);font-size:22px;text-align:center;padding-top:2px;}
 .hp-rk.first{font-size:30px;color:#8a6420;}
 .hp-line{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
@@ -400,6 +400,12 @@ th.ov-th{text-align:center;}
 .hp-vl{font-size:12px;font-weight:600;color:#1F1A12;font-variant-numeric:tabular-nums;white-space:nowrap;font-family:'Inter','Segoe UI',system-ui,sans-serif;}
 .hp-vl em{font-style:normal;font-weight:500;color:#5C5345;}
 .hp-sw{display:inline-block;width:8px;height:8px;border-radius:2px;margin-inline-end:5px;}
+.hp-row.win{background:linear-gradient(90deg,rgba(203,161,85,.26),rgba(203,161,85,.08));border-top:0;border-radius:10px;padding:16px 14px 16px 12px;margin:2px -14px 8px -12px;box-shadow:inset 0 0 0 1px rgba(164,122,40,.35);}
+.hp-row.win + .hp-row{border-top:0;}
+.hp-row.win .hp-rk.first{font-size:46px;color:#7a5818;line-height:.9;padding-top:0;}
+.hp-row.win .hp-nm.first{font-size:23px;}
+.hp-row.win .hp-bar{height:26px;}
+.hp-tag{display:inline-block;margin-inline-start:10px;font-family:'Inter','Segoe UI',system-ui,sans-serif;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:#5e430f;background:rgba(203,161,85,.45);border-radius:99px;padding:3px 9px;vertical-align:3px;}
 @media (max-width:560px){.hp-card{padding:22px 18px}.hp-cols{gap:30px}}
 .cdb-timer{display:inline-flex;gap:8px;align-items:flex-end;margin-bottom:4px;}
 .cdb-block{background:#FEFBF3;border-radius:10px;padding:12px 16px 10px;box-shadow:0 2px 12px rgba(31,26,18,.08);min-width:68px;text-align:center;position:relative;overflow:hidden;}
@@ -3930,11 +3936,11 @@ function brPodiumCard(w){
       const r=brPerson(p.id,ay),first=i===0,pt=brPodiumParts(p,total);
       const grp=(c,lab)=>{const n=Number(p.by[GN[c]])||0,g=Number(G[GN[c]])||0;
         return cell(c,lab,...(g?[n+"/"+g+" ",el("em",null,Math.round(n/g*100)+"%")]:["–"]));};
-      return el("div",{cls:"hp-row"},
+      return el("div",{cls:"hp-row"+(first?" win":"")},
         el("div",{cls:"hp-rk"+(first?" first":"")},String(i+1)),
         el("div",null,
           el("div",{cls:"hp-line"},
-            el("span",{cls:"hp-nm"+(first?" first":"")},r?dname(r.name):"—"),
+            el("span",{cls:"hp-nm"+(first?" first":"")},r?dname(r.name):"—",first?el("span",{cls:"hp-tag"},"Winner"):null),
             el("span",{cls:"hp-meta"},el("b",null,p.final+"/100"))),
           el("div",{cls:"hp-bar",st:{width:Math.round(p.final/top*100)+"%"}},
             ...["k","c","r","n"].filter(k=>pt[k]>0).map(k=>el("div",{cls:"hp-"+k,st:{flex:String(pt[k])}},String(pt[k])))),
