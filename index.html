@@ -3085,6 +3085,15 @@ function oncallResidentDatesInBlock(blk,rid,rname){
   const key=rname?rname.trim().toLowerCase():null;
   return ocData().filter(e=>e.block_number===blk&&(rid?e.resident_id===rid:(e.resident_name||"").trim().toLowerCase()===key)).map(e=>e.schedule_date).filter((d,i,a)=>a.indexOf(d)===i).sort();
 }
+// Weekday and weekend on-call days for one resident: this block, and the whole year on
+// screen so far. Weekend is Friday and Saturday, weekdays Sunday to Thursday, as everywhere
+// in the module (isWeekendDate). A date counts once however many slots it fills.
+function oncallDayCounts(blk,rid,rname){
+  const key=rname?rname.trim().toLowerCase():null;
+  const mine=ocData().filter(e=>rid?e.resident_id===rid:(e.resident_name||"").trim().toLowerCase()===key);
+  const tally=rows=>{const seen={},t={wd:0,we:0};rows.forEach(e=>{if(seen[e.schedule_date])return;seen[e.schedule_date]=1;if(isWeekendDate(e.schedule_date))t.we++;else t.wd++;});return t;};
+  return{block:tally(mine.filter(e=>e.block_number===blk)),year:tally(mine)};
+}
 // Preview shown while hovering a candidate name in the on-call cell picker:
 // their other on-call days this block (for highlighting), plus any
 // back-to-back / consecutive-weekend / approved-leave conflicts with the
@@ -3133,6 +3142,9 @@ function oncallSpotlight(blk,targetDate,rid,rname,blockStart,blockEnd,anchorEl){
   });
   const label=rid?dname(anyResById(rid)?.name||""):rname;
   let html="<div class='oc-dp-name'>"+label+" \u2014 "+dates.length+" on-call day"+(dates.length===1?"":"s")+" this block</div>";
+  const c=oncallDayCounts(blk,rid,rname);
+  html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.78);'>This block: "+c.block.wd+" weekday \u00b7 "+c.block.we+" weekend</div>";
+  html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.78);margin-bottom:4px;'>"+ayLabel(ocAY())+" so far: "+c.year.wd+" weekday \u00b7 "+c.year.we+" weekend</div>";
   lines.forEach(l=>{html+="<div class='oc-dp-line "+(l.type==="leave"?"oc-dp-leave":"oc-dp-warn")+"'>"+(l.type==="leave"?"\uD83C\uDF34 ":"\u26A0 ")+l.text+"</div>";});
   if(!lines.length)html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.55);'>No conflicts detected</div>";
   const fsOpen=document.getElementById("oc-fullscreen")?.classList.contains("open");
