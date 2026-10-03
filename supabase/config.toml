@@ -33,3 +33,11 @@ verify_jwt = false
 # auth.getUser(jwt) to confirm who the caller is before doing anything.
 [functions.admin-create-login]
 verify_jwt = true
+
+
+# Stars votes from nurses and consultants, posted by a Google Apps Script on each form's response
+# sheet. Apps Script sends no Supabase JWT, so the platform check must be off. The function
+# authenticates the caller itself: it refuses anything without the right x-vote-secret header
+# (one secret per group), and the group written to the database comes from WHICH secret matched.
+[functions.external-vote]
+verify_jwt = false
