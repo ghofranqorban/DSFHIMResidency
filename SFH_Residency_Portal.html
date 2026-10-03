@@ -15764,8 +15764,16 @@ function render(){
   const _sc=_sf?document.getElementById("search-inp").selectionStart:null;
   // Kill any leftover ScrollTrigger instances from Performance Report
   if(typeof ScrollTrigger!=="undefined"){try{ScrollTrigger.getAll().forEach(function(st){st.kill();});}catch(e){}}
+  // Every click rebuilds the page from nothing, and a fresh .main-area starts at the top. So
+  // the scroll position is taken before the wipe and put back after the rebuild — on the
+  // main area, which scrolls on a desktop, and on the window, which scrolls on a phone. A
+  // change of module is the one time the top IS the right place.
+  const _sameMod=STATE.mod===_lastMod;
+  const _oldMain=document.querySelector(".main-area");
+  const _keepMain=_sameMod&&_oldMain?_oldMain.scrollTop:0;
+  const _keepWin=_sameMod?(window.scrollY||window.pageYOffset||0):0;
   app.innerHTML="";
-  if(STATE.mod!==_lastMod){window.scrollTo(0,0);_lastMod=STATE.mod;}
+  if(!_sameMod){window.scrollTo(0,0);_lastMod=STATE.mod;}
   if(STATE.loading&&!STATE.user){app.appendChild(renderLoading());return;}
   if(!STATE.user){app.appendChild(renderLogin());return;}
   if(STATE.loading){app.appendChild(renderLoading());return;}
@@ -15809,6 +15817,8 @@ function render(){
   main.appendChild(content);
   layout.appendChild(main);
   app.appendChild(layout);
+  if(_keepMain)main.scrollTop=_keepMain;
+  if(_keepWin)window.scrollTo(0,_keepWin);
   if(STATE.showMobileNav)app.appendChild(el("div",{cls:"mob-backdrop mob-open",onClick:()=>set({showMobileNav:false})}));
   if(STATE.kpiPropModal)app.appendChild(renderKpiProposalModal());
   if(STATE.cmModal)app.appendChild(renderCanmedsModal());
