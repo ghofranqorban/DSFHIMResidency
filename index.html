@@ -474,6 +474,14 @@ th.ov-th{text-align:center;}
 .rb-wk{font-size:.56rem;font-weight:700;opacity:.62;letter-spacing:.03em;font-style:normal;}
 .rb-flag{position:absolute;top:2px;right:3px;width:0;height:0;border-left:7px solid transparent;border-top:7px solid #b52040;}
 .rb-flag.amber{border-top-color:#A47A28;}
+.rb-drift{position:absolute;bottom:3px;right:4px;width:8px;height:8px;border-radius:50%;background:#c96a4a;box-shadow:0 0 0 2px #FEFBF3;}
+.rb-pend{margin:0 0 18px;padding:14px 16px;background:rgba(201,106,74,.07);border-left:3px solid #c96a4a;border-radius:0 8px 8px 0;}
+.rb-pend h3{margin:0 0 2px;font-size:.88rem;font-weight:700;color:#1F1A12;}
+.rb-pend .sub{font-size:.76rem;color:rgba(31,26,18,.62);margin-bottom:10px;}
+.rb-pend .ln{display:flex;gap:10px;align-items:baseline;font-size:.8rem;padding:4px 0;border-top:1px solid rgba(31,26,18,.07);}
+.rb-pend .ln .nm{font-weight:600;min-width:170px;}
+.rb-pend .ln .was{color:rgba(31,26,18,.55);text-decoration:line-through;}
+.rb-pend .ln .now{font-weight:700;color:#8a3a20;}
 .rb-cell.off{opacity:.13;}
 .rb-cell.off:hover{box-shadow:inset 0 0 0 2px rgba(201,106,74,.4);opacity:.4;}
 .rb-grid tr.rb-cline th{background:#f1e7d6;border-bottom:1px solid rgba(31,26,18,.1);padding:5px 4px;text-transform:none;letter-spacing:0;}
@@ -1332,7 +1340,7 @@ let PLAN_AY_PICKED=false;
 function planSetYear(y){
   if(y===PLAN_AY||planYears().indexOf(y)<0)return;
   PLAN_AY=y;PLAN_AY_PICKED=true;
-  ROTA_PLAN={};PLAN_STATUS={};PLAN_STATE="idle";
+  ROTA_PLAN={};PLAN_STATUS={};PLAN_LIVE={};PLAN_STATE="idle";
   set({rbCell:null,rbBlock:null,rbPrefill:false});
 }
 // ROTA_PLAN[residentId][block] = [{seg,weekStart,weeks,rot,leaveWeeks,leavePos}] sorted by seg
@@ -1340,6 +1348,9 @@ let ROTA_PLAN={};
 // PLAN_STATUS[block] = {state,approved_at,published_at,pushed_at}
 let PLAN_STATUS={};
 let PLAN_STATE="idle"; // idle | loading | ready | error
+// PLAN_LIVE[residentId][block] = what `rotations` holds for PLAN_AY right now, in the same shape
+// as ROTA_PLAN. null when it could not be read, which switches the drift check off.
+let PLAN_LIVE={};
 const PLAN_FLOW=["draft","review","approved","published"];
 // Mirrors can_build_rota() / can_approve_rota() in the database. Kept role-for-role
 // identical so the UI never offers a button that RLS will reject: dio and ceo are
@@ -1363,12 +1374,16 @@ async function loadRotaPlan(){
   const ay=PLAN_AY;
   // 38 residents x 13 blocks is already past PostgREST's 1000-row cap once blocks split,
   // so page it and order by the unique key.
-  const[{data,error},{data:sdata,error:serr}]=await Promise.all([
+  const[{data,error},{data:sdata,error:serr},{data:ldata,error:lerr}]=await Promise.all([
     fetchAllRows(()=>sb.from("rota_plan")
       .select("resident_id,block_number,segment,week_start,weeks,rotation_name,leave_weeks,leave_position,note,source")
       .eq("academic_year",ay)
       .order("resident_id").order("block_number").order("segment")),
-    sb.from("rota_plan_block_status").select("*").eq("academic_year",ay)
+    sb.from("rota_plan_block_status").select("*").eq("academic_year",ay),
+    fetchAllRows(()=>sb.from("rotations")
+      .select("resident_id,block_number,segment,week_start,weeks,rotation_name,leave_weeks,leave_position")
+      .eq("academic_year",ay)
+      .order("resident_id").order("block_number").order("segment"))
   ]);
   // The year was switched while this was in flight: these rows belong to the other year.
   if(ay!==PLAN_AY){PLAN_STATE="idle";return loadRotaPlan();}
@@ -1394,6 +1409,20 @@ async function loadRotaPlan(){
   Object.keys(plan).forEach(rid=>Object.keys(plan[rid]).forEach(b=>plan[rid][b].sort((x,y)=>x.seg-y.seg)));
   const st={};
   (sdata||[]).forEach(r=>{st[r.block_number]=r;});
+  if(lerr){console.warn("rota_plan live compare load error",lerr.message);PLAN_LIVE=null;}
+  else{
+    const live={};
+    (ldata||[]).forEach(r=>{
+      if(!r.rotation_name)return;
+      const rid=r.resident_id,blk=String(r.block_number);
+      if(!live[rid])live[rid]={};
+      if(!live[rid][blk])live[rid][blk]=[];
+      live[rid][blk].push({seg:r.segment||1,weekStart:r.week_start||1,weeks:r.weeks||4,
+        rot:r.rotation_name,leaveWeeks:r.leave_weeks||0,leavePos:r.leave_position||"none"});
+    });
+    Object.keys(live).forEach(rid=>Object.keys(live[rid]).forEach(b=>live[rid][b].sort((x,y)=>x.seg-y.seg)));
+    PLAN_LIVE=live;
+  }
   ROTA_PLAN=plan;PLAN_STATUS=st;PLAN_STATE="ready";
   render();
 }
@@ -1447,6 +1476,61 @@ async function pushBlockLive(blk){
     {onConflict:"academic_year,block_number"});
   await loadRotaPlan();
   showToast("Block "+blk+" published — "+entries.length+" assignments are now live.","success");
+  return true;
+}
+// ── Edits to a block that is already live ──
+// Push Live copies a block once. After that the builder still lets the PD edit its cells, and
+// those edits land in the draft only, so the Master Rota tab goes on showing the old rotation.
+// planDrift() finds the residents whose draft block no longer matches the live copy, and
+// pushPlanChanges() writes just those across.
+function planSegKey(s){
+  return[s.seg,s.weekStart,s.weeks,s.rot,s.leaveWeeks||0,s.leaveWeeks?s.leavePos:"none"].join("|");
+}
+function planSegText(segs){
+  if(!segs||!segs.length)return"empty";
+  return segs.map(s=>{
+    const rot=ROT_ABBR[s.rot]||s.rot;
+    const part=segs.length>1||s.leaveWeeks||s.weeks<4?" ("+s.weeks+"w)":"";
+    const lv=s.leaveWeeks?(s.leavePos==="start"?"Leave "+s.leaveWeeks+"w + ":"")+rot+part+(s.leavePos==="end"?" + Leave "+s.leaveWeeks+"w":""):rot+part;
+    return lv;
+  }).join(" + ");
+}
+// Residents whose draft and live copy of a PUBLISHED block differ. Only residents the plan
+// already manages are compared: someone with no draft row anywhere this year (a late addition
+// entered straight into the live rota) is left alone, or a push would wipe their blocks.
+function planDrift(blk){
+  if(!PLAN_LIVE||planBlockState(blk)!=="published")return[];
+  const key=a=>(a||[]).map(planSegKey).join(";");
+  const ids={};
+  Object.keys(ROTA_PLAN).forEach(r=>{ids[r]=1;});
+  Object.keys(PLAN_LIVE).forEach(r=>{if(ROTA_PLAN[r])ids[r]=1;});
+  return Object.keys(ids).filter(rid=>
+    key((ROTA_PLAN[rid]||{})[String(blk)])!==key((PLAN_LIVE[rid]||{})[String(blk)])).map(Number);
+}
+async function pushPlanChanges(blk){
+  const ids=planDrift(blk);
+  if(!ids.length)return true;
+  const b=parseInt(blk),ay=PLAN_AY;
+  const entries=[];
+  ids.forEach(rid=>((ROTA_PLAN[rid]||{})[String(b)]||[]).forEach(s=>entries.push({
+    residentId:rid,block:b,segment:s.seg,weekStart:s.weekStart,weeks:s.weeks,
+    rotationName:s.rot,leaveWeeks:s.leaveWeeks,leavePosition:s.leavePos})));
+  // Write the new segments first, then remove any old segment past the new count, so a
+  // failure part-way never leaves a resident with a hole in the live rota.
+  if(entries.length&&!await saveRotaCells(entries,ay))return false;
+  for(const rid of ids){
+    const n=(((ROTA_PLAN[rid]||{})[String(b)])||[]).length;
+    const{error}=await sb.from("rotations").delete()
+      .eq("resident_id",rid).eq("academic_year",ay).eq("block_number",b).gt("segment",n);
+    if(error){showToast("Could not remove the old rotation: "+error.message,"error");await loadRotaPlan();return false;}
+  }
+  await sb.from("rota_plan_block_status").upsert(
+    {academic_year:ay,block_number:b,state:"published",pushed_at:new Date().toISOString(),updated_at:new Date().toISOString()},
+    {onConflict:"academic_year,block_number"});
+  await loadRotations();
+  if(ay===CURRENT_ACADEMIC_YEAR+1)await loadNextRota();
+  await loadRotaPlan();
+  showToast("Block "+b+" updated — "+ids.length+" change"+(ids.length===1?"":"s")+" are now live.","success");
   return true;
 }
 // Weeks per rotation that the DRAFT plan adds, for one resident.
@@ -11837,6 +11921,7 @@ function renderRotaBuilder(){
   let rows=roster.filter(r=>lvlFilter==="all"||planLevel(r)===lvlFilter);
   if(STATE.rbShort)rows=rows.filter(r=>blocks.some(b=>flagsFor(r.id,b)));
 
+  const drift={};blocks.forEach(b=>{drift[b]=planDrift(b);});
   const counts={published:0,approved:0,review:0,draft:0};
   blocks.forEach(b=>{counts[planBlockState(b)]++;});
 
@@ -11876,7 +11961,14 @@ function renderRotaBuilder(){
         "Publish Block "+selBlk+"? This writes the block into the live rota for "+ayLabel(PLAN_AY)+". Other blocks stay in draft.",
         ()=>pushBlockLive(selBlk),"Publish & Push Live","primary")},"Publish Block "+selBlk));
     }
-    if(st==="published")actions.appendChild(el("div",{st:{fontSize:".76rem",color:"#26523A",fontWeight:"600",padding:"8px 0"}},"Block "+selBlk+" is live."));
+    if(st==="published"){
+      const nd=planDrift(selBlk).length;
+      actions.appendChild(el("div",{st:{fontSize:".76rem",color:"#26523A",fontWeight:"600",padding:"8px 0"}},
+        "Block "+selBlk+" is live"+(nd?" — "+nd+" edit"+(nd===1?"":"s")+" not live yet.":".")));
+      if(nd&&canApprove)actions.appendChild(el("button",{cls:"sbtn primary",onClick:()=>showConfirm(
+        "Push "+nd+" edit"+(nd===1?"":"s")+" to the live rota for Block "+selBlk+"? Residents and the Master Rota tab will show the new rotation"+(nd===1?"":"s")+". Everyone else in the block is left as they are.",
+        ()=>pushPlanChanges(selBlk),"Push changes live","primary")},"Push "+nd+" change"+(nd===1?"":"s")+" live"));
+    }
   }else{
     actions.appendChild(el("div",{st:{fontSize:".76rem",color:"rgba(31,26,18,.4)",padding:"8px 0"}},"Select a block below to approve or publish it."));
   }
@@ -11890,9 +11982,25 @@ function renderRotaBuilder(){
     const st=planBlockState(b);
     strip.appendChild(el("div",{cls:"rb-"+st+(selBlk===b?" sel":""),
       onClick:()=>set({rbBlock:selBlk===b?null:b})},
-      "B"+b+(st==="draft"?"":" · "+stateLabel[st])));
+      "B"+b+(st==="draft"?"":" · "+stateLabel[st]),(drift[b].length?el("span",{cls:"rb-drift",st:{position:"static",display:"inline-block",marginLeft:"6px",verticalAlign:"middle",width:"7px",height:"7px"},title:drift[b].length+" edit(s) not live yet"}):null)));
   });
   secA.appendChild(strip);
+  if(selBlk&&drift[selBlk]&&drift[selBlk].length){
+    const pend=el("div",{cls:"rb-pend"},
+      el("h3",null,"Edited since Block "+selBlk+" went live"),
+      el("div",{cls:"sub"},canApprove
+        ?"These changes are saved in the plan only. Residents and the Master Rota tab still show the old rotation until you push them."
+        :"These changes are saved in the plan only. The PD or Deputy PD needs to push them live."));
+    drift[selBlk].forEach(rid=>{
+      const r=resById(rid);
+      pend.appendChild(el("div",{cls:"ln"},
+        el("span",{cls:"nm"},r?dname(r.name):"Resident "+rid),
+        el("span",{cls:"was"},planSegText((PLAN_LIVE[rid]||{})[String(selBlk)])),
+        el("span",null,"\u2192"),
+        el("span",{cls:"now"},planSegText((ROTA_PLAN[rid]||{})[String(selBlk)]))));
+    });
+    secA.appendChild(pend);
+  }
   wrap.appendChild(secA);
 
   // ── the grid ──
@@ -11989,6 +12097,7 @@ function renderRotaBuilder(){
           kids.push(el("div",{cls:"rb-seg"},...parts));
         }
         if(flag)kids.push(el("i",{cls:"rb-flag"+(flag==="amber"?" amber":"")}));
+        if(drift[b].indexOf(Number(r.id))>=0)kids.push(el("i",{cls:"rb-drift",title:"Edited after publishing \u2014 not live yet"}));
         const off=rotFilter&&!(rotFilter===RB_AWAY?segs.some(rbIsAwaySeg):segs.some(s=>s.rot===rotFilter));
         const bg=off?"":(plain?rotColor(segs[0].rot).bg:(selBlk===b?"rgba(201,106,74,.05)":""));
         tr.appendChild(el("td",{st:bg?{background:bg}:{}},
@@ -12226,7 +12335,7 @@ function rbCellPanel(){
         rotList),
       rail),
     el("div",{cls:"rb-foot"},
-      el("div",{st:{fontSize:".78rem",color:"rgba(31,26,18,.5)"}},"Saved to the plan — not live until Push Live."),
+      el("div",{st:{fontSize:".78rem",color:"rgba(31,26,18,.5)"}},(planBlockState(blk)==="published"?"Saved to the plan — this block is live, so push the change from Block status.":"Saved to the plan — not live until Push Live.")),
       el("div",{st:{display:"flex",gap:"8px"}},
         el("button",{cls:"sbtn ghost",onClick:async()=>{if(await savePlanCell(rid,blk,[]))set({rbCell:null});}},"Clear cell"),
         el("button",{cls:"sbtn primary",onClick:rbSaveCell},"Save"))));
