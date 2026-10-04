@@ -6823,12 +6823,59 @@ async function loadQuizPast(ay){
   render();
 }
 function quizList(){return quizAY()===CURRENT_ACADEMIC_YEAR?QUIZZES:(QUIZ_PAST.ay===quizAY()?QUIZ_PAST.list:[]);}
-// Last year's cohort at the level they held then, including the R4s who have since graduated.
-function quizPastRoster(ay){
-  const all=brRoster(ay),u=STATE.user;
-  if(isPdRole(u.role)||u.role==="chief")return all;
-  const ids=new Set(visRes().map(r=>r.id));
-  return all.filter(r=>ids.has(r.id));
+// The whole cohort of a quiz's year. Averages and the highest scores are always taken over it,
+// never over the few residents a mentor happens to look after.
+function quizCohort(ay){return ay===CURRENT_ACADEMIC_YEAR?RESIDENTS:brRoster(ay);}
+// The three highest scores with everyone who earned each, so a tie shares its place.
+function quizTop(q,cohort){
+  const by={};
+  cohort.forEach(r=>{const x=q.sc[r.id];if(x!=null)(by[x]=by[x]||[]).push(dname(r.name));});
+  return Object.keys(by).map(Number).sort((a,b)=>b-a).slice(0,3)
+    .map(x=>({score:x,names:by[x].sort((a,b)=>a.localeCompare(b))}));
+}
+function quizTopEl(q,cohort){
+  const top=quizTop(q,cohort);
+  if(!top.length)return null;
+  return el("div",{st:{marginTop:"12px",paddingTop:"10px",borderTop:"1px solid rgba(31,26,18,.08)"}},
+    el("div",{st:{fontSize:".66rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:"rgba(31,26,18,.55)",marginBottom:"6px"}},"Highest scores"),
+    ...top.map((t,i)=>el("div",{st:{display:"flex",gap:"10px",fontSize:".82rem",padding:"2px 0"}},
+      el("span",{st:{fontWeight:"700",minWidth:"52px",color:i===0?"#A47A28":"#1F1A12"}},t.score+"/"+q.max),
+      el("span",{st:{color:"rgba(31,26,18,.78)"}},t.names.join(", ")))));
+}
+// A consultant's own mentored residents, with each one's mark on every published quiz of the
+// year on show. This is the one place a consultant sees individual marks without being the
+// quiz's assessor.
+function quizMentorSection(QL,cohort){
+  if(!isConsultant())return null;
+  const cid=STATE.user.cid;
+  const mine=sortByLevel(cohort.filter(r=>MENTORS[r.id]===cid));
+  const pub=QL.filter(q=>q.published).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const pctBadge=pct=>el("span",{cls:"bdg",st:{background:pct>=80?"#dcfce7":pct>=60?"#fef9c3":"#fee2e2",color:pct>=80?"#166534":pct>=60?"#854d0e":"#991b1b"}},pct+"%");
+  return el("div",{cls:"card",st:{marginTop:"22px"}},
+    el("div",{cls:"card-title"},"Your mentored residents"),
+    !mine.length?el("p",{cls:"sh"},"Currently no resident is assigned under your name."):
+    !pub.length?el("p",{cls:"sh"},"No published quizzes yet."):
+    el("div",{cls:"tbl-wrap"},el("table",null,
+      el("thead",null,el("tr",null,
+        el("th",{cls:"sticky-col"},"Resident"),el("th",null,"Level"),
+        ...pub.map(q=>el("th",{st:{textAlign:"center"}},q.title,el("div",{st:{fontWeight:"400",fontSize:".7rem"}},"/"+q.max))),
+        el("th",{st:{textAlign:"center"}},"Average"))),
+      el("tbody",null,...mine.map(r=>{
+        const got=pub.filter(q=>q.sc[r.id]!=null);
+        const avg=got.length?Math.round(got.reduce((a,q)=>a+Math.round(q.sc[r.id]/q.max*100),0)/got.length):null;
+        return el("tr",null,
+          el("td",{cls:"sticky-col"},el("div",{cls:"flex-gap"},avEl(r),el("span",{cls:"name",st:{fontSize:".84rem"}},r.name))),
+          el("td",null,levelBadge(r.level)),
+          ...pub.map(q=>el("td",{st:{textAlign:"center"}},q.sc[r.id]!=null?el("div",null,el("b",null,q.sc[r.id]),el("div",{st:{marginTop:"2px"}},pctBadge(Math.round(q.sc[r.id]/q.max*100)))):el("span",{cls:"sh"},"\u2014"))),
+          el("td",{st:{textAlign:"center"}},avg!=null?pctBadge(avg):el("span",{cls:"sh"},"\u2014")));
+      })))));
+}
+// Who may open a quiz's table of individual marks: PD, deputy, chief, and the consultant the quiz
+// is assigned to (who has to enter the marks). Every other consultant sees the card only.
+function quizCanOpen(q){
+  const u=STATE.user;if(!u)return false;
+  if(canEdit())return true;
+  return u.role==="consultant"&&q.assigned_mentor_id!=null&&q.assigned_mentor_id===u.cid;
 }
 function quizAYBar(sel,forResident){
   const cur=CURRENT_ACADEMIC_YEAR,past=sel!==cur;
@@ -6859,10 +6906,12 @@ function renderQuiz(){
   if(isResident()){return renderQuizResident();}
   const qAY=quizAY(),isPast=qAY!==CURRENT_ACADEMIC_YEAR;
   if(isPast&&QUIZ_PAST.ay!==qAY&&QUIZ_PAST.state==="idle")loadQuizPast(qAY);
-  const QL=quizList();
-  const vr=isPast?quizPastRoster(qAY):visRes();
+  const cohort=quizCohort(qAY);
+  // A consultant sees published quizzes, plus drafts of the ones assigned to them.
+  const QL=quizList().filter(q=>q.published||quizCanOpen(q));
+  const vr=cohort;
   const selQId=STATE.quizSelQuiz;
-  const selQ=selQId?QL.find(q=>q.id===selQId):null;
+  const selQ=selQId?QL.find(q=>q.id===selQId&&quizCanOpen(q)):null;
   if(selQ){
     // ── Quiz detail view: all residents, mark entry ──
     // Global edit: PD or quiz's assigned assessor can edit marks for all residents
@@ -6895,7 +6944,7 @@ function renderQuiz(){
             showConfirm('Delete "'+selQ.title+'" and all its scores? This cannot be undone.',async()=>{
               const{error}=await sb.from("quizzes").delete().eq("id",selQ.id);
               if(error){showToast("Could not delete: "+error.message);return;}
-              const idx=QL.indexOf(selQ);if(idx>-1)QL.splice(idx,1);set({quizSelQuiz:null});
+              const all=quizList(),idx=all.indexOf(selQ);if(idx>-1)all.splice(idx,1);set({quizSelQuiz:null});
             },"Delete","danger");
           }},"Delete Quiz"):null
         )
@@ -6993,7 +7042,7 @@ function renderQuiz(){
         el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Quiz Marks"),
         el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+qAY+"-"+(qAY+1).toString().slice(2)+" · "+QL.length+" quizzes")
       ),
-      !isPast&&QUIZZES.some(q=>q.published)?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem",flexShrink:"0"},onClick:exportQuizAll},"Export All Excel"):null,
+      canEdit()&&!isPast&&QUIZZES.some(q=>q.published)?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem",flexShrink:"0"},onClick:exportQuizAll},"Export All Excel"):null,
       isPD()&&(!isPast||QUIZ_PAST.ay===qAY)?el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"999px",padding:"9px 22px",fontSize:".84rem",fontWeight:"600",cursor:"pointer",flexShrink:"0"},onClick:()=>set({quizShowAdd:!STATE.quizShowAdd})},STATE.quizShowAdd?"Cancel":"+ New Quiz"):null
     ),
     quizAYBar(qAY),
@@ -7031,7 +7080,7 @@ function renderQuiz(){
           if(!blk){showToast("Choose the block this quiz was held in","warning");return;}
           const{data,error}=await sb.from("quizzes").insert({title:t,date:d,block_number:blk,max_score:m,published:false,assigned_mentor_id:mid?parseInt(mid):null,academic_year:qAY}).select().single();
           if(error){showToast("Could not save quiz: "+error.message);return;}
-          QL.push({id:data.id,title:t,date:d,block:blk,max:m,published:false,assigned_mentor_id:mid?parseInt(mid):null,sc:{}});
+          quizList().push({id:data.id,title:t,date:d,block:blk,max:m,published:false,assigned_mentor_id:mid?parseInt(mid):null,sc:{}});
           set({quizShowAdd:false});
         }},"Save Quiz"),
         el("button",{cls:"sbtn ghost",onClick:()=>set({quizShowAdd:false})},"Cancel")
@@ -7044,10 +7093,12 @@ function renderQuiz(){
         const entered=vr.filter(r=>q.sc[r.id]!=null).length;
         const avg=entered?Math.round(vr.filter(r=>q.sc[r.id]!=null).reduce((a,r)=>a+Math.round(q.sc[r.id]/q.max*100),0)/entered):null;
         const assignedMentor=q.assigned_mentor_id?consultById(q.assigned_mentor_id):null;
-        return el("div",{cls:"card",st:{cursor:"pointer",border:"2px solid #e2e8f0",transition:"border-color .15s"},
+        const open=quizCanOpen(q);
+        return el("div",open?{cls:"card",st:{cursor:"pointer",border:"2px solid #e2e8f0",transition:"border-color .15s"},
           onClick:()=>set({quizSelQuiz:q.id}),
           onMouseenter:function(){this.style.borderColor="#4f46e5";},
-          onMouseleave:function(){this.style.borderColor="rgba(31,26,18,.1)";}},
+          onMouseleave:function(){this.style.borderColor="rgba(31,26,18,.1)";}}
+          :{cls:"card",st:{border:"2px solid #e2e8f0"}},
           el("div",{cls:"flex-gap",st:{marginBottom:"10px"}},
             el("div",{st:{flex:"1"}},
               el("div",{cls:"name",st:{fontSize:".95rem"}},q.title),
@@ -7069,10 +7120,12 @@ function renderQuiz(){
               el("div",{cls:"sh",st:{fontSize:".7rem"}},"Assessor")
             )
           ),
-          el("div",{cls:"sh",st:{fontSize:".72rem",marginTop:"8px",textAlign:"right"}},"Click to open →")
+          quizTopEl(q,cohort),
+          open?el("div",{cls:"sh",st:{fontSize:".72rem",marginTop:"8px",textAlign:"right"}},"Click to open →"):null
         );
       })
-    )
+    ),
+    isPast&&QUIZ_PAST.ay!==qAY?null:quizMentorSection(QL,cohort)
   );
 }
 function renderQuizResident(){
@@ -7111,7 +7164,8 @@ function renderQuizResident(){
                 el("span",{cls:"bdg",st:{background:"rgba(38,82,58,.12)",color:"#26523A",marginLeft:"auto"}},Math.round(sc/q.max*100)+"%")
               ),
               pbar(Math.round(sc/q.max*100),"#0ea5e9")
-            ):el("span",{cls:"sh"},"Score not entered yet")
+            ):el("span",{cls:"sh"},"Score not entered yet"),
+            quizTopEl(q,quizCohort(qAY))
           );
         })
       )
