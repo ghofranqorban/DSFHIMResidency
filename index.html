@@ -4199,7 +4199,15 @@ function brComputeRankings(){
 function brRankVisible(){
   if(brIsLead())return true;
   const p=brPeriod();
-  return !brEnded(p)||brRevealed(brRow(p));
+  if(!brEnded(p)||brRevealed(brRow(p)))return true;
+  // Once the quarter has ended the server hands out per-candidate counts only while voting is
+  // open (br_public). So the standings show while voting is open AND only if the counts really
+  // came back: a ranking built without the votes would be wrong, and worse than none.
+  return brVotingIsOpen()&&brTallyHasCounts();
+}
+function brTallyHasCounts(){
+  const t=brTally();
+  return !!t&&(t.total===0||Object.keys(t.senior||{}).length>0||Object.keys(t.junior||{}).length>0);
 }
 function brVotingIsOpen(){
   if(!BEST_STATUS||!BEST_STATUS.voting_open)return false;
