@@ -174,6 +174,36 @@ label{display:block;font-size:.78rem;font-weight:600;color:rgba(31,26,18,.55);ma
 /* ── Layout helpers ── */
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
 .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+/* Quiz Marks ledger: one typeset row per quiz, hairlines instead of boxes */
+.qa{border-top:1px solid rgba(31,26,18,.1);}
+.qa-row{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr) minmax(0,1.7fr) 18px;gap:28px;align-items:start;padding:24px 10px;border-bottom:1px solid rgba(31,26,18,.08);transition:background .15s;}
+.qa-row.open{cursor:pointer;}
+.qa-row.open:hover,.qa-row.open:focus-visible{background:rgba(201,106,74,.04);outline:none;}
+.qa-row h3{font-family:'Playfair Display',Georgia,serif;font-size:1.15rem;font-weight:700;color:#1F1A12;line-height:1.25;margin-bottom:6px;}
+.qa-meta{font-size:.78rem;color:#5C5345;line-height:1.9;}
+.qa-st{display:inline-block;font-size:.7rem;font-weight:700;padding:2px 10px;border-radius:999px;white-space:nowrap;vertical-align:middle;margin-left:6px;}
+.qa-st.pub{background:rgba(127,184,156,.2);color:#26523A;}
+.qa-st.draft{background:rgba(164,122,40,.14);color:#6a4c10;}
+.qa-fig{display:grid;grid-template-columns:auto auto 1fr;gap:22px;}
+.qa-fig dt{font-size:.66rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5C5345;margin-bottom:4px;}
+.qa-fig dd{font-family:'Playfair Display',Georgia,serif;font-size:1.5rem;font-weight:700;color:#1F1A12;letter-spacing:-.02em;line-height:1.1;}
+.qa-fig dd small{font-size:.8rem;font-weight:400;color:#6E6455;letter-spacing:0;}
+.qa-fig dd.txt{font-family:'Inter','Segoe UI',system-ui,sans-serif;font-size:.86rem;font-weight:600;letter-spacing:0;color:#443C2F;padding-top:6px;}
+/* Top 3: numbered rows, a fine gold rule under 1st, and name tags for 1st only */
+.qh{display:grid;gap:10px;}
+.qh-row{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:baseline;}
+.qh-n{font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:1.2rem;line-height:1;color:#5C5345;}
+.qh-n sup{font-size:.5em;font-weight:400;margin-left:1px;vertical-align:super;}
+.qh-row.c1{align-items:center;padding-bottom:10px;border-bottom:1px solid rgba(164,122,40,.4);}
+.qh-row.c1 .qh-n{font-size:2rem;color:#7a5818;}
+.qh-names{font-size:.84rem;line-height:1.55;color:#443C2F;}
+.qh-names>span+span::before{content:"\00b7";margin:0 7px;color:#6E6455;font-weight:400;}
+.qh-tags{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.qh-tag{display:inline-flex;align-items:center;gap:8px;padding:4px 14px 4px 5px;border-radius:999px;background:rgba(203,161,85,.26);font-size:.9rem;font-weight:700;color:#1F1A12;white-space:nowrap;}
+.qh-tag i{font-style:normal;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:rgba(203,161,85,.5);color:#5e430f;font-size:.78rem;font-weight:700;letter-spacing:.02em;}
+.qa-none{font-size:.8rem;color:#6E6455;}
+.qa-go{font-size:1.4rem;color:#6E6455;line-height:1;padding-top:2px;}
+@media(max-width:700px){.qa-row{grid-template-columns:1fr 18px;gap:14px;}.qa-fig,.qh,.qa-none{grid-column:1;}.qa-go{grid-row:1;grid-column:2;}}
 .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
 .flex{display:flex;align-items:center;}
 .flex-gap{display:flex;align-items:center;gap:8px;}
@@ -6833,14 +6863,23 @@ function quizTop(q,cohort){
   return Object.keys(by).map(Number).sort((a,b)=>b-a).slice(0,3)
     .map(x=>({score:x,names:by[x].sort((a,b)=>a.localeCompare(b))}));
 }
-function quizTopEl(q,cohort){
+const QZ_ORD=["st","nd","rd"];
+function quizPodium(q,cohort){
   const top=quizTop(q,cohort);
   if(!top.length)return null;
+  // Every name is shown: a tie for a place lists everyone who earned it.
+  return el("div",{cls:"qh"},...top.map((t,i)=>el("div",{cls:"qh-row c"+(i+1)},
+    el("div",{cls:"qh-n"},String(i+1),el("sup",null,QZ_ORD[i])),
+    i===0
+      ?el("div",{cls:"qh-tags"},...t.names.map(n=>el("span",{cls:"qh-tag"},el("i",null,ini(n)),n)))
+      :el("div",{cls:"qh-names"},...t.names.map(n=>el("span",null,n))))));
+}
+// With its own heading, for the resident's card.
+function quizTopEl(q,cohort){
+  const l=quizPodium(q,cohort);
+  if(!l)return null;
   return el("div",{st:{marginTop:"12px",paddingTop:"10px",borderTop:"1px solid rgba(31,26,18,.08)"}},
-    el("div",{st:{fontSize:".66rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:"rgba(31,26,18,.55)",marginBottom:"6px"}},"Top 3"),
-    ...top.map((t,i)=>el("div",{st:{display:"flex",gap:"10px",fontSize:".82rem",padding:"2px 0"}},
-      el("span",{st:{fontWeight:"700",minWidth:"30px",color:i===0?"#A47A28":"#1F1A12"}},["1st","2nd","3rd"][i]),
-      el("span",{st:{color:"rgba(31,26,18,.78)"}},t.names.join(", ")))));
+    el("div",{st:{fontSize:".66rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:"#5C5345",marginBottom:"10px"}},"Top 3"),l);
 }
 // A consultant's own mentored residents, with each one's mark on every published quiz of the
 // year on show. This is the one place a consultant sees individual marks without being the
@@ -7088,40 +7127,26 @@ function renderQuiz(){
     ):null,
     isPast&&QUIZ_PAST.ay!==qAY?el("div",{cls:"card"},el("p",{cls:"sh"},QUIZ_PAST.state==="error"?"Could not load last year\u2019s quizzes. Switch year and back to try again.":"Loading last year\u2019s quizzes\u2026")):
     QL.length===0?el("div",{cls:"card"},el("p",{cls:"sh"},isPast?"No quizzes were recorded for "+ayLabel(qAY)+".":"No quizzes yet — click + New Quiz to add one.")):
-    el("div",{cls:"grid-2",st:{gap:"14px"}},
+    el("div",{cls:"qa"},
       ...QL.map(q=>{
         const entered=vr.filter(r=>q.sc[r.id]!=null).length;
         const avg=entered?Math.round(vr.filter(r=>q.sc[r.id]!=null).reduce((a,r)=>a+Math.round(q.sc[r.id]/q.max*100),0)/entered):null;
         const assignedMentor=q.assigned_mentor_id?consultById(q.assigned_mentor_id):null;
         const open=quizCanOpen(q);
-        return el("div",open?{cls:"card",st:{cursor:"pointer",border:"2px solid #e2e8f0",transition:"border-color .15s"},
-          onClick:()=>set({quizSelQuiz:q.id}),
-          onMouseenter:function(){this.style.borderColor="#4f46e5";},
-          onMouseleave:function(){this.style.borderColor="rgba(31,26,18,.1)";}}
-          :{cls:"card",st:{border:"2px solid #e2e8f0"}},
-          el("div",{cls:"flex-gap",st:{marginBottom:"10px"}},
-            el("div",{st:{flex:"1"}},
-              el("div",{cls:"name",st:{fontSize:".95rem"}},q.title),
-              el("div",{cls:"sub"},(isPast?"Block "+q.block+" · ":"")+fmtDate(q.date)+" · Max: "+q.max)
-            ),
-            el("span",{cls:"bdg",st:{background:q.published?"#dcfce7":"#FEFBF3",color:q.published?"#166534":"#64748b"}},q.published?"Published":"Draft")
+        const go=()=>set({quizSelQuiz:q.id});
+        return el("div",open?{cls:"qa-row open",role:"button",tabindex:"0",onClick:go,onKeydown:e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}}}:{cls:"qa-row"},
+          el("div",null,
+            el("h3",null,q.title),
+            el("div",{cls:"qa-meta"},"Block "+q.block+" \u00b7 "+fmtDate(q.date)+" \u00b7 Max "+q.max,
+              el("span",{cls:"qa-st "+(q.published?"pub":"draft")},q.published?"Published":"Draft"))
           ),
-          el("div",{cls:"grid-3",st:{gap:"8px",fontSize:".82rem"}},
-            el("div",{st:{background:"#F6EFE2",borderRadius:"8px",padding:"6px 10px",textAlign:"center"}},
-              el("div",{st:{fontWeight:"700"}},entered+"/"+vr.length),
-              el("div",{cls:"sh",st:{fontSize:".7rem"}},"Scores")
-            ),
-            el("div",{st:{background:"#F6EFE2",borderRadius:"8px",padding:"6px 10px",textAlign:"center"}},
-              avg!=null?el("div",{st:{fontWeight:"700",color:avg>=80?"#26523A":avg>=60?"#A47A28":"#dc2626"}},avg+"%"):el("div",{cls:"sh"},"—"),
-              el("div",{cls:"sh",st:{fontSize:".7rem"}},"Avg")
-            ),
-            el("div",{st:{background:"#F6EFE2",borderRadius:"8px",padding:"6px 10px",textAlign:"center"}},
-              el("div",{st:{fontWeight:"700",fontSize:".78rem",color:"#0ea5e9"}},assignedMentor?assignedMentor.name.split(" ").pop():"PD/Chief"),
-              el("div",{cls:"sh",st:{fontSize:".7rem"}},"Assessor")
-            )
+          el("dl",{cls:"qa-fig"},
+            el("div",null,el("dt",null,"Average"),el("dd",null,avg!=null?avg+"%":"\u2014")),
+            el("div",null,el("dt",null,"Marked"),el("dd",null,String(entered),el("small",null,"/"+vr.length))),
+            el("div",null,el("dt",null,"Assessor"),el("dd",{cls:"txt"},assignedMentor?assignedMentor.name.split(" ").pop():"PD/Chief"))
           ),
-          quizTopEl(q,cohort),
-          open?el("div",{cls:"sh",st:{fontSize:".72rem",marginTop:"8px",textAlign:"right"}},"Click to open →"):null
+          quizPodium(q,cohort)||el("p",{cls:"qa-none"},"Top 3 appears once marks are entered."),
+          open?el("span",{cls:"qa-go","aria-hidden":"true"},"\u203a"):el("span")
         );
       })
     ),
