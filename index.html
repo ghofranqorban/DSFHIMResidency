@@ -6830,7 +6830,7 @@ function quizPastRoster(ay){
   const ids=new Set(visRes().map(r=>r.id));
   return all.filter(r=>ids.has(r.id));
 }
-function quizAYBar(sel){
+function quizAYBar(sel,forResident){
   const cur=CURRENT_ACADEMIC_YEAR,past=sel!==cur;
   const seg=y=>{const on=sel===y;
     return el("span",{st:{padding:"6px 17px",borderRadius:"9999px",fontSize:".78rem",fontWeight:on?"600":"500",color:on?"#FEFBF3":"rgba(31,26,18,.5)",background:on?"#c96a4a":"transparent",cursor:on?"default":"pointer",transition:"all .15s"},onClick:()=>{if(!on)quizSetAY(y);}},y+"-"+String(y+1).slice(2));};
@@ -6839,7 +6839,8 @@ function quizAYBar(sel){
       el("div",{st:{display:"inline-flex",border:"1px solid rgba(31,26,18,.12)",borderRadius:"9999px",padding:"3px",background:"rgba(31,26,18,.02)"}},seg(cur-1),seg(cur)),
       el("span",{st:{fontSize:".72rem",color:"rgba(31,26,18,.4)"}},past?"Last year":"Live year")),
     !past?null:el("div",{st:{marginTop:"12px",background:"rgba(201,106,74,.06)",borderLeft:"3px solid #c96a4a",borderRadius:"0 8px 8px 0",padding:"11px 16px",fontSize:".78rem",color:"rgba(31,26,18,.72)"}},
-      "You are looking at "+ayLabel(sel)+". Marks you change here count toward that year\u2019s Best Resident quarters."));
+      forResident?"You are looking at "+ayLabel(sel)+". Only published quizzes are shown."
+        :"You are looking at "+ayLabel(sel)+". Marks you change here count toward that year\u2019s Best Resident quarters."));
 }
 function renderQuiz(){
   const u=STATE.user;
@@ -6993,11 +6994,20 @@ function renderQuiz(){
         el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+qAY+"-"+(qAY+1).toString().slice(2)+" · "+QL.length+" quizzes")
       ),
       !isPast&&QUIZZES.some(q=>q.published)?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem",flexShrink:"0"},onClick:exportQuizAll},"Export All Excel"):null,
-      isPD()&&!isPast?el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"999px",padding:"9px 22px",fontSize:".84rem",fontWeight:"600",cursor:"pointer",flexShrink:"0"},onClick:()=>set({quizShowAdd:!STATE.quizShowAdd})},STATE.quizShowAdd?"Cancel":"+ New Quiz"):null
+      isPD()&&(!isPast||QUIZ_PAST.ay===qAY)?el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"999px",padding:"9px 22px",fontSize:".84rem",fontWeight:"600",cursor:"pointer",flexShrink:"0"},onClick:()=>set({quizShowAdd:!STATE.quizShowAdd})},STATE.quizShowAdd?"Cancel":"+ New Quiz"):null
     ),
     quizAYBar(qAY),
-    STATE.quizShowAdd&&isPD()&&!isPast?el("div",{cls:"card"},
-      el("div",{cls:"card-title"},"New Quiz"),
+    STATE.quizShowAdd&&isPD()&&(!isPast||QUIZ_PAST.ay===qAY)?el("div",{cls:"card"},
+      el("div",{cls:"card-title"},isPast?"New Quiz \u2014 "+ayLabel(qAY):"New Quiz"),
+      // A quiz held last year must be filed under the block it was held in: that block decides
+      // which Best Resident quarter it counts toward.
+      isPast?el("div",{st:{marginBottom:"10px"}},
+        el("label",null,"Block it was held in"),
+        el("select",{id:"qz_block"},
+          el("option",{value:""},"\u2014 choose a block \u2014"),
+          ...ROTA_PERIODS.map((_,i)=>el("option",{value:String(i+1)},"Block "+(i+1)+" \u00b7 "+blockLabel(i+1,qAY)))
+        )
+      ):null,
       el("div",{cls:"grid-3",st:{marginBottom:"10px"}},
         el("div",null,el("label",null,"Title"),el("input",{id:"qz_title",placeholder:"Quiz title"})),
         el("div",null,el("label",null,"Date"),el("input",{type:"date",id:"qz_date"})),
@@ -7017,9 +7027,11 @@ function renderQuiz(){
           const m=parseInt(document.getElementById("qz_max").value)||20;
           const mid=document.getElementById("qz_mentor").value;
           if(!t||!d)return;
-          const{data,error}=await sb.from("quizzes").insert({title:t,date:d,block_number:CURRENT_PERIOD,max_score:m,published:false,assigned_mentor_id:mid?parseInt(mid):null,academic_year:CURRENT_ACADEMIC_YEAR}).select().single();
+          const blk=isPast?(parseInt(document.getElementById("qz_block").value)||0):CURRENT_PERIOD;
+          if(!blk){showToast("Choose the block this quiz was held in","warning");return;}
+          const{data,error}=await sb.from("quizzes").insert({title:t,date:d,block_number:blk,max_score:m,published:false,assigned_mentor_id:mid?parseInt(mid):null,academic_year:qAY}).select().single();
           if(error){showToast("Could not save quiz: "+error.message);return;}
-          QUIZZES.push({id:data.id,title:t,date:d,block:CURRENT_PERIOD,max:m,published:false,assigned_mentor_id:mid?parseInt(mid):null,sc:{}});
+          QL.push({id:data.id,title:t,date:d,block:blk,max:m,published:false,assigned_mentor_id:mid?parseInt(mid):null,sc:{}});
           set({quizShowAdd:false});
         }},"Save Quiz"),
         el("button",{cls:"sbtn ghost",onClick:()=>set({quizShowAdd:false})},"Cancel")
@@ -7067,25 +7079,31 @@ function renderQuizResident(){
   const u=STATE.user;
   const res=resById(u.rid);
   if(!res)return el("div",null,"Error");
-  const pubQ=QUIZZES.filter(q=>q.published);
+  // Live year, or last year (a quarter's quizzes must not vanish when the year rolls over).
+  const qAY=quizAY(),isPast=qAY!==CURRENT_ACADEMIC_YEAR;
+  if(isPast&&QUIZ_PAST.ay!==qAY&&QUIZ_PAST.state==="idle")loadQuizPast(qAY);
+  const pastPending=isPast&&QUIZ_PAST.ay!==qAY;
+  const pubQ=quizList().filter(q=>q.published);
   return el("div",{cls:"content"},
     el("div",{st:{marginBottom:"24px"}},
       el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Assessment"),
       el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"My Quiz Marks"),
-      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2))
+      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+qAY+"-"+(qAY+1).toString().slice(2))
     ),
+    quizAYBar(qAY,true),
     el("div",{cls:"card"},
       el("div",{cls:"flex-gap",st:{marginBottom:"14px"}},
         avEl(res),
         el("div",null,el("div",{cls:"name"},res.name),el("div",{cls:"sub"},res.level))
       ),
-      pubQ.length===0?el("p",{cls:"sh"},"No published quizzes yet."):
+      pastPending?el("p",{cls:"sh"},QUIZ_PAST.state==="error"?"Could not load last year\u2019s quizzes. Switch year and back to try again.":"Loading last year\u2019s quizzes\u2026"):
+      pubQ.length===0?el("p",{cls:"sh"},isPast?"No published quizzes for "+ayLabel(qAY)+".":"No published quizzes yet."):
       el("div",null,
         ...pubQ.map(q=>{
           const sc=q.sc[res.id];
           return el("div",{st:{border:"1px solid #e2e8f0",borderRadius:"10px",padding:"14px",marginBottom:"10px"}},
             el("div",{cls:"name"},q.title),
-            el("div",{cls:"sub",st:{marginBottom:"8px"}},fmtDate(q.date)+" · Max: "+q.max),
+            el("div",{cls:"sub",st:{marginBottom:"8px"}},(isPast?"Block "+q.block+" · ":"")+fmtDate(q.date)+" · Max: "+q.max),
             sc!=null?el("div",null,
               el("div",{cls:"flex-gap",st:{marginBottom:"6px"}},
                 el("span",{cls:"statval",st:{fontSize:"1.3rem"}},sc),
