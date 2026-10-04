@@ -6826,7 +6826,7 @@ function quizList(){return quizAY()===CURRENT_ACADEMIC_YEAR?QUIZZES:(QUIZ_PAST.a
 // The whole cohort of a quiz's year. Averages and the highest scores are always taken over it,
 // never over the few residents a mentor happens to look after.
 function quizCohort(ay){return ay===CURRENT_ACADEMIC_YEAR?RESIDENTS:brRoster(ay);}
-// The three highest scores with everyone who earned each, so a tie shares its place.
+// The top three places with everyone who earned each. A tie shares its place; scores are not shown.
 function quizTop(q,cohort){
   const by={};
   cohort.forEach(r=>{const x=q.sc[r.id];if(x!=null)(by[x]=by[x]||[]).push(dname(r.name));});
@@ -6837,9 +6837,9 @@ function quizTopEl(q,cohort){
   const top=quizTop(q,cohort);
   if(!top.length)return null;
   return el("div",{st:{marginTop:"12px",paddingTop:"10px",borderTop:"1px solid rgba(31,26,18,.08)"}},
-    el("div",{st:{fontSize:".66rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:"rgba(31,26,18,.55)",marginBottom:"6px"}},"Highest scores"),
+    el("div",{st:{fontSize:".66rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:"rgba(31,26,18,.55)",marginBottom:"6px"}},"Top 3"),
     ...top.map((t,i)=>el("div",{st:{display:"flex",gap:"10px",fontSize:".82rem",padding:"2px 0"}},
-      el("span",{st:{fontWeight:"700",minWidth:"52px",color:i===0?"#A47A28":"#1F1A12"}},t.score+"/"+q.max),
+      el("span",{st:{fontWeight:"700",minWidth:"30px",color:i===0?"#A47A28":"#1F1A12"}},["1st","2nd","3rd"][i]),
       el("span",{st:{color:"rgba(31,26,18,.78)"}},t.names.join(", ")))));
 }
 // A consultant's own mentored residents, with each one's mark on every published quiz of the
