@@ -15960,13 +15960,19 @@ function renderOncall(){
     }
     const blkEntries=ocData().filter(e=>e.block_number===blk);
     const allEntries=ocData();
-    const resStats=ocRoster().map(r=>({
-      res:r,
-      bReg:blkEntries.filter(e=>e.resident_id===r.id&&!e.is_extra).length,
-      bExtra:blkEntries.filter(e=>e.resident_id===r.id&&e.is_extra).length,
-      aReg:allEntries.filter(e=>e.resident_id===r.id&&!e.is_extra).length,
-      aExtra:allEntries.filter(e=>e.resident_id===r.id&&e.is_extra).length,
-    })).filter(s=>s.bReg+s.bExtra+s.aReg+s.aExtra>0)
+    // Regular shifts split Sun\u2013Thu (weekday) / Fri\u2013Sat (weekend); wd + we always equals Regular.
+    const regOf=(rows,rid)=>rows.filter(e=>(rid==null||e.resident_id===rid)&&!e.is_extra);
+    const weOf=rows=>rows.filter(e=>isWeekendDate(e.schedule_date)).length;
+    const resStats=ocRoster().map(r=>{
+      const bR=regOf(blkEntries,r.id),aR=regOf(allEntries,r.id);
+      return {
+        res:r,
+        bReg:bR.length,bWe:weOf(bR),bWd:bR.length-weOf(bR),
+        bExtra:blkEntries.filter(e=>e.resident_id===r.id&&e.is_extra).length,
+        aReg:aR.length,aWe:weOf(aR),aWd:aR.length-weOf(aR),
+        aExtra:allEntries.filter(e=>e.resident_id===r.id&&e.is_extra).length,
+      };
+    }).filter(s=>s.bReg+s.bExtra+s.aReg+s.aExtra>0)
        .sort((a,b)=>(_LVL_ORD[a.res.level]??9)-(_LVL_ORD[b.res.level]??9)||a.res.name.localeCompare(b.res.name));
     const totBReg=blkEntries.filter(e=>!e.is_extra).length;
     const totBExtra=blkEntries.filter(e=>e.is_extra).length;
@@ -15978,10 +15984,15 @@ function renderOncall(){
         el("div",{st:{fontSize:".76rem",color:"rgba(31,26,18,.42)",marginTop:"4px"}},label)
       );
     }
+    const totBWe=weOf(regOf(blkEntries)),totAWe=weOf(regOf(allEntries));
     return el("div",null,
       el("div",{st:{display:"flex",gap:"14px",flexWrap:"wrap",marginBottom:"20px"}},
         statCard(totBReg,"Regular — Block "+blk,"#1a4a7a"),
-        statCard(totBExtra,"Extra (Penalty) — Block "+blk,"#b91c1c"),
+        statCard(totBReg-totBWe,"Weekday — Block "+blk,"#1a4a7a"),
+        statCard(totBWe,"Weekend — Block "+blk,"#1a4a7a"),
+        statCard(totBExtra,"Extra (Penalty) — Block "+blk,"#b91c1c")
+      ),
+      el("div",{st:{display:"flex",gap:"14px",flexWrap:"wrap",marginBottom:"20px"}},
         statCard(totAReg,"Regular — All Blocks","#1a4a7a"),
         statCard(totAExtra,"Extra — All Blocks","#b91c1c")
       ),
@@ -15989,12 +16000,14 @@ function renderOncall(){
       el("div",{cls:"card"},
         el("div",{cls:"card-title"},"Per-Resident — Block "+blk),
         el("div",{st:{overflowX:"auto"}},
+        statCard(totAReg-totAWe,"Weekday — All Blocks","#1a4a7a"),
+        statCard(totAWe,"Weekend — All Blocks","#1a4a7a"),
           el("table",{cls:"data-table"},
             el("thead",null,
               el("tr",null,
                 el("th",null,"Resident"),el("th",null,"Level"),
-                el("th",{st:{textAlign:"center"}},"Blk "+blk+" Regular"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Extra"),
-                el("th",{st:{textAlign:"center"}},"All Regular"),el("th",{st:{textAlign:"center"}},"All Extra")
+                el("th",{st:{textAlign:"center"}},"Blk "+blk+" Regular"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Weekday"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Weekend"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Extra"),
+                el("th",{st:{textAlign:"center"}},"All Regular"),el("th",{st:{textAlign:"center"}},"All Weekday"),el("th",{st:{textAlign:"center"}},"All Weekend"),el("th",{st:{textAlign:"center"}},"All Extra")
               )
             ),
             el("tbody",null,
@@ -16003,11 +16016,15 @@ function renderOncall(){
                 el("td",null,s.res.level),
                 el("td",{st:{textAlign:"center",fontWeight:"700"}},s.bReg||"—"),
                 el("td",{st:{textAlign:"center",fontWeight:"700",color:s.bExtra?"#b91c1c":""}},s.bExtra||"—"),
-                el("td",{st:{textAlign:"center"}},s.aReg||"—"),
+                el("td",{st:{textAlign:"center",fontWeight:"700"}},s.aReg||"—"),
+                el("td",{st:{textAlign:"center"}},s.aWd||"—"),
+                el("td",{st:{textAlign:"center"}},s.aWe||"—"),
                 el("td",{st:{textAlign:"center",color:s.aExtra?"#b91c1c":""}},s.aExtra||"—")
               ))
             )
           )
+                el("td",{st:{textAlign:"center"}},s.bWd||"—"),
+                el("td",{st:{textAlign:"center"}},s.bWe||"—"),
         )
       )
     );
