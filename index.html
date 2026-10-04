@@ -401,6 +401,7 @@ th.ov-th{text-align:center;}
 .br-rank-list{display:flex;flex-direction:column;gap:0;}
 .br-rank-row{background:transparent;border-radius:0;padding:14px 8px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(31,26,18,.07);transition:background .14s;}
 .br-rank-row:hover{background:rgba(201,106,74,.04);}
+.br-rank-row.br-static:not(.br-you-row):hover{background:transparent;}
 .br-rank-row.rk1{border-left:3px solid #A47A28;padding-left:10px;}
 .br-rank-row.rk2{border-left:3px solid rgba(31,26,18,.18);padding-left:10px;}
 .br-rank-row.rk3{border-left:3px solid #c96a4a;padding-left:10px;}
@@ -13372,8 +13373,10 @@ function renderBestResident(){
         el("div",{cls:"br-rank-list"},
           ...ranked.map((item,i)=>{
             const isMe=item.res.id===u.rid;
-            const rkCls="br-rank-row"+(i===0?" rk1":i===1?" rk2":i===2?" rk3":"")+(isMe?" br-you-row":"");
-            return el("div",{cls:rkCls,st:{cursor:"pointer"},onClick:()=>set({brDetailRid:item.res.id})},
+            // The detail card is for the programme leadership; everyone else sees the ranking only.
+            const canOpen=brIsLead();
+            const rkCls="br-rank-row"+(i===0?" rk1":i===1?" rk2":i===2?" rk3":"")+(isMe?" br-you-row":"")+(canOpen?"":" br-static");
+            return el("div",canOpen?{cls:rkCls,st:{cursor:"pointer"},onClick:()=>set({brDetailRid:item.res.id})}:{cls:rkCls},
               el("div",{cls:"br-rank-num"},i+1),
               el("div",{cls:"br-rank-av "+avCls},ini(item.res.name)),
               el("div",{cls:"br-rank-info"},
@@ -16290,7 +16293,7 @@ function render(){
   if(STATE.showPromoModal&&isPD())app.appendChild(renderPromoModal());
   if(STATE.showBroadcast)(isPD()||STATE.user?.role==="chief")&&app.appendChild(renderBroadcastModal());
   if(STATE.showCalModal)app.appendChild(renderCalModal());
-  if(STATE.brDetailRid)app.appendChild(renderBrDetailModal());
+  if(STATE.brDetailRid&&brIsLead())app.appendChild(renderBrDetailModal());
   if(STATE.cteMtg)app.appendChild(renderCteMeetingModal());
   if(STATE.cteAch)app.appendChild(renderCteAchModal());
   const _np=renderNotifPanel();if(_np)app.appendChild(_np);
