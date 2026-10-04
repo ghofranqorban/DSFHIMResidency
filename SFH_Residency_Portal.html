@@ -6874,13 +6874,6 @@ function quizPodium(q,cohort){
       ?el("div",{cls:"qh-tags"},...t.names.map(n=>el("span",{cls:"qh-tag"},el("i",null,ini(n)),n)))
       :el("div",{cls:"qh-names"},...t.names.map(n=>el("span",null,n))))));
 }
-// With its own heading, for the resident's card.
-function quizTopEl(q,cohort){
-  const l=quizPodium(q,cohort);
-  if(!l)return null;
-  return el("div",{st:{marginTop:"12px",paddingTop:"10px",borderTop:"1px solid rgba(31,26,18,.08)"}},
-    el("div",{st:{fontSize:".66rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:"#5C5345",marginBottom:"10px"}},"Top 3"),l);
-}
 // A consultant's own mentored residents, with each one's mark on every published quiz of the
 // year on show. This is the one place a consultant sees individual marks without being the
 // quiz's assessor.
@@ -6919,7 +6912,7 @@ function quizCanOpen(q){
 function quizAYBar(sel,forResident){
   const cur=CURRENT_ACADEMIC_YEAR,past=sel!==cur;
   const seg=y=>{const on=sel===y;
-    return el("span",{st:{padding:"6px 17px",borderRadius:"9999px",fontSize:".78rem",fontWeight:on?"600":"500",color:on?"#FEFBF3":"rgba(31,26,18,.5)",background:on?"#c96a4a":"transparent",cursor:on?"default":"pointer",transition:"all .15s"},onClick:()=>{if(!on)quizSetAY(y);}},y+"-"+String(y+1).slice(2));};
+    return el("span",{st:{padding:"6px 17px",borderRadius:"9999px",fontSize:".78rem",fontWeight:on?"600":"500",color:on?"#FEFBF3":"#5C5345",background:on?"#c96a4a":"transparent",cursor:on?"default":"pointer",transition:"all .15s"},onClick:()=>{if(!on)quizSetAY(y);}},y+"-"+String(y+1).slice(2));};
   return el("div",{st:{marginBottom:"18px"}},
     el("div",{st:{display:"flex",alignItems:"center",gap:"14px",flexWrap:"wrap"}},
       el("div",{st:{display:"inline-flex",border:"1px solid rgba(31,26,18,.12)",borderRadius:"9999px",padding:"3px",background:"rgba(31,26,18,.02)"}},seg(cur-1),seg(cur)),
@@ -6932,7 +6925,7 @@ function renderQuiz(){
   const u=STATE.user;
   if(QUIZZES_LOAD_ERR)return el("div",{cls:"content"},
     el("div",{st:{marginBottom:"28px"}},
-      el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Assessment"),
+      el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#a94e2c",marginBottom:"8px"}},"Assessment"),
       el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Quiz Marks"),
       el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+CURRENT_ACADEMIC_YEAR+"-"+(CURRENT_ACADEMIC_YEAR+1).toString().slice(2))
     ),
@@ -7077,7 +7070,7 @@ function renderQuiz(){
   return el("div",{cls:"content"},
     el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
       el("div",null,
-        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Assessment"),
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#a94e2c",marginBottom:"8px"}},"Assessment"),
         el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Quiz Marks"),
         el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+qAY+"-"+(qAY+1).toString().slice(2)+" · "+QL.length+" quizzes")
       ),
@@ -7164,37 +7157,29 @@ function renderQuizResident(){
   const pubQ=quizList().filter(q=>q.published);
   return el("div",{cls:"content"},
     el("div",{st:{marginBottom:"24px"}},
-      el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"8px"}},"Assessment"),
+      el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#a94e2c",marginBottom:"8px"}},"Assessment"),
       el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"My Quiz Marks"),
-      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},"AY "+qAY+"-"+(qAY+1).toString().slice(2))
+      el("div",{st:{fontSize:".82rem",color:"#5C5345"}},dname(res.name)+" \u00b7 "+res.level+" \u00b7 AY "+qAY+"-"+(qAY+1).toString().slice(2))
     ),
     quizAYBar(qAY,true),
-    el("div",{cls:"card"},
-      el("div",{cls:"flex-gap",st:{marginBottom:"14px"}},
-        avEl(res),
-        el("div",null,el("div",{cls:"name"},res.name),el("div",{cls:"sub"},res.level))
-      ),
-      pastPending?el("p",{cls:"sh"},QUIZ_PAST.state==="error"?"Could not load last year\u2019s quizzes. Switch year and back to try again.":"Loading last year\u2019s quizzes\u2026"):
-      pubQ.length===0?el("p",{cls:"sh"},isPast?"No published quizzes for "+ayLabel(qAY)+".":"No published quizzes yet."):
-      el("div",null,
-        ...pubQ.map(q=>{
-          const sc=q.sc[res.id];
-          return el("div",{st:{border:"1px solid #e2e8f0",borderRadius:"10px",padding:"14px",marginBottom:"10px"}},
-            el("div",{cls:"name"},q.title),
-            el("div",{cls:"sub",st:{marginBottom:"8px"}},(isPast?"Block "+q.block+" · ":"")+fmtDate(q.date)+" · Max: "+q.max),
-            sc!=null?el("div",null,
-              el("div",{cls:"flex-gap",st:{marginBottom:"6px"}},
-                el("span",{cls:"statval",st:{fontSize:"1.3rem"}},sc),
-                el("span",{cls:"sh"},"/"+q.max),
-                el("span",{cls:"bdg",st:{background:"rgba(38,82,58,.12)",color:"#26523A",marginLeft:"auto"}},Math.round(sc/q.max*100)+"%")
-              ),
-              pbar(Math.round(sc/q.max*100),"#0ea5e9")
-            ):el("span",{cls:"sh"},"Score not entered yet"),
-            quizTopEl(q,quizCohort(qAY))
-          );
-        })
-      )
-    )
+    pastPending?el("div",{cls:"card"},el("p",{cls:"sh"},QUIZ_PAST.state==="error"?"Could not load last year\u2019s quizzes. Switch year and back to try again.":"Loading last year\u2019s quizzes\u2026")):
+    pubQ.length===0?el("div",{cls:"card"},el("p",{cls:"sh"},isPast?"No published quizzes for "+ayLabel(qAY)+".":"No published quizzes yet.")):
+    el("div",{cls:"qa"},...pubQ.map(q=>{
+      const sc=q.sc[res.id],pct=sc!=null?Math.round(sc/q.max*100):null;
+      return el("div",{cls:"qa-row"},
+        el("div",null,
+          el("h3",null,q.title),
+          el("div",{cls:"qa-meta"},"Block "+q.block+" \u00b7 "+fmtDate(q.date)+" \u00b7 Max "+q.max)
+        ),
+        el("dl",{cls:"qa-fig"},
+          el("div",null,el("dt",null,"Your mark"),el("dd",null,sc!=null?String(sc):"\u2014",sc!=null?el("small",null,"/"+q.max):null)),
+          el("div",null,el("dt",null,"Score"),el("dd",null,pct!=null?pct+"%":"\u2014")),
+          sc==null?el("div",{cls:"qa-none",st:{alignSelf:"end"}},"Not entered yet"):el("div")
+        ),
+        quizPodium(q,quizCohort(qAY))||el("p",{cls:"qa-none"},"Top 3 appears once marks are entered."),
+        el("span")
+      );
+    }))
   );
 }
 // ─── QUARTERLY KPI HELPERS ───────────────────────────────────────────────────
