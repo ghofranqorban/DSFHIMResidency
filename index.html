@@ -3202,8 +3202,8 @@ const ONCALL_SLOTS_FALLBACK=[
   {slot_key:"bldg1",label:"Floor Oncall",group_key:"bldg1",slot_index:1,hours_mode:"oncall",days_mode:"all",sort_order:20,active:true},
   {slot_key:"bldg2",label:"Floor Oncall",group_key:"bldg2",slot_index:1,hours_mode:"oncall",days_mode:"all",sort_order:30,active:true},
   {slot_key:"consult",label:"Floor Oncall",group_key:"consult",slot_index:1,hours_mode:"oncall",days_mode:"all",sort_order:40,active:true},
-  {slot_key:"ctu1",label:"CTU Cover A",group_key:"ctu_a",slot_index:1,hours_mode:"day",days_mode:"weekend",sort_order:50,active:true},
-  {slot_key:"ctu2",label:"CTU Cover B",group_key:"ctu_b",slot_index:1,hours_mode:"day",days_mode:"weekend",sort_order:60,active:true},
+  {slot_key:"ctu1",label:"CTU Daycover A",group_key:"ctu_a",slot_index:1,hours_mode:"day",days_mode:"weekend",sort_order:50,active:true},
+  {slot_key:"ctu2",label:"CTU Daycover B",group_key:"ctu_b",slot_index:1,hours_mode:"day",days_mode:"weekend",sort_order:60,active:true},
 ];
 let ONCALL_SLOT_ROWS=null;
 function ocSlotRows(){return(ONCALL_SLOT_ROWS&&ONCALL_SLOT_ROWS.length)?ONCALL_SLOT_ROWS:ONCALL_SLOTS_FALLBACK;}
@@ -3232,7 +3232,7 @@ function ocSlots(blk){
 // in past blocks, and those must keep rendering their real name instead of a raw key.
 function ocSlotByKey(k){return ocSlotRows().find(x=>x.slot_key===k)||ONCALL_SLOTS_FALLBACK.find(x=>x.slot_key===k)||null;}
 // A column is one or more slots sharing a group_key, drawn under a single heading and stacked.
-// That is how CTU Cover A holds two people on one Friday without becoming two columns.
+// That is how CTU Daycover A holds two people on one Friday without becoming two columns.
 function ocColumns(blk){
   const out=[],at={};
   ocSlots(blk).forEach(x=>{
@@ -3244,7 +3244,7 @@ function ocColumns(blk){
   return out;
 }
 function ocColShownOn(col,ds){return col.days_mode!=="weekend"||isWeekendDate(ds);}
-// "CTU Cover A 2" in places that name a single box; a one-slot column keeps its plain label.
+// "CTU Daycover A 2" in places that name a single box; a one-slot column keeps its plain label.
 function ocSlotFullLabel(x){
   if(!x)return"";
   const sib=ocSlots().filter(y=>(y.group_key||y.slot_key)===(x.group_key||x.slot_key));
@@ -3263,6 +3263,9 @@ async function loadOncallSlots(){
   render();
 }
 function isWeekendDate(ds){const[y,m,d]=ds.split("-").map(Number);const dw=new Date(y,m-1,d).getDay();return dw===5||dw===6;}
+// Day cover (08:00-16:00) is one on-call shift but never a weekday or weekend on-call: it is
+// tallied on its own line everywhere. Read from the slot, not hard-coded to the ctu keys.
+function ocIsDayCover(slotKey){const x=ocSlotByKey(slotKey);return !!x&&x.hours_mode==="day";}
 function oncallHoursLabel(slotKey,ds){
   const x=ocSlotByKey(slotKey);
   if(x&&x.hours_mode==="day")return"08:00 - 16:00";
@@ -3301,7 +3304,7 @@ function oncallResidentDatesInBlock(blk,rid,rname){
 function oncallDayCounts(blk,rid,rname){
   const key=rname?rname.trim().toLowerCase():null;
   const mine=ocData().filter(e=>rid?e.resident_id===rid:(e.resident_name||"").trim().toLowerCase()===key);
-  const tally=rows=>{const seen={},t={wd:0,we:0};rows.forEach(e=>{if(seen[e.schedule_date])return;seen[e.schedule_date]=1;if(isWeekendDate(e.schedule_date))t.we++;else t.wd++;});return t;};
+  const tally=rows=>{const seen={},t={wd:0,we:0,ctu:0};rows.forEach(e=>{if(ocIsDayCover(e.slot_key)){t.ctu++;return;}if(seen[e.schedule_date])return;seen[e.schedule_date]=1;if(isWeekendDate(e.schedule_date))t.we++;else t.wd++;});return t;};
   return{block:tally(mine.filter(e=>e.block_number===blk)),year:tally(mine)};
 }
 // Preview shown while hovering a candidate name in the on-call cell picker:
@@ -3353,7 +3356,7 @@ function oncallSpotlight(blk,targetDate,rid,rname,blockStart,blockEnd,anchorEl){
   const label=rid?dname(anyResById(rid)?.name||""):rname;
   let html="<div class='oc-dp-name'>"+label+" \u2014 "+dates.length+" on-call day"+(dates.length===1?"":"s")+" this block</div>";
   const c=oncallDayCounts(blk,rid,rname);
-  html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.78);margin-bottom:4px;'>"+c.block.wd+" weekday \u00b7 "+c.block.we+" weekend</div>";
+  html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.78);margin-bottom:4px;'>"+c.block.wd+" weekday \u00b7 "+c.block.we+" weekend"+(c.block.ctu?" \u00b7 "+c.block.ctu+" CTU daycover":"")+"</div>";
   lines.forEach(l=>{html+="<div class='oc-dp-line "+(l.type==="leave"?"oc-dp-leave":"oc-dp-warn")+"'>"+(l.type==="leave"?"\uD83C\uDF34 ":"\u26A0 ")+l.text+"</div>";});
   if(!lines.length)html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.55);'>No conflicts detected</div>";
   const fsOpen=document.getElementById("oc-fullscreen")?.classList.contains("open");
@@ -14919,7 +14922,7 @@ function ocColumnCell(cellFn,sl,date,col,interactive){
   return wrap;
 }
 // ─── ONCALL COLUMN EDITOR ────────────────────────────────────────────────────
-// Edits columns, not slots: the scheduler thinks "CTU Cover A has two people", not in slot keys.
+// Edits columns, not slots: the scheduler thinks "CTU Daycover A has two people", not in slot keys.
 // The draft lives outside STATE so typing a label does not trigger a re-render and steal focus,
 // which is how the day editor beside it already works.
 let _ocCols=null,_ocColsGone=[];
@@ -15960,16 +15963,17 @@ function renderOncall(){
     }
     const blkEntries=ocData().filter(e=>e.block_number===blk);
     const allEntries=ocData();
-    // Regular shifts split Sun\u2013Thu (weekday) / Fri\u2013Sat (weekend); wd + we always equals Regular.
+    // Regular = weekday (Sun\u2013Thu) + weekend (Fri\u2013Sat) + CTU daycover; day cover is never weekend.
     const regOf=(rows,rid)=>rows.filter(e=>(rid==null||e.resident_id===rid)&&!e.is_extra);
-    const weOf=rows=>rows.filter(e=>isWeekendDate(e.schedule_date)).length;
+    const cvOf=rows=>rows.filter(e=>ocIsDayCover(e.slot_key)).length;
+    const weOf=rows=>rows.filter(e=>!ocIsDayCover(e.slot_key)&&isWeekendDate(e.schedule_date)).length;
     const resStats=ocRoster().map(r=>{
       const bR=regOf(blkEntries,r.id),aR=regOf(allEntries,r.id);
       return {
         res:r,
-        bReg:bR.length,bWe:weOf(bR),bWd:bR.length-weOf(bR),
+        bReg:bR.length,bWe:weOf(bR),bCv:cvOf(bR),bWd:bR.length-weOf(bR)-cvOf(bR),
         bExtra:blkEntries.filter(e=>e.resident_id===r.id&&e.is_extra).length,
-        aReg:aR.length,aWe:weOf(aR),aWd:aR.length-weOf(aR),
+        aReg:aR.length,aWe:weOf(aR),aCv:cvOf(aR),aWd:aR.length-weOf(aR)-cvOf(aR),
         aExtra:allEntries.filter(e=>e.resident_id===r.id&&e.is_extra).length,
       };
     }).filter(s=>s.bReg+s.bExtra+s.aReg+s.aExtra>0)
@@ -15979,6 +15983,7 @@ function renderOncall(){
     const totAReg=allEntries.filter(e=>!e.is_extra).length;
     const totAExtra=allEntries.filter(e=>e.is_extra).length;
     const totBWe=weOf(regOf(blkEntries)),totAWe=weOf(regOf(allEntries));
+    const totBCv=cvOf(regOf(blkEntries)),totACv=cvOf(regOf(allEntries));
     function statCard(val,label,col){
       return el("div",{cls:"card",st:{flex:"1",minWidth:"150px",textAlign:"center",padding:"18px 12px"}},
         el("div",{st:{fontSize:"2rem",fontWeight:"800",color:col}},val),
@@ -15988,14 +15993,16 @@ function renderOncall(){
     return el("div",null,
       el("div",{st:{display:"flex",gap:"14px",flexWrap:"wrap",marginBottom:"20px"}},
         statCard(totBReg,"Regular — Block "+blk,"#1a4a7a"),
-        statCard(totBReg-totBWe,"Weekday — Block "+blk,"#1a4a7a"),
+        statCard(totBReg-totBWe-totBCv,"Weekday — Block "+blk,"#1a4a7a"),
         statCard(totBWe,"Weekend — Block "+blk,"#1a4a7a"),
+        statCard(totBCv,"CTU Daycover — Block "+blk,"#1a4a7a"),
         statCard(totBExtra,"Extra (Penalty) — Block "+blk,"#b91c1c")
       ),
       el("div",{st:{display:"flex",gap:"14px",flexWrap:"wrap",marginBottom:"20px"}},
         statCard(totAReg,"Regular — All Blocks","#1a4a7a"),
-        statCard(totAReg-totAWe,"Weekday — All Blocks","#1a4a7a"),
+        statCard(totAReg-totAWe-totACv,"Weekday — All Blocks","#1a4a7a"),
         statCard(totAWe,"Weekend — All Blocks","#1a4a7a"),
+        statCard(totACv,"CTU Daycover — All Blocks","#1a4a7a"),
         statCard(totAExtra,"Extra — All Blocks","#b91c1c")
       ),
       !resStats.length?el("p",{cls:"sh"},"No on-call data to analyze yet."):
@@ -16006,8 +16013,8 @@ function renderOncall(){
             el("thead",null,
               el("tr",null,
                 el("th",null,"Resident"),el("th",null,"Level"),
-                el("th",{st:{textAlign:"center"}},"Blk "+blk+" Regular"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Weekday"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Weekend"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Extra"),
-                el("th",{st:{textAlign:"center"}},"All Regular"),el("th",{st:{textAlign:"center"}},"All Weekday"),el("th",{st:{textAlign:"center"}},"All Weekend"),el("th",{st:{textAlign:"center"}},"All Extra")
+                el("th",{st:{textAlign:"center"}},"Blk "+blk+" Regular"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Weekday"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Weekend"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" CTU Daycover"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Extra"),
+                el("th",{st:{textAlign:"center"}},"All Regular"),el("th",{st:{textAlign:"center"}},"All Weekday"),el("th",{st:{textAlign:"center"}},"All Weekend"),el("th",{st:{textAlign:"center"}},"All CTU Daycover"),el("th",{st:{textAlign:"center"}},"All Extra")
               )
             ),
             el("tbody",null,
@@ -16017,10 +16024,12 @@ function renderOncall(){
                 el("td",{st:{textAlign:"center",fontWeight:"700"}},s.bReg||"—"),
                 el("td",{st:{textAlign:"center"}},s.bWd||"—"),
                 el("td",{st:{textAlign:"center"}},s.bWe||"—"),
+                el("td",{st:{textAlign:"center"}},s.bCv||"—"),
                 el("td",{st:{textAlign:"center",fontWeight:"700",color:s.bExtra?"#b91c1c":""}},s.bExtra||"—"),
                 el("td",{st:{textAlign:"center",fontWeight:"700"}},s.aReg||"—"),
                 el("td",{st:{textAlign:"center"}},s.aWd||"—"),
                 el("td",{st:{textAlign:"center"}},s.aWe||"—"),
+                el("td",{st:{textAlign:"center"}},s.aCv||"—"),
                 el("td",{st:{textAlign:"center",color:s.aExtra?"#b91c1c":""}},s.aExtra||"—")
               ))
             )

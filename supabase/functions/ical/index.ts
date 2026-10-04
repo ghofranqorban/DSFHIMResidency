@@ -105,7 +105,7 @@ function fold(line: string): string {
 
 const SLOT_LABELS: Record<string, string> = {
   er_medical: "ER Medical Oncall", bldg1: "Floor Oncall", bldg2: "Floor Oncall",
-  consult: "Floor Oncall", ctu1: "CTU Cover A", ctu2: "CTU Cover B",
+  consult: "Floor Oncall", ctu1: "CTU Daycover A", ctu2: "CTU Daycover B",
 };
 
 // Mirrors the client's isWeekendDate()/oncallHoursLabel() (SFH_Residency_Portal.html)
