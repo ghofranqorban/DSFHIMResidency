@@ -3078,10 +3078,14 @@ function brAttendance(p){
   _brAtt={mm:MM_ATT_RAW,te:TEACH_ATT_RAW,key,out};
   return out;
 }
-// The KPI half of the score: morning-meeting and teaching attendance and quiz marks of the
-// quarter being judged, and of nothing else. Presenting or moderating is not counted. The
-// three parts share the same weights as in kpiOngoingScore(), which reads the whole of the
-// live year and so could not tell one quarter from another.
+// Best Resident score = 60% KPI + 40% votes. The KPI part is quiz 30 + attendance 30 (morning
+// meeting 15, Academic Day 15), in points of the final 100. These are the Best Resident's own
+// weights, deliberately NOT KPI_W, which other screens still read.
+const BR_KPI_PCT=60,BR_VOTE_PCT=40;
+const BR_W={quiz:30,mm:15,teach:15};
+// The KPI part of the score: morning-meeting and teaching attendance and quiz marks of the
+// quarter being judged, and of nothing else. Presenting or moderating is not counted. A part
+// not held yet in the quarter drops out and the rest are rescaled to 0-100.
 function brKpiParts(id,p){
   const at=brAttendance(p),blocks=brBlocks(p);
   const mm=at.mm[id]||{total:0,att:0,score:0},te=at.te[id]||{total:0,att:0,score:0};
@@ -3090,9 +3094,9 @@ function brKpiParts(id,p){
   const sat=brQuizzes(p.ay).filter(q=>q.published&&q.sc[id]!=null&&blocks.indexOf(q.block)>=0);
   const qAvg=sat.length?Math.round(sat.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/sat.length):null;
   const h=at.held;
-  const total=(h.quiz?KPI_W.quiz:0)+(h.mm?KPI_W.mm:0)+(h.teach?KPI_W.teach:0);
-  const raw=(h.quiz?(qAvg||0)*KPI_W.quiz/100:0)+(h.mm?(mmPct||0)*KPI_W.mm/100:0)
-    +(h.teach?(tPct||0)*KPI_W.teach/100:0);
+  const total=(h.quiz?BR_W.quiz:0)+(h.mm?BR_W.mm:0)+(h.teach?BR_W.teach:0);
+  const raw=(h.quiz?(qAvg||0)*BR_W.quiz/100:0)+(h.mm?(mmPct||0)*BR_W.mm/100:0)
+    +(h.teach?(tPct||0)*BR_W.teach/100:0);
   return{qAvg,nQuiz:sat.length,mmPct,mmAtt:mm.att,mmTotal:mm.total,tPct,tAtt:te.att,tTotal:te.total,
     held:h,score:total?Math.round(raw/total*100):0};
 }
@@ -4084,20 +4088,22 @@ function brPodiumSnapshot(){
   const by=o=>({resident:Number(o&&o.resident)||0,consultant:Number(o&&o.consultant)||0,nurse:Number(o&&o.nurse)||0});
   const pick=(arr,m)=>arr.slice(0,3).filter((x,i)=>i===0||x.final>0||x.votes>0)
     .map(x=>({id:x.res.id,final:x.final,kpi:x.kpi,votes:x.votes,by:by(m&&m[x.res.id])}));
-  return{v:1,total:t?t.total:0,groups:by(t&&t.by),senior:pick(sRanked,t&&t.sBy),junior:pick(jRanked,t&&t.jBy)};
+  return{v:1,kpiPct:BR_KPI_PCT,votePct:BR_VOTE_PCT,total:t?t.total:0,groups:by(t&&t.by),senior:pick(sRanked,t&&t.sBy),junior:pick(jRanked,t&&t.jBy)};
 }
-// The final score is 50% KPI + 50% votes. Split into the four things it is made of, in whole
+// The final score is KPI% + votes%. Split into the four things it is made of, in whole
 // points that add up to the score shown (largest remainder, so no point is lost to rounding).
-function brPodiumParts(p,total){
-  const v=g=>total>0?(Number(p.by[g])||0)/total*50:0;
-  const ex={k:p.kpi*0.5,c:v("consultant"),r:v("resident"),n:v("nurse")};
+// A podium saved before the weights changed carries no kpiPct/votePct and was a 50/50 score.
+function brPodiumWeights(d){return{k:Number(d&&d.kpiPct)||50,v:Number(d&&d.votePct)||50};}
+function brPodiumParts(p,total,wt){
+  const v=g=>total>0?(Number(p.by[g])||0)/total*wt.v:0;
+  const ex={k:p.kpi*wt.k/100,c:v("consultant"),r:v("resident"),n:v("nurse")};
   const fl={};Object.keys(ex).forEach(k=>{fl[k]=Math.floor(ex[k]+1e-9);});
   const need=p.final-Object.values(fl).reduce((a,b)=>a+b,0),pri=["k","r","c","n"];
   pri.slice().sort((a,b)=>((ex[b]-fl[b])-(ex[a]-fl[a]))||(pri.indexOf(a)-pri.indexOf(b))).slice(0,Math.max(need,0)).forEach(k=>{fl[k]++;});
   return fl;
 }
 function brPodiumCard(w){
-  const d=w.podium,ay=w.academic_year,G=d.groups||{},total=Number(d.total)||0;
+  const d=w.podium,ay=w.academic_year,G=d.groups||{},total=Number(d.total)||0,wt=brPodiumWeights(d);
   const GN={c:"consultant",r:"resident",n:"nurse"};
   const key=el("div",{cls:"hp-key"},...[["k","KPI"],["c","Consultants' votes"],["r","Residents' votes"],["n","Nurses' votes"]]
     .map(([c,l])=>el("span",null,el("i",{cls:"hp-sw hp-"+c}),l)));
@@ -4105,7 +4111,7 @@ function brPodiumCard(w){
   const col=(title,list)=>{
     const top=(list[0]&&list[0].final)||1;
     return el("div",{cls:"hp-col"},el("h3",null,title),...list.map((p,i)=>{
-      const r=brPerson(p.id,ay),first=i===0,pt=brPodiumParts(p,total);
+      const r=brPerson(p.id,ay),first=i===0,pt=brPodiumParts(p,total,wt);
       const grp=(c,lab)=>{const n=Number(p.by[GN[c]])||0,g=Number(G[GN[c]])||0;
         return cell(c,lab,...(g?[n+"/"+g+" ",el("em",null,Math.round(n/g*100)+"%")]:["–"]));};
       return el("div",{cls:"hp-row"+(first?" win":"")},
@@ -4122,7 +4128,7 @@ function brPodiumCard(w){
   return el("div",{cls:"hp-card"},
     el("div",{cls:"hp-q"},quarterLabel(w.quarter)+" · AY "+ay+"–"+(ay+1)),
     key,
-    el("div",{cls:"hp-lead"},total+" votes cast in all ("+brGroupText(G)+"). Final score = 50% KPI + 50% votes. Numbers inside the bars are points out of 100. Ties are broken by KPI, then by votes."),
+    el("div",{cls:"hp-lead"},total+" votes cast in all ("+brGroupText(G)+"). Final score = "+wt.k+"% KPI + "+wt.v+"% votes. Numbers inside the bars are points out of 100. Ties are broken by KPI, then by votes."),
     el("div",{cls:"hp-cols"},col("Best Senior Resident",d.senior||[]),col("Best Junior Resident",d.junior||[])));
 }
 // Ambient confetti for the Hall of Fame: a soft, continuous fall over the whole window while the
@@ -4179,7 +4185,7 @@ function brComputeRankings(){
     const kpi=brKpiParts(res.id,p).score;
     const votes=brVoteCountFor(res.id,col);
     const votePct=totalVoters>0?Math.round(votes/totalVoters*100):0;
-    const final=Math.round(kpi*0.5+votePct*0.5);
+    const final=Math.round(kpi*BR_KPI_PCT/100+votePct*BR_VOTE_PCT/100);
     return{res,kpi,votes,votePct,final};
   }
   const byRank=(a,b)=>(b.final-a.final)||(b.kpi-a.kpi)||(b.votes-a.votes); // a tie goes to the higher KPI, then to more votes
@@ -10798,7 +10804,7 @@ function renderBestResidentBanner(){
   const votingStrip=isOpen?el("div",{cls:"stars-voting-strip"},
     el("div",{cls:"vote-pulse-dot"}),
     el("div",{cls:"vote-strip-text"},
-      el("strong",null,"Voting is open! "), "Cast your vote for Best Senior and Best Junior — counts 50% of the final score." ),
+      el("strong",null,"Voting is open! "), "Cast your vote for Best Senior and Best Junior — counts "+BR_VOTE_PCT+"% of the final score." ),
     cd?el("div",{cls:"vote-strip-cd"},cd):null,
     el("button",{cls:"sbtn primary",st:{fontSize:".78rem",padding:"5px 12px"},onClick:()=>set({mod:"best_resident",brTab:"vote"})},"Vote →")
   ):null;
@@ -13232,7 +13238,7 @@ function renderBestResident(){
             }},"Lock winners"),
             el("button",{cls:"sbtn ghost",onClick(){showConfirm("Reopen voting?",async()=>{await brSaveRow({voting_open:true,voting_deadline:null});},"Reopen","warn");}},"Reopen voting")),
           noteField(true),
-          note("Winners are worked out from the morning meeting and teaching attendance and quiz marks of "+brScope(P)+" (50%), plus the votes (50%). The first three of each category are saved with the winners and appear in the Hall of Fame once they are announced."));
+          note("Winners are worked out from the morning meeting and teaching attendance and quiz marks of "+brScope(P)+" ("+BR_KPI_PCT+"%), plus the votes ("+BR_VOTE_PCT+"%). The first three of each category are saved with the winners and appear in the Hall of Fame once they are announced."));
       }else{
         pdControls=el("div",yellow,
           el("div",{cls:"card-title",st:{color:"#B8860B"}},"Open Voting — "+quarterLabel(q)),
@@ -13384,9 +13390,9 @@ function renderBestResident(){
     }
     return el("div",null,
       el("div",{cls:"card",st:{background:"#fff8e6",border:"1.5px solid #f5c518",marginBottom:"20px",maxWidth:"100%"}},
-        el("div",{st:{fontSize:".83rem",color:"#7a5800",fontFamily:"sans-serif"}}, " Rankings = ",el("strong",null,"KPI 50%"), " (morning meeting and teaching attendance and quiz marks of "+brScope(P)+") + ",
-          el("strong",null,"Votes 50%"), " ("+totalVoters+" vote"+(totalVoters!==1?"s":"")+" cast so far"+(brTally()&&brGroupText(brTally().by)?": "+brGroupText(brTally().by):"")+"). Final score shown on right. ",
-          (announced?"Winners have been announced.":ended?"The quarter has ended, so the KPI half is final. Only the votes can still change.":"Scores update live — keep pushing!")
+        el("div",{st:{fontSize:".83rem",color:"#7a5800",fontFamily:"sans-serif"}}, " Rankings = ",el("strong",null,"KPI "+BR_KPI_PCT+"%"), " (morning meeting and teaching attendance and quiz marks of "+brScope(P)+") + ",
+          el("strong",null,"Votes "+BR_VOTE_PCT+"%"), " ("+totalVoters+" vote"+(totalVoters!==1?"s":"")+" cast so far"+(brTally()&&brGroupText(brTally().by)?": "+brGroupText(brTally().by):"")+"). Final score shown on right. ",
+          (announced?"Winners have been announced.":ended?"The quarter has ended, so the KPI part is final. Only the votes can still change.":"Scores update live — keep pushing!")
         )
       ),
       el("div",{st:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"20px"}},
@@ -13510,12 +13516,15 @@ function renderBrDetailModal(){
   const totalVoters=brTotalVoters();
   const votePct=totalVoters>0?Math.round(votes/totalVoters*100):0;
   const kpi=k.score;
-  const final=Math.round(kpi*0.5+votePct*0.5);
+  const final=Math.round(kpi*BR_KPI_PCT/100+votePct*BR_VOTE_PCT/100);
   const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
+  // share of the FINAL score each part carries, given which parts have been held this quarter
+  const heldW=BR_W.quiz*(k.held.quiz?1:0)+BR_W.mm*(k.held.mm?1:0)+BR_W.teach*(k.held.teach?1:0);
+  const share=(key)=>k.held[key]&&heldW?Math.round(BR_W[key]/heldW*BR_KPI_PCT):0;
   const rows=[
-    {label:"Quiz Average",val:k.qAvg,w:KPI_W.quiz,sub:k.nQuiz+" quizzes"},
-    {label:"MM Attendance",val:k.mmPct,w:KPI_W.mm,sub:k.mmAtt+"/"+k.mmTotal+" sessions"},
-    {label:"Academic Day Attendance",val:k.tPct,w:KPI_W.teach,sub:k.tAtt+"/"+k.tTotal+" sessions"},
+    {label:"Quiz Average",val:k.qAvg,w:share("quiz"),sub:k.nQuiz+" quizzes"},
+    {label:"MM Attendance",val:k.mmPct,w:share("mm"),sub:k.mmAtt+"/"+k.mmTotal+" sessions"},
+    {label:"Academic Day Attendance",val:k.tPct,w:share("teach"),sub:k.tAtt+"/"+k.tTotal+" sessions"},
   ];
   return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
     el("div",{cls:"modal-card",st:{width:"460px",maxWidth:"100%",position:"relative"}},
@@ -13530,7 +13539,7 @@ function renderBrDetailModal(){
       el("div",{st:{fontSize:".68rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".08em",color:"rgba(31,26,18,.35)",marginBottom:"8px"}},"KPI score · "+brScope(brP)+" — "+kpi+"%"),
       ...rows.map(r=>el("div",{st:{marginBottom:"10px"}},
         el("div",{st:{display:"flex",justifyContent:"space-between",fontSize:".82rem",marginBottom:"3px"}},
-          el("span",null,r.label+" ("+r.w+"% weight)"),
+          el("span",null,r.label+" ("+r.w+"% of final score)"),
           el("span",{st:{fontWeight:"700",color:r.val==null?"#9ca3af":kpiColor(r.val)}},r.val==null?"N/A":r.val+"%")
         ),
         el("div",{cls:"sh",st:{fontSize:".72rem",marginBottom:"3px"}},r.sub),
