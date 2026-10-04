@@ -15978,13 +15978,13 @@ function renderOncall(){
     const totBExtra=blkEntries.filter(e=>e.is_extra).length;
     const totAReg=allEntries.filter(e=>!e.is_extra).length;
     const totAExtra=allEntries.filter(e=>e.is_extra).length;
+    const totBWe=weOf(regOf(blkEntries)),totAWe=weOf(regOf(allEntries));
     function statCard(val,label,col){
       return el("div",{cls:"card",st:{flex:"1",minWidth:"150px",textAlign:"center",padding:"18px 12px"}},
         el("div",{st:{fontSize:"2rem",fontWeight:"800",color:col}},val),
         el("div",{st:{fontSize:".76rem",color:"rgba(31,26,18,.42)",marginTop:"4px"}},label)
       );
     }
-    const totBWe=weOf(regOf(blkEntries)),totAWe=weOf(regOf(allEntries));
     return el("div",null,
       el("div",{st:{display:"flex",gap:"14px",flexWrap:"wrap",marginBottom:"20px"}},
         statCard(totBReg,"Regular — Block "+blk,"#1a4a7a"),
@@ -15994,14 +15994,14 @@ function renderOncall(){
       ),
       el("div",{st:{display:"flex",gap:"14px",flexWrap:"wrap",marginBottom:"20px"}},
         statCard(totAReg,"Regular — All Blocks","#1a4a7a"),
+        statCard(totAReg-totAWe,"Weekday — All Blocks","#1a4a7a"),
+        statCard(totAWe,"Weekend — All Blocks","#1a4a7a"),
         statCard(totAExtra,"Extra — All Blocks","#b91c1c")
       ),
       !resStats.length?el("p",{cls:"sh"},"No on-call data to analyze yet."):
       el("div",{cls:"card"},
         el("div",{cls:"card-title"},"Per-Resident — Block "+blk),
         el("div",{st:{overflowX:"auto"}},
-        statCard(totAReg-totAWe,"Weekday — All Blocks","#1a4a7a"),
-        statCard(totAWe,"Weekend — All Blocks","#1a4a7a"),
           el("table",{cls:"data-table"},
             el("thead",null,
               el("tr",null,
@@ -16015,6 +16015,8 @@ function renderOncall(){
                 el("td",null,dname(s.res.name)),
                 el("td",null,s.res.level),
                 el("td",{st:{textAlign:"center",fontWeight:"700"}},s.bReg||"—"),
+                el("td",{st:{textAlign:"center"}},s.bWd||"—"),
+                el("td",{st:{textAlign:"center"}},s.bWe||"—"),
                 el("td",{st:{textAlign:"center",fontWeight:"700",color:s.bExtra?"#b91c1c":""}},s.bExtra||"—"),
                 el("td",{st:{textAlign:"center",fontWeight:"700"}},s.aReg||"—"),
                 el("td",{st:{textAlign:"center"}},s.aWd||"—"),
@@ -16023,8 +16025,6 @@ function renderOncall(){
               ))
             )
           )
-                el("td",{st:{textAlign:"center"}},s.bWd||"—"),
-                el("td",{st:{textAlign:"center"}},s.bWe||"—"),
         )
       )
     );
