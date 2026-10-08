@@ -10152,13 +10152,15 @@ const PRIV_LABELS_RESIDENT={
   edit_teach_schedule:"Enter/edit Academic Day schedule (Teaching Committee)",
   edit_kpi_notes:"Edit KPI notes",
   edit_oncall:"Enter/edit On-Call schedule (Oncall Committee)",
-  plan_rota:"View all residents leave plan & manage AY rota planning"
+  plan_rota:"View all residents leave plan & manage AY rota planning",
+  manage_committees:"Manage Committees (assign members and faculty, meetings, achievements)"
 };
 const PRIV_LABELS_CONSULTANT={
   edit_quiz_marks:"Enter/edit quiz marks (all quizzes)",
   edit_mm_attendance:"Update Morning Meeting attendance",
   edit_teach_attendance:"Update Academic Day attendance",
-  edit_kpi_notes:"Edit KPI notes"
+  edit_kpi_notes:"Edit KPI notes",
+  manage_committees:"Manage Committees (assign members and faculty, meetings, achievements)"
 };
 async function togglePriv(profileId,key,grant){
   if(grant){
@@ -10196,6 +10198,7 @@ function accountRoleTags(profileId,kind,personId){
   if(profileId){
     if(hasPriv(profileId,"edit_mm_schedule")||hasPriv(profileId,"edit_teach_schedule"))tags.push({label:"Teaching Committee",bg:"rgba(127,184,156,.15)",fg:"#26523A"});
     if(hasPriv(profileId,"edit_mm_attendance")||hasPriv(profileId,"edit_teach_attendance"))tags.push({label:"Attendance Committee",bg:"#ede9fe",fg:"#5b21b6"});
+    if(hasPriv(profileId,"manage_committees"))tags.push({label:"Committees Manager",bg:"rgba(201,106,74,.12)",fg:"#8f3f20"});
     if(hasPriv(profileId,"edit_quiz_marks"))tags.push({label:"Quiz Assessor (all)",bg:"rgba(201,106,74,.12)",fg:"#9d174d"});
     if(hasPriv(profileId,"edit_kpi_notes"))tags.push({label:"KPI Editor",bg:"rgba(164,122,40,.12)",fg:"#6a4c10"});
   }
@@ -12645,12 +12648,13 @@ function cteAY(){return STATE.cteAY==null?CURRENT_ACADEMIC_YEAR:STATE.cteAY;}
 function cteAYLabel(y){return "AY "+y+"\u2013"+String(y+1).slice(2);}
 function cteDef(id){return CTE_DEFS.find(c=>c.id==id)||null;}
 
-// Mirrors is_pd_or_chief() in the database exactly. dio and ceo are NOT in that
-// function, so they read committees but cannot edit them -- widening this here
-// without widening the SQL would show them controls every write would reject.
+// Mirrors is_pd_or_chief() in the database, plus the manage_committees privilege (policies named
+// *_manage_priv in supabase/add_manage_committees_privilege.sql). dio and ceo are NOT in that
+// function, so they read committees but cannot edit them -- widening this here without widening
+// the SQL would show them controls every write would reject.
 function canManageCommittees(){
   const r=STATE.user&&STATE.user.role;
-  return r==="pd"||r==="deputy_pd"||r==="chief";
+  return r==="pd"||r==="deputy_pd"||r==="chief"||hasPriv(STATE.user&&STATE.user.profileId,"manage_committees");
 }
 // A committee's own leader or co-leader runs its meetings and achievements.
 // Mirrors is_committee_lead() in add_committees.sql.
