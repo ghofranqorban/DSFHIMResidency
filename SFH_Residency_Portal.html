@@ -1160,34 +1160,31 @@ let TEACH_ATT_CMT={};
 // rebuilt from the raw rows on every switch rather than being built once at load.
 let MM_ATT_RAW=[];
 let TEACH_ATT_RAW=[];
+let MM_ATT_LIVE={},TEACH_ATT_LIVE={};
+function buildAttMap(raw,byId,yr){
+  const att={},cmt={};
+  raw.forEach(a=>{
+    const s=byId[a.session_id];if(!s)return;
+    if(s.academic_year!==yr)return;
+    if(!att[s.block_number])att[s.block_number]={};
+    if(!att[s.block_number][s.session_date])att[s.block_number][s.session_date]={};
+    att[s.block_number][s.session_date][a.resident_id]=a.status;
+    if(a.comment){
+      if(!cmt[s.block_number])cmt[s.block_number]={};
+      if(!cmt[s.block_number][s.session_date])cmt[s.block_number][s.session_date]={};
+      cmt[s.block_number][s.session_date][a.resident_id]=a.comment;
+    }
+  });
+  return{att,cmt};
+}
+// MM_ATT / TEACH_ATT follow the year the module is showing. MM_ATT_LIVE / TEACH_ATT_LIVE always
+// hold the live year: calcKPI, calcKPIQ and the profile editors read those, so pointing a
+// module at another year never changes anyone's KPI.
 function buildAttendanceMaps(){
-  const mmYr=mmAY(),teYr=teachAY();
-  MM_ATT={};MM_ATT_CMT={};
-  MM_ATT_RAW.forEach(a=>{
-    const s=MM_SESSION_BY_ID[a.session_id];if(!s)return;
-    if(s.academic_year!==mmYr)return;
-    if(!MM_ATT[s.block_number])MM_ATT[s.block_number]={};
-    if(!MM_ATT[s.block_number][s.session_date])MM_ATT[s.block_number][s.session_date]={};
-    MM_ATT[s.block_number][s.session_date][a.resident_id]=a.status;
-    if(a.comment){
-      if(!MM_ATT_CMT[s.block_number])MM_ATT_CMT[s.block_number]={};
-      if(!MM_ATT_CMT[s.block_number][s.session_date])MM_ATT_CMT[s.block_number][s.session_date]={};
-      MM_ATT_CMT[s.block_number][s.session_date][a.resident_id]=a.comment;
-    }
-  });
-  TEACH_ATT={};TEACH_ATT_CMT={};
-  TEACH_ATT_RAW.forEach(a=>{
-    const s=TEACH_SESSION_BY_ID[a.session_id];if(!s)return;
-    if(s.academic_year!==teYr)return;
-    if(!TEACH_ATT[s.block_number])TEACH_ATT[s.block_number]={};
-    if(!TEACH_ATT[s.block_number][s.session_date])TEACH_ATT[s.block_number][s.session_date]={};
-    TEACH_ATT[s.block_number][s.session_date][a.resident_id]=a.status;
-    if(a.comment){
-      if(!TEACH_ATT_CMT[s.block_number])TEACH_ATT_CMT[s.block_number]={};
-      if(!TEACH_ATT_CMT[s.block_number][s.session_date])TEACH_ATT_CMT[s.block_number][s.session_date]={};
-      TEACH_ATT_CMT[s.block_number][s.session_date][a.resident_id]=a.comment;
-    }
-  });
+  const mm=buildAttMap(MM_ATT_RAW,MM_SESSION_BY_ID,mmAY());MM_ATT=mm.att;MM_ATT_CMT=mm.cmt;
+  const te=buildAttMap(TEACH_ATT_RAW,TEACH_SESSION_BY_ID,teachAY());TEACH_ATT=te.att;TEACH_ATT_CMT=te.cmt;
+  MM_ATT_LIVE=mmAY()===CURRENT_ACADEMIC_YEAR?MM_ATT:buildAttMap(MM_ATT_RAW,MM_SESSION_BY_ID,CURRENT_ACADEMIC_YEAR).att;
+  TEACH_ATT_LIVE=teachAY()===CURRENT_ACADEMIC_YEAR?TEACH_ATT:buildAttMap(TEACH_ATT_RAW,TEACH_SESSION_BY_ID,CURRENT_ACADEMIC_YEAR).att;
 }
 async function loadSchedules(){
   const[{data:mm,error:mmErr},{data:mmA,error:mmAErr},{data:te,error:teErr},{data:teA,error:teAErr},{data:mmH,error:mmHErr}]=await Promise.all([
@@ -2865,8 +2862,38 @@ function set(s){Object.assign(STATE,s);render();}
 // CURRENT_ACADEMIC_YEAR. Each module keeps its own key so switching one never drags the others.
 function ayClamp(y){return y===CURRENT_ACADEMIC_YEAR+1?y:CURRENT_ACADEMIC_YEAR;}
 function ayLabel(y){return"AY "+y+"-"+(y+1).toString().slice(2);}
-function mmAY(){return ayClamp(STATE.mmAY);}
-function teachAY(){return ayClamp(STATE.teachAY);}
+// Years a module may show: every closed year it holds sessions for, the live year, and next
+// year for whoever schedules it. Residents only ever hold published rows, so a closed year
+// whose sessions were never published does not appear for them. Closed years are read-only.
+function sessionYears(list,canPlan){
+  const seen={};list.forEach(s=>{if(s.academic_year<CURRENT_ACADEMIC_YEAR)seen[s.academic_year]=true;});
+  const out=Object.keys(seen).map(Number);out.push(CURRENT_ACADEMIC_YEAR);if(canPlan)out.push(CURRENT_ACADEMIC_YEAR+1);
+  return out.sort((a,b)=>a-b);
+}
+function mmYears(){return sessionYears(MM_SESSIONS,isMMScheduler());}
+function teachYears(){return sessionYears(TEACH_SESSIONS,isTeachScheduler());}
+function ayClampTo(y,years){return years.indexOf(y)>=0?y:CURRENT_ACADEMIC_YEAR;}
+function mmAY(){return ayClampTo(STATE.mmAY,mmYears());}
+function teachAY(){return ayClampTo(STATE.teachAY,teachYears());}
+function mmIsPast(){return mmAY()<CURRENT_ACADEMIC_YEAR;}
+function teachIsPast(){return teachAY()<CURRENT_ACADEMIC_YEAR;}
+// Who was on the programme in the year a module is showing. Live and next year: the usual
+// visible roster. A closed year: that year's cohort at the levels they held, graduates
+// included, narrowed to the same people the viewer may see today.
+function yearVisRes(ay){
+  if(ay>=CURRENT_ACADEMIC_YEAR)return visRes();
+  const u=STATE.user;if(!u)return[];
+  const all=brRoster(ay);
+  if(isPdRole(u.role)||u.role==="chief")return all;
+  if(u.role==="consultant"){const ids=getAccess(u.cid);return all.filter(r=>ids.includes(r.id));}
+  if(u.role==="resident"){
+    if(hasPriv(u.profileId,"edit_mm_attendance")||hasPriv(u.profileId,"edit_teach_attendance"))return all;
+    return all.filter(r=>r.id===u.rid);
+  }
+  return[];
+}
+function mmVisRes(){return yearVisRes(mmAY());}
+function teachVisRes(){return yearVisRes(teachAY());}
 function mmSessions(){const y=mmAY();return MM_SESSIONS.filter(s=>s.academic_year===y);}
 function teachSessions(){const y=teachAY();return TEACH_SESSIONS.filter(s=>s.academic_year===y);}
 // The attendance maps hold one year at a time, so they have to be rebuilt before the render
@@ -3810,24 +3837,29 @@ function canEdit(){const r=STATE.user?.role;return isPdRole(r)||r==="chief";}
 function isPD(){return isPdRole(STATE.user?.role);}
 function isConsultant(){return STATE.user?.role==="consultant";}
 function isResident(){return STATE.user?.role==="resident";}
-function canEditMMSchedule(){
+// Role only: who may schedule at all. The year on screen decides whether they may right now.
+function isMMScheduler(){
   const u=STATE.user;if(!u)return false;
   if(isPdRole(u.role)||u.role==="chief")return true;
   return hasPriv(u.profileId,"edit_mm_schedule");
 }
-function canEditTeachSchedule(){
+function isTeachScheduler(){
   const u=STATE.user;if(!u)return false;
   if(isPdRole(u.role)||u.role==="chief")return true;
   return hasPriv(u.profileId,"edit_teach_schedule");
 }
+function canEditMMSchedule(){return isMMScheduler()&&!mmIsPast();}
+function canEditTeachSchedule(){return isTeachScheduler()&&!teachIsPast();}
 function canLogMMAttendance(){
   const u=STATE.user;if(!u)return false;
+  if(mmIsPast())return false;
   if(isPdRole(u.role)||u.role==="chief")return true;
   if(u.role==="consultant")return true;
   return hasPriv(u.profileId,"edit_mm_attendance");
 }
 function canLogTeachAttendance(){
   const u=STATE.user;if(!u)return false;
+  if(teachIsPast())return false;
   if(isPdRole(u.role)||u.role==="chief")return true;
   if(u.role==="consultant")return true;
   return hasPriv(u.profileId,"edit_teach_attendance");
@@ -3872,10 +3904,10 @@ function publishedResearch(id){
 function hasPublishedResearch(id){return publishedResearch(id).length>0;}
 function calcKPI(id){
   let mmAtt=0,mmTotal=0,mmScore=0;
-  Object.values(MM_ATT).forEach(blk=>{Object.values(blk).forEach(day=>{const s=day[id];if(!s||s==='O')return;mmTotal++;if(s==='P'||s==='E'){mmAtt++;mmScore+=1;}else if(s==='L'){mmAtt++;mmScore+=0.5;}});});
+  Object.values(MM_ATT_LIVE).forEach(blk=>{Object.values(blk).forEach(day=>{const s=day[id];if(!s||s==='O')return;mmTotal++;if(s==='P'||s==='E'){mmAtt++;mmScore+=1;}else if(s==='L'){mmAtt++;mmScore+=0.5;}});});
   const mmPct=mmTotal?Math.round(mmScore/mmTotal*100):null;
   let tAtt=0,tTotal=0,tScore=0;
-  Object.values(TEACH_ATT).forEach(blk=>{Object.values(blk).forEach(day=>{const s=day[id];if(!s||s==='O')return;tTotal++;if(s==='P'||s==='E'){tAtt++;tScore+=1;}else if(s==='L'){tAtt++;tScore+=0.5;}});});
+  Object.values(TEACH_ATT_LIVE).forEach(blk=>{Object.values(blk).forEach(day=>{const s=day[id];if(!s||s==='O')return;tTotal++;if(s==='P'||s==='E'){tAtt++;tScore+=1;}else if(s==='L'){tAtt++;tScore+=0.5;}});});
   const tPct=tTotal?Math.round(tScore/tTotal*100):null;
   const rotPct=Math.round(((ROT_H[id]||[]).length/MANDATORY.length)*100);
   const pubQ=QUIZZES.filter(q=>q.published&&q.sc[id]!=null);
@@ -4179,21 +4211,42 @@ function consultById(id){return CONSULTANTS.find(c=>c.id===id);}
 // further out has no block dates defined. The standing bar below the toggle is the point of
 // the control: once you scroll past the header the two years look identical, and every edit
 // on the page writes to whichever one is selected.
-function renderAYBar(sel,onPick,planNote){
-  const cur=CURRENT_ACADEMIC_YEAR,nxt=cur+1,plan=sel!==cur;
+// The year list as a dropdown. The global input,select{width:100%} rule is overridden here on
+// purpose, and the native arrow is replaced so the control reads as one of the portal's pills.
+function yearPicker(years,sel,onPick){
+  const cur=CURRENT_ACADEMIC_YEAR;
+  const chevron="url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%231F1A12%22 stroke-width=%222.4%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><polyline points=%226 9 12 15 18 9%22/></svg>')";
+  const s=el("select",{st:{width:"auto",minWidth:"0",padding:"7px 38px 7px 16px",border:"1px solid rgba(31,26,18,.18)",borderRadius:"9999px",fontSize:".8rem",fontWeight:"600",color:"#1F1A12",background:"#FEFBF3 "+chevron+" no-repeat right 14px center",appearance:"none",WebkitAppearance:"none",MozAppearance:"none",cursor:"pointer",lineHeight:"1.2",fontFamily:"inherit"},
+    onChange:e=>{const y=Number(e.target.value);if(y!==sel)onPick(y);}},
+    ...years.map(y=>el("option",Object.assign({value:String(y)},y===sel?{selected:""}:{}),
+      ocAYLabel(y)+(y<cur?" · closed":y>cur?" · next":" · live"))));
+  return s;
+}
+function renderAYBar(sel,onPick,planNote,opts){
+  opts=opts||{};
+  const cur=CURRENT_ACADEMIC_YEAR,nxt=cur+1;
+  const years=opts.years||[cur,nxt];
+  const plan=sel>cur,past=sel<cur,off=sel!==cur;
   const seg=(y)=>{
     const on=sel===y;
-    return el("span",{st:{padding:"6px 17px",borderRadius:"9999px",fontSize:".78rem",fontWeight:on?"600":"500",color:on?"#FEFBF3":"rgba(31,26,18,.5)",background:on?"#c96a4a":"transparent",cursor:on?"default":"pointer",transition:"all .15s"},onClick:()=>onPick(y)},ocAYLabel(y).slice(3));
+    return el("span",{st:{padding:"6px 17px",borderRadius:"9999px",fontSize:".78rem",fontWeight:on?"600":"500",color:on?"#FEFBF3":"rgba(31,26,18,.5)",background:on?"#c96a4a":"transparent",cursor:on?"default":"pointer",transition:"all .15s",whiteSpace:"nowrap"},onClick:()=>onPick(y)},ocAYLabel(y).slice(3));
   };
   const nxtStart=blockStartDate(1,nxt);
+  const status=plan?(nxtStart?"Next year \u2014 starts "+fmtDate(toLocalYMD(nxtStart)):"Next year"):past?"Closed year \u2014 read only":"Live year";
+  // A closed year gets the quiet ink rule, not the amber one: amber means "what you save goes
+  // somewhere else", and on a closed year nothing can be saved at all.
+  const accent=past?"#5C5345":"#c96a4a",wash=past?"rgba(31,26,18,.04)":"rgba(201,106,74,.06)";
   return el("div",null,
     el("div",{st:{display:"flex",alignItems:"center",gap:"14px",flexWrap:"wrap",marginBottom:"14px"}},
-      el("div",{st:{display:"inline-flex",border:"1px solid rgba(31,26,18,.12)",borderRadius:"9999px",padding:"3px",background:"rgba(31,26,18,.02)"}},seg(cur),seg(nxt)),
-      el("span",{st:{fontSize:".72rem",color:"rgba(31,26,18,.4)"}},plan?(nxtStart?"Next year \u2014 starts "+fmtDate(toLocalYMD(nxtStart)):"Next year"):"Live year")
+      // Two years fit as pills; a module that offers its closed years uses a list instead.
+      opts.years?yearPicker(years,sel,onPick):el("div",{st:{display:"inline-flex",border:"1px solid rgba(31,26,18,.12)",borderRadius:"9999px",padding:"3px",background:"rgba(31,26,18,.02)"}},...years.map(seg)),
+      el("span",{st:{fontSize:".72rem",color:"rgba(31,26,18,.4)"}},status)
     ),
-    !plan?null:el("div",{st:{display:"flex",alignItems:"center",gap:"12px",flexWrap:"wrap",background:"rgba(201,106,74,.06)",borderLeft:"3px solid #c96a4a",borderRadius:"0 8px 8px 0",padding:"11px 16px",marginBottom:"18px"}},
-      el("span",{st:{fontSize:".78rem",color:"rgba(31,26,18,.72)",flex:"1",minWidth:"220px"}},planNote||("You are planning "+ocAYLabel(nxt)+". Nothing here is live yet \u2014 anything you save is stored against next year.")),
-      el("span",{st:{fontSize:".72rem",fontWeight:"600",color:"#FEFBF3",background:"#c96a4a",borderRadius:"9999px",padding:"6px 14px",cursor:"pointer",whiteSpace:"nowrap"},onClick:()=>onPick(cur)},"Back to "+ocAYLabel(cur).slice(3))
+    !off?null:el("div",{st:{display:"flex",alignItems:"center",gap:"12px",flexWrap:"wrap",background:wash,borderLeft:"3px solid "+accent,borderRadius:"0 8px 8px 0",padding:"11px 16px",marginBottom:"18px"}},
+      el("span",{st:{fontSize:".78rem",color:"rgba(31,26,18,.72)",flex:"1",minWidth:"220px"}},
+        past?(opts.pastNote||("You are looking at "+ocAYLabel(sel)+", which is closed. Nothing on this page can be changed."))
+            :(planNote||("You are planning "+ocAYLabel(nxt)+". Nothing here is live yet \u2014 anything you save is stored against next year."))),
+      el("span",{st:{fontSize:".72rem",fontWeight:"600",color:"#FEFBF3",background:accent,borderRadius:"9999px",padding:"6px 14px",cursor:"pointer",whiteSpace:"nowrap"},onClick:()=>onPick(cur)},"Back to "+ocAYLabel(cur).slice(3))
     )
   );
 }
@@ -4519,10 +4572,10 @@ function renderSearchOverlay(){
   // Search spans both years, so a hit has to carry its year across or it lands on the right
   // block of the wrong one.
   MM_SESSIONS.filter(s=>(s.topic||"").toLowerCase().includes(q)).slice(0,5).forEach(s=>{
-    results.push({label:s.topic,sub:"Morning Meeting · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"",action:()=>{Object.assign(STATE,{mod:"morning",mmTab:"attendance",mmAY:ayClamp(s.academic_year),mmBlock:s.block_number,searchQ:""});buildAttendanceMaps();render();}});
+    results.push({label:s.topic,sub:"Morning Meeting · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"",action:()=>{Object.assign(STATE,{mod:"morning",mmTab:"attendance",mmAY:s.academic_year,mmBlock:s.block_number,searchQ:""});buildAttendanceMaps();render();}});
   });
   TEACH_SESSIONS.filter(s=>(s.topic||"").toLowerCase().includes(q)).slice(0,5).forEach(s=>{
-    results.push({label:s.topic,sub:"Academic Day · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"",action:()=>{Object.assign(STATE,{mod:"teaching",teachTab:"attendance",teachAY:ayClamp(s.academic_year),teachBlock:s.block_number,searchQ:""});buildAttendanceMaps();render();}});
+    results.push({label:s.topic,sub:"Academic Day · Block "+s.block_number+" · "+fmtDate(s.session_date),icon:"",action:()=>{Object.assign(STATE,{mod:"teaching",teachTab:"attendance",teachAY:s.academic_year,teachBlock:s.block_number,searchQ:""});buildAttendanceMaps();render();}});
   });
   if(!results.length)results.push({label:'No results for "'+STATE.searchQ+'"',sub:"",icon:"",action:null});
   return el("div",{st:{position:"fixed",top:"0",left:"0",right:"0",bottom:"0",zIndex:"999",display:"flex",alignItems:"flex-start",justifyContent:"flex-start"},
@@ -5693,7 +5746,7 @@ function renderScheduleTable(sessions,blk,cols){
     byWeek[w].push(s);
   });
   const weeks=Object.keys(byWeek).map(Number).sort((a,b)=>a-b);
-  const curWeek=currentWeekInBlock(blk);
+  const curWeek=(sessions.length&&sessions[0].academic_year!==CURRENT_ACADEMIC_YEAR)?null:currentWeekInBlock(blk);
   const bodyRows=[];
   weeks.forEach(w=>{
     const rows=byWeek[w].slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
@@ -5751,9 +5804,9 @@ function renderMorning(){
   );
   return el("div",{cls:"content"},
     header,
-    // Only schedulers get the year toggle: residents have nothing to do in a year that has
-    // not started, and next year's sessions are unpublished, so they would see an empty page.
-    canEdit?renderAYBar(ay,mmSetYear,"You are planning "+ayLabel(CURRENT_ACADEMIC_YEAR+1)+". Sessions you add here are stored against next year and stay hidden from residents until you publish the block."):null,
+    // Schedulers get next year; everyone gets the closed years that hold sessions they can see.
+    // Residents hold only published rows, so a never-published year is not offered to them.
+    mmYears().length>1?renderAYBar(ay,mmSetYear,"You are planning "+ayLabel(CURRENT_ACADEMIC_YEAR+1)+". Sessions you add here are stored against next year and stay hidden from residents until you publish the block.",{years:mmYears()}):null,
     tabs,
     STATE.mmTab==="schedule"?renderMMSchedule():
     STATE.mmTab==="attendance"?renderMMAttendance():
@@ -6204,7 +6257,7 @@ function renderMMSchedule(){
 function renderMMAttendance(){
   const blk=STATE.mmBlock;
   const sessions=mmSessions().filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
-  const vr=visRes();
+  const vr=mmVisRes();
   let totalSess=sessions.length,totalP=0,totalL=0,totalA=0,totalE=0;
   sessions.forEach(s=>{
     const dayAtt=(MM_ATT[blk]||{})[s.session_date]||{};
@@ -6364,7 +6417,7 @@ function attCounts(sessions,attStore,resId){
   return{p,l,a,e,o,total:sessions.length};
 }
 function renderAttOverview(cfg){
-  const vr=visRes();
+  const vr=cfg.roster||visRes();
   const mode=STATE[cfg.modeKey]||"block";
   const sort=STATE[cfg.sortKey]||{field:"a",dir:"desc"};
   function setSort(field){
@@ -6425,7 +6478,7 @@ function renderAttOverview(cfg){
   );
 }
 function renderMMOverview(){
-  return renderAttOverview({sessionsAll:mmSessions(),attStore:MM_ATT,blockKey:"mmBlock",modeKey:"mmOvMode",sortKey:"mmOvSort",title:"Attendance Overview"});
+  return renderAttOverview({sessionsAll:mmSessions(),attStore:MM_ATT,roster:mmVisRes(),blockKey:"mmBlock",modeKey:"mmOvMode",sortKey:"mmOvSort",title:"Attendance Overview"});
 }
 // ─── ACADEMIC DAY SCHEDULE ────────────────────────────────────────────────────
 function renderTeaching(){
@@ -6440,7 +6493,7 @@ function renderTeaching(){
       ),
       canEditT?el("button",{st:{background:"#c96a4a",color:"#FEFBF3",border:"none",borderRadius:"999px",padding:"9px 22px",fontSize:".84rem",fontWeight:"600",cursor:"pointer",flexShrink:"0"},onClick:()=>set({teachShowEntry:true,teachEntrySession:"new_teach",teachTab:"schedule"})},"+ Add Session"):null
     ),
-    canEditT?renderAYBar(ayT,teachSetYear,"You are planning "+ayLabel(CURRENT_ACADEMIC_YEAR+1)+". Sessions you add here are stored against next year and stay hidden from residents until you publish the block."):null,
+    teachYears().length>1?renderAYBar(ayT,teachSetYear,"You are planning "+ayLabel(CURRENT_ACADEMIC_YEAR+1)+". Sessions you add here are stored against next year and stay hidden from residents until you publish the block.",{years:teachYears()}):null,
     el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"28px"}},
       ...["schedule","attendance","overview"].map(t=>{const lbs={schedule:"Schedule",attendance:"Attendance",overview:"Overview"};const active=STATE.teachTab===t;return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({teachTab:t})},lbs[t]);})),
     STATE.teachTab==="schedule"?renderTeachSchedule():
@@ -6557,7 +6610,7 @@ function renderTeachSchedule(){
 function renderTeachAttendance(){
   const blk=STATE.teachBlock;
   const sessions=teachSessions().filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
-  const vr=visRes();
+  const vr=teachVisRes();
   let totalP=0,totalL=0,totalA=0,totalE=0;
   sessions.forEach(s=>{
     const dayAtt=(TEACH_ATT[blk]||{})[s.session_date]||{};
@@ -6688,7 +6741,7 @@ function renderTeachEntryForm(blk,sessions){
   return wrap;
 }
 function renderTeachOverview(){
-  return renderAttOverview({sessionsAll:teachSessions(),attStore:TEACH_ATT,blockKey:"teachBlock",modeKey:"teachOvMode",sortKey:"teachOvSort",title:"Academic Day Attendance Overview"});
+  return renderAttOverview({sessionsAll:teachSessions(),attStore:TEACH_ATT,roster:teachVisRes(),blockKey:"teachBlock",modeKey:"teachOvMode",sortKey:"teachOvSort",title:"Academic Day Attendance Overview"});
 }
 // ─── OCTOBER PROMOTION ───────────────────────────────────────────────────────
 let PROMOTION_NEEDED=false;
@@ -6828,7 +6881,7 @@ function exportAttendance(type, blk){
     .filter(s => s.block_number === blk)
     .slice().sort((a,b) => a.session_date.localeCompare(b.session_date));
   const ATT = isMM ? MM_ATT : TEACH_ATT;
-  const vr = visRes();
+  const vr = isMM ? mmVisRes() : teachVisRes();
   const headers = ["Resident","Level", ...sessions.map(s => fmtDate(s.session_date)+"\n"+s.topic), "Att %"];
   const rows = vr.map(r => {
     let present = 0;
@@ -7329,9 +7382,9 @@ function currentQuarter(){
 function calcKPIQ(id,qBlocks){
   let mmAtt=0,mmTotal=0,mmScore=0,tAtt=0,tTotal=0,tScore=0;
   qBlocks.forEach(blk=>{
-    const blkAtt=MM_ATT[blk]||{};
+    const blkAtt=MM_ATT_LIVE[blk]||{};
     Object.values(blkAtt).forEach(day=>{const s=day[id];if(!s||s==='O')return;mmTotal++;if(s==='P'||s==='E'){mmAtt++;mmScore+=1;}else if(s==='L'){mmAtt++;mmScore+=0.5;}});
-    const tBlk=TEACH_ATT[blk]||{};
+    const tBlk=TEACH_ATT_LIVE[blk]||{};
     Object.values(tBlk).forEach(day=>{const s=day[id];if(!s||s==='O')return;tTotal++;if(s==='P'||s==='E'){tAtt++;tScore+=1;}else if(s==='L'){tAtt++;tScore+=0.5;}});
   });
   const mmPct=mmTotal?Math.round(mmScore/mmTotal*100):null;
@@ -17028,7 +17081,7 @@ function appendAccountModal(app){
 }
 function renderProfileMM(res){
   const blk=STATE.mmBlock;
-  const sessions=mmSessions().filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
+  const sessions=MM_SESSIONS.filter(s=>s.academic_year===CURRENT_ACADEMIC_YEAR&&s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
   return el("div",null,
     el("div",{cls:"card"},
       el("div",{cls:"lbl"},"Select Block"),
@@ -17040,7 +17093,7 @@ function renderProfileMM(res){
       (()=>{
         const wrap=el("div",null);
         sessions.forEach(s=>{
-          const dayAtt=(MM_ATT[blk]||{})[s.session_date]||{};
+          const dayAtt=(MM_ATT_LIVE[blk]||{})[s.session_date]||{};
           const cur=dayAtt[res.id]||"";
           const row=el("div",{st:{display:"flex",alignItems:"center",gap:"10px",padding:"8px",borderBottom:"1px solid #f1f5f9"}},
             el("div",{st:{minWidth:"80px",fontSize:".82rem",fontWeight:"600"}},fmtDate(s.session_date)),
@@ -17064,7 +17117,7 @@ function renderProfileMM(res){
 }
 function renderProfileTeach(res){
   const blk=STATE.teachBlock;
-  const sessions=teachSessions().filter(s=>s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
+  const sessions=TEACH_SESSIONS.filter(s=>s.academic_year===CURRENT_ACADEMIC_YEAR&&s.block_number===blk).slice().sort((a,b)=>a.session_date.localeCompare(b.session_date));
   return el("div",null,
     el("div",{cls:"card"},
       el("div",{cls:"lbl"},"Select Block"),
@@ -17076,7 +17129,7 @@ function renderProfileTeach(res){
       (()=>{
         const wrap=el("div",null);
         sessions.forEach(s=>{
-          const dayAtt=(TEACH_ATT[blk]||{})[s.session_date]||{};
+          const dayAtt=(TEACH_ATT_LIVE[blk]||{})[s.session_date]||{};
           const cur=dayAtt[res.id]||"";
           const row=el("div",{st:{display:"flex",alignItems:"center",gap:"10px",padding:"8px",borderBottom:"1px solid #f1f5f9"}},
             el("div",{st:{minWidth:"80px",fontSize:".82rem",fontWeight:"600"}},fmtDate(s.session_date)),
