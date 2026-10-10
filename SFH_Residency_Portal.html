@@ -1744,7 +1744,7 @@ let CANMEDS_ERR=null;
 // LEAVE PLAN (AY 2026-27 planning — separate from leave_records)
 let LP_AY=2026; // the year the AY Plan module works on; the PD moves it in Control Centre > Year setup
 // Counted per half-block period, so a whole block can absorb up to 2x this.
-const LP_CAP=5;
+// (the number now lives in the year's rules: see lpCap())
 let LP_DEADLINE=new Date("2026-07-18T23:59:59"); // fallback until loadLpStatus() resolves the DB value
 let LP_STATUS=null; // {academic_year,deadline} — loaded from leave_plan_status, PD/plan_rota-controlled
 function lpDeadlineShort(){return LP_DEADLINE.getTime()===0?"no deadline set yet":LP_DEADLINE.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
@@ -1791,6 +1791,33 @@ let LP_PERIODS=LP_PERIODS_2026;
 // every module follows without being edited. A year with no row keeps the values built into the
 // code, and so does the whole portal if the table is missing.
 let AY_ROWS=[];
+// ─── PER-YEAR RULES ─────────────────────────────────────────────────────────────────────────────
+// Leave-plan caps and locks, leave quotas, GIM slot counts and the R4 early-block limit. Each year can
+// carry its own, in academic_years.rules (supabase/add_academic_year_rules.sql); anything a year does not
+// set falls back to the values below, which are the rules the portal has always used.
+const AY_RULES_DEFAULT={cap:5,r1LockedBlocks:[1,2],r3OnlyBlocks:[13],uncappedBlocks:[13],annualQuota:28,eduQuota:7,
+  gimSlots:{R1:6,R2:4,R3:4,R4:0},r4EarlyMax:7};
+function ayRules(ay){
+  const D=AY_RULES_DEFAULT,row=AY_ROWS.find(r=>Number(r.ay)===ay),r=(row&&row.rules&&typeof row.rules==="object")?row.rules:{};
+  const num=(v,d,lo,hi)=>{const n=Number(v);return Number.isFinite(n)&&n>=lo&&n<=hi?Math.round(n):d;};
+  const blocks=(v,d)=>Array.isArray(v)?[...new Set(v.map(Number).filter(b=>b>=1&&b<=13))].sort((a,b)=>a-b):d.slice();
+  const g=(r.gimSlots&&typeof r.gimSlots==="object")?r.gimSlots:{};
+  return{
+    cap:num(r.cap,D.cap,1,99),
+    r1LockedBlocks:blocks(r.r1LockedBlocks,D.r1LockedBlocks),
+    r3OnlyBlocks:blocks(r.r3OnlyBlocks,D.r3OnlyBlocks),
+    uncappedBlocks:blocks(r.uncappedBlocks,D.uncappedBlocks),
+    annualQuota:num(r.annualQuota,D.annualQuota,0,365),
+    eduQuota:num(r.eduQuota,D.eduQuota,0,365),
+    gimSlots:{R1:num(g.R1,D.gimSlots.R1,0,13),R2:num(g.R2,D.gimSlots.R2,0,13),R3:num(g.R3,D.gimSlots.R3,0,13),R4:num(g.R4,D.gimSlots.R4,0,13)},
+    r4EarlyMax:num(r.r4EarlyMax,D.r4EarlyMax,1,13)
+  };
+}
+function lpCap(){return ayRules(LP_AY).cap;}
+function annualQuota(){return ayRules(CURRENT_ACADEMIC_YEAR).annualQuota;}
+function eduQuota(){return ayRules(CURRENT_ACADEMIC_YEAR).eduQuota;}
+function r4EarlyMax(){return ayRules(LP_AY).r4EarlyMax;}
+
 function ayDMY(d){return d.getDate()+"/"+(d.getMonth()+1);}
 function ayAddDays(d,n){return new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);}
 function ayParseISO(iso){const[y,m,d]=String(iso).slice(0,10).split("-").map(Number);return new Date(y,m-1,d);}
@@ -1827,13 +1854,15 @@ function ayFmtRange(a,b){
 // residents' saved choices are keyed to them. Any other year is generated: the first two weeks of
 // each block, then the rest. Block 1-2 are closed to R1s and block 13 is R3 only, as before.
 function lpBuildPeriods(ay){
-  if(ay===2026)return LP_PERIODS_2026;
+  const R=ayRules(ay);
+  const flagsFor=b=>Object.assign({},R.r1LockedBlocks.includes(b)?{r1lock:true}:{},R.r3OnlyBlocks.includes(b)?{r3only:true}:{});
+  if(ay===2026)return LP_PERIODS_2026.map(p=>{const q=Object.assign({},p);delete q.r1lock;delete q.r3only;return Object.assign(q,flagsFor(p.blk));});
   const ranges=ayBlockRanges(ay),out=[];
   ranges.forEach((r,i)=>{
     const b=i+1,s=new Date(r.start.getFullYear(),r.start.getMonth(),r.start.getDate());
     const e=new Date(r.end.getFullYear(),r.end.getMonth(),r.end.getDate());
     const mid=ayAddDays(s,13),second=ayAddDays(s,14);
-    const flags=Object.assign({},b<=2?{r1lock:true}:{},b===13?{r3only:true}:{});
+    const flags=flagsFor(b);
     out.push(Object.assign({key:b+"a",blk:b,half:"first",label:"Block "+b+" - First Half",from:ayISO(s),to:ayISO(mid),disp:ayFmtRange(s,mid)},flags));
     out.push(Object.assign({key:b+"b",blk:b,half:"second",label:"Block "+b+" - Second Half",from:ayISO(second),to:ayISO(e),disp:ayFmtRange(second,e)},flags));
   });
@@ -1867,7 +1896,7 @@ async function loadAcademicYears(){
     ayRecomputeCurrent();
     const py=!s.error&&s.data&&s.data.value?Number(s.data.value.ay):NaN;
     if(Number.isInteger(py)&&py!==LP_AY)applyPlanYearLocal(py);
-    else if(LP_PERIODS!==LP_PERIODS_2026||LP_AY!==2026)LP_PERIODS=lpBuildPeriods(LP_AY);
+    else LP_PERIODS=lpBuildPeriods(LP_AY);
   }catch(e){console.warn("loadAcademicYears",e.message);}
 }
 let LEAVE_PLAN={}; // {resident_id: row}
@@ -1882,7 +1911,7 @@ function lpPeriodCount(periodKey,excludeResId){
   });
   return c;
 }
-function lpCapFor(period){return period&&period.r3only?Infinity:LP_CAP;}
+function lpCapFor(period){return period&&ayRules(LP_AY).uncappedBlocks.includes(period.blk)?Infinity:lpCap();}
 async function loadLeavePlan(){
   const{data,error}=await sb.from("leave_plan").select("*").eq("academic_year",LP_AY);
   if(error){console.warn("leave_plan load error",error.message);return;}
@@ -2078,9 +2107,7 @@ async function lpDecideEdit(residentId,which,newKey){
 }
 let GIM_PREFS={}; // {resident_id: row}
 function gimSlotCount(level){
-  if(level==="R1")return 6;
-  if(level==="R2"||level==="R3")return 4;
-  return 0; // R4 graduating — not applicable
+  return ayRules(LP_AY).gimSlots[level]||0; // R4 graduating — not applicable unless the year says otherwise
 }
 function nextAYLevel(level){
   const map={R1:"R2",R2:"R3",R3:"R4"};
@@ -2295,7 +2322,7 @@ let R4_PREFS_STATUS=null;
 // The first elective and the first clinic are pinned to the front half of the year so a
 // resident cannot stack all four picks into the last six blocks, which would leave the
 // service months bare. The second elective and clinic are free to sit anywhere.
-const R4_EARLY_MAX=7;
+// (the last block for an R4's first elective and clinic comes from the year's rules: see r4EarlyMax())
 function r4PrefsIsOpen(){
   if(!R4_PREFS_STATUS||!R4_PREFS_STATUS.is_open)return false;
   if(R4_PREFS_STATUS.deadline){const dl=new Date(R4_PREFS_STATUS.deadline);if(dl<new Date())return false;}
@@ -2350,8 +2377,8 @@ async function saveR4Prefs(status){
     if(!row.elective2_block||!row.elective2_subspecialty){showToast("Please select Block and Subspecialty for Elective 2","error");return;}
     if(!row.clinic1_block){showToast("Please select a block for Clinic 1","error");return;}
     if(!row.clinic2_block){showToast("Please select a block for Clinic 2","error");return;}
-    if(row.elective1_block>R4_EARLY_MAX){showToast("Elective 1 must be in Blocks 1\u2013"+R4_EARLY_MAX,"error");return;}
-    if(row.clinic1_block>R4_EARLY_MAX){showToast("Clinic 1 must be in Blocks 1\u2013"+R4_EARLY_MAX,"error");return;}
+    if(row.elective1_block>r4EarlyMax()){showToast("Elective 1 must be in Blocks 1\u2013"+r4EarlyMax(),"error");return;}
+    if(row.clinic1_block>r4EarlyMax()){showToast("Clinic 1 must be in Blocks 1\u2013"+r4EarlyMax(),"error");return;}
     const blocks=[row.elective1_block,row.elective2_block,row.clinic1_block,row.clinic2_block].filter(Boolean);
     if(new Set(blocks).size!==4){showToast("Each rotation must be in a different block","error");return;}
   }
@@ -6913,7 +6940,7 @@ function exportQuizAll(){
 }
 function exportLeave(){
   const vr=visRes();
-  const headers=["Resident","Level","Rota Blocks","Annual Used (days)","Edu Used (days)","Absences (days)","Remaining (of 28d)"];
+  const headers=["Resident","Level","Rota Blocks","Annual Used (days)","Edu Used (days)","Absences (days)","Remaining (of "+annualQuota()+"d)"];
   const rows=vr.map(r=>{
     const ld=LEAVE_DATA[r.id]||{rota:[],manual:[],absences:[]};
     const approvedBlocks=new Set(ld.manual.map(m=>{const mt=m.comment?.match(/Rota leave B(\d+)/);return mt?parseInt(mt[1]):null;}).filter(Boolean));
@@ -6921,7 +6948,7 @@ function exportLeave(){
     const annualApproved=ld.manual.filter(x=>x.approved&&!x.comment?.startsWith("[EDU]")).reduce((a,x)=>a+(x.days||0),0);
     const eduApproved=ld.manual.filter(x=>x.approved&&x.comment?.startsWith("[EDU]")).reduce((a,x)=>a+(x.days||0),0);
     const absenceDays=ld.absences.reduce((a,x)=>a+(x.days||0),0);
-    const remaining=28-(annualApproved+rotaDays);
+    const remaining=annualQuota()-(annualApproved+rotaDays);
     return[r.name,r.level,ld.rota.length,annualApproved+rotaDays,eduApproved,absenceDays,remaining];
   });
   const ws=XLSX.utils.aoa_to_sheet([headers,...rows]);
@@ -8810,7 +8837,7 @@ function renderLeaveList(vr){
             el("th",{st:{textAlign:"center"}},"Annual Used"),
             el("th",{st:{textAlign:"center"}},"Edu Used"),
             el("th",{st:{textAlign:"center"}},"Absences"),
-            el("th",{st:{textAlign:"center"}},"Remaining (28d)"),
+            el("th",{st:{textAlign:"center"}},"Remaining ("+annualQuota()+"d)"),
             el("th",null,"")
           )
         ),
@@ -8822,7 +8849,7 @@ function renderLeaveList(vr){
             const annualApproved=ld.manual.filter(x=>x.approved&&!x.comment?.startsWith("[EDU]")).reduce((a,x)=>a+(x.days||0),0);
             const eduApproved=ld.manual.filter(x=>x.approved&&x.comment?.startsWith("[EDU]")).reduce((a,x)=>a+(x.days||0),0);
             const absenceDays=ld.absences.reduce((a,x)=>a+(x.days||0),0);
-            const remaining=28-(annualApproved+rotaDays);
+            const remaining=annualQuota()-(annualApproved+rotaDays);
             return el("tr",null,
               el("td",null,el("div",{cls:"flex-gap"},avEl(r),el("span",{cls:"name",st:{fontSize:".88rem"}},r.name))),
               el("td",null,levelBadge(r.level)),
@@ -8958,8 +8985,8 @@ function renderLeaveDetail(rid,onBack){
   const ld=LEAVE_DATA[rid]||{rota:[],manual:[],absences:[],requests:[]};
   if(!LEAVE_DATA[rid])LEAVE_DATA[rid]={rota:[],manual:[],absences:[],requests:[]};
   // Quotas
-  const ANNUAL_QUOTA=28;
-  const EDU_QUOTA=7;
+  const ANNUAL_QUOTA=annualQuota();
+  const EDU_QUOTA=eduQuota();
   // Split manual leaves into annual vs educational ([EDU] prefix in comment)
   const annualLeaves=ld.manual.filter(x=>x.approved&&!x.comment?.startsWith("[EDU]"));
   const eduLeaves=ld.manual.filter(x=>x.approved&&x.comment?.startsWith("[EDU]"));
@@ -11222,7 +11249,7 @@ function renderLeavePlan(){
     const gimEligible=allRes.filter(r=>r.level!=="R4");
     const gimSubRes=gimEligible.filter(r=>GIM_PREFS[r.id]?.status==="submitted");
     const sumStrip=el("div",{st:{display:"flex",border:"1px solid rgba(31,26,18,.08)",borderRadius:"14px",overflow:"hidden",marginBottom:"24px"}},
-      ...[{n:subRes.length,l:"Leave Submitted"},{n:missing.length,l:"Leave Not submitted",warn:missing.length>0},{n:overCap,l:"Periods over cap ("+LP_CAP+")",warn:overCap>0},{n:gimSubRes.length+"/"+gimEligible.length,l:"GIM Prefs Submitted"},{n:passed?"Closed":"Open",l:"Submissions"}]
+      ...[{n:subRes.length,l:"Leave Submitted"},{n:missing.length,l:"Leave Not submitted",warn:missing.length>0},{n:overCap,l:"Periods over cap ("+lpCap()+")",warn:overCap>0},{n:gimSubRes.length+"/"+gimEligible.length,l:"GIM Prefs Submitted"},{n:passed?"Closed":"Open",l:"Submissions"}]
         .map((s,i,a)=>el("div",{st:{flex:"1",padding:"18px 20px",borderRight:i<a.length-1?"1px solid rgba(31,26,18,.08)":"none"}},
           el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.7rem",fontWeight:"700",lineHeight:"1",color:s.warn?"#b52040":"#1F1A12"}},s.n),
           el("div",{st:{fontSize:".68rem",color:"rgba(31,26,18,.4)",marginTop:"4px",textTransform:"uppercase",letterSpacing:".06em",fontWeight:"600"}},s.l)
@@ -11374,7 +11401,7 @@ function renderLeavePlan(){
         el("div",{st:{display:"flex",gap:"14px",flexWrap:"wrap"}},
           el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.5)"}},el("span",{st:{display:"inline-block",width:"10px",height:"10px",borderRadius:"50%",background:"#c96a4a"}}),"First Leave"),
           el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.5)"}},el("span",{st:{display:"inline-block",width:"10px",height:"10px",borderRadius:"50%",background:"#26523A"}}),"Second Leave"),
-          el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.5)"}},el("span",{st:{display:"inline-block",width:"10px",height:"10px",borderRadius:"50%",background:"#fde8e8",border:"1px solid #b52040"}}),"Over cap ("+LP_CAP+")"),
+          el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.5)"}},el("span",{st:{display:"inline-block",width:"10px",height:"10px",borderRadius:"50%",background:"#fde8e8",border:"1px solid #b52040"}}),"Over cap ("+lpCap()+")"),
           el("div",{st:{display:"flex",alignItems:"center",gap:"5px",fontSize:".72rem",color:"rgba(31,26,18,.5)"}},el("span",{st:{display:"inline-block",width:"10px",height:"10px",borderRadius:"3px",background:"rgba(38,90,72,.18)"}}),"Suggested GIM block")
         ),
         el("div",{st:{marginLeft:"auto",display:"flex",gap:"10px"}},
@@ -11880,7 +11907,7 @@ function renderLeavePlan(){
           const sc=status==="SUBMITTED"?{bg:"#e6f4ea",c:"#1e7a43"}:status==="DRAFT"?{bg:"#fef3d6",c:"#92680a"}:{bg:"rgba(31,26,18,.06)",c:"rgba(31,26,18,.4)"};
           // Anything submitted before the Blocks 1–7 rule existed still reads as SUBMITTED,
           // so it is called out here — otherwise there is no way to know who to chase.
-          const late=pref?[pref.elective1_block>R4_EARLY_MAX?"E1":null,pref.clinic1_block>R4_EARLY_MAX?"C1":null].filter(Boolean):[];
+          const late=pref?[pref.elective1_block>r4EarlyMax()?"E1":null,pref.clinic1_block>r4EarlyMax()?"C1":null].filter(Boolean):[];
           const row=el("div",{st:{display:"flex",alignItems:"center",gap:"12px",padding:"10px 16px",borderBottom:"1px solid rgba(31,26,18,.06)"}},
             el("div",{st:{flex:"1",fontWeight:"500",fontSize:".85rem",color:"#1F1A12"}},dname(r.name)),
             late.length?el("span",{st:{fontSize:".6rem",fontWeight:"700",padding:"3px 10px",borderRadius:"9999px",background:"#fdecef",color:"#8f1730"}},late.join(" + ")+" TOO LATE"):null,
@@ -11916,14 +11943,14 @@ function renderLeavePlan(){
       sec.appendChild(el("div",{st:{background:"#fef9ec",border:"1px solid #f0d98a",borderRadius:"10px",padding:"12px 16px",fontSize:".8rem",color:"#92680a",lineHeight:"1.5",marginBottom:"20px"}},
         el("div",null,"This is only a suggested plan to help build the master rota to your best interest — it is not guaranteed nor final."),
         el("div",{st:{marginTop:"6px"}},"Spread them across the year: ",el("b",null,"Elective 1")," and ",el("b",null,"Clinic 1"),
-          " must sit in Blocks 1\u2013"+R4_EARLY_MAX+". Elective 2 and Clinic 2 may go in any block. All four must be in different blocks.")));
+          " must sit in Blocks 1\u2013"+r4EarlyMax()+". Elective 2 and Clinic 2 may go in any block. All four must be in different blocks.")));
       const allSelected=[STATE.r4e1Block,STATE.r4e2Block,STATE.r4c1Block,STATE.r4c2Block].filter(Boolean);
       function blockPicker(label,stateKey,color,early){
         const cur=STATE[stateKey];
         const others=allSelected.filter(b=>b!==cur);
         const grid=el("div",{st:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(80px,1fr))",gap:"8px",marginBottom:"8px"}});
         for(let b=1;b<=13;b++){
-          const out=!!early&&b>R4_EARLY_MAX;
+          const out=!!early&&b>r4EarlyMax();
           const taken=!out&&others.includes(b);
           const isSel=cur===b;
           // A draft saved before this rule existed can still hold an out-of-range block, so
@@ -11937,7 +11964,7 @@ function renderLeavePlan(){
         return el("div",{st:{marginBottom:"20px"}},
           el("div",{st:{fontSize:".72rem",fontWeight:"700",letterSpacing:".07em",textTransform:"uppercase",color:color,marginBottom:"8px"}},
             label+(cur?" — Block "+cur:""),
-            early?el("span",{st:{display:"inline-block",fontSize:".66rem",fontWeight:"700",letterSpacing:".05em",padding:"3px 10px",borderRadius:"9999px",marginLeft:"8px",background:color+"1f",color:color}},"Blocks 1\u2013"+R4_EARLY_MAX):null),
+            early?el("span",{st:{display:"inline-block",fontSize:".66rem",fontWeight:"700",letterSpacing:".05em",padding:"3px 10px",borderRadius:"9999px",marginLeft:"8px",background:color+"1f",color:color}},"Blocks 1\u2013"+r4EarlyMax()):null),
           grid);
       }
       function textRow(label,stateKey,placeholder){
@@ -11965,11 +11992,11 @@ function renderLeavePlan(){
         blockPicker("Select Block","r4c2Block","#26523A")));
       const allFilled=STATE.r4e1Block&&STATE.r4e1Sub&&STATE.r4e2Block&&STATE.r4e2Sub&&STATE.r4c1Block&&STATE.r4c2Block;
       const late=[];
-      if(STATE.r4e1Block>R4_EARLY_MAX)late.push("Elective 1");
-      if(STATE.r4c1Block>R4_EARLY_MAX)late.push("Clinic 1");
+      if(STATE.r4e1Block>r4EarlyMax())late.push("Elective 1");
+      if(STATE.r4c1Block>r4EarlyMax())late.push("Clinic 1");
       const canSubmit=!!allFilled&&!late.length;
       if(late.length)sec.appendChild(el("div",{st:{background:"#fdecef",border:"1px solid #f0a8b8",borderRadius:"10px",padding:"12px 16px",fontSize:".8rem",color:"#8f1730",lineHeight:"1.5",marginBottom:"12px"}},
-        late.join(" and ")+(late.length>1?" are":" is")+" in a block that is no longer allowed. Pick a block in 1\u2013"+R4_EARLY_MAX+" before submitting."));
+        late.join(" and ")+(late.length>1?" are":" is")+" in a block that is no longer allowed. Pick a block in 1\u2013"+r4EarlyMax()+" before submitting."));
       sec.appendChild(el("div",{st:{display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"8px"}},
         el("button",{st:{background:"#F6EFE2",color:"#1F1A12",border:"none",borderRadius:"9999px",padding:"10px 22px",fontFamily:"Inter,sans-serif",fontWeight:"500",fontSize:".85rem",cursor:"pointer"},
           async onClick(){await saveR4Prefs("draft");}},"Save Draft"),
@@ -12441,7 +12468,7 @@ function renderRotaBuilder(){
       const cls=(tot,alv,half)=>{const cap=rbHalfCap(b,half);return !tot?"nil":alv>cap?"over":alv===cap?"at":"";};
       const extra=[aw.mat?aw.mat+" on maternity leave":null,aw.elec?aw.elec+" on elective (no on-calls)":null].filter(Boolean);
       const tip="Block "+b+": "+aw.first+" unavailable in the first half, "+aw.second+" in the second."
-        +(extra.length?" Includes "+extra.join(" and ")+" — the cap of "+LP_CAP+" covers annual leave only, which here is "
+        +(extra.length?" Includes "+extra.join(" and ")+" — the cap of "+lpCap()+" covers annual leave only, which here is "
           +aw.alFirst+"·"+aw.alSecond+".":"");
       lvRow.appendChild(el("th",{title:tip},el("div",{cls:"rb-cnt"},
         el("span",{cls:cls(aw.first,aw.alFirst,"first")},String(aw.first)),el("s",null,"·"),
@@ -13513,6 +13540,80 @@ async function ctlSwitchPlanYear(ay){
   render();
   showToast("The AY Plan module now works on "+lpAYName()+".","success");
 }
+// Leave and rules: the numbers and block locks that used to be fixed in the code. Saved on the chosen
+// year's academic_years row, so changing 2027-28 never touches 2026-27.
+async function ctlSaveRules(ay,rules){
+  const{error}=await sb.from("academic_years").update({rules,updated_at:new Date().toISOString(),updated_by:STATE.user.profileId}).eq("ay",ay);
+  if(error){showToast("Could not save the rules: "+error.message+(error.message.indexOf("rules")>=0?" (run supabase/add_academic_year_rules.sql first)":""));return false;}
+  await loadAcademicYears();
+  set({ctlRules:null});
+  showToast("Rules for AY "+ay+"-"+String((ay+1)%100).padStart(2,"0")+" saved.","success");
+  return true;
+}
+function ctlRulesView(){
+  const years=AY_ROWS.map(r=>Number(r.ay)).filter(y=>y>=CURRENT_ACADEMIC_YEAR).sort((a,b)=>a-b);
+  if(!years.length)return el("div",{cls:"card"},el("p",{cls:"sh"},"Set up an academic year first (Year setup). Rules are kept per year."));
+  const ay=years.includes(STATE.ctlRulesYear)?STATE.ctlRulesYear:(years.includes(LP_AY)?LP_AY:years[0]);
+  const nm=y=>"AY "+y+"-"+String((y+1)%100).padStart(2,"0");
+  const saved=ayRules(ay);
+  const d=(STATE.ctlRules&&STATE.ctlRules.ay===ay)?STATE.ctlRules.v:JSON.parse(JSON.stringify(saved));
+  const edit=f=>{const v=JSON.parse(JSON.stringify(d));f(v);set({ctlRules:{ay,v}});};
+  const dirty=JSON.stringify(d)!==JSON.stringify(saved);
+  const num=(label,hint,get,setf,lo,hi)=>el("div",{st:{minWidth:"130px"}},
+    el("label",null,label),
+    el("input",{type:"number",min:String(lo),max:String(hi),value:String(get(d)),st:{maxWidth:"110px"},
+      onChange:e=>{const v=Math.max(lo,Math.min(hi,parseInt(e.target.value)||lo));edit(x=>setf(x,v));}}),
+    hint?el("div",{cls:"sh",st:{fontSize:".7rem",marginTop:"3px"}},hint):null);
+  const chips=(label,hint,key)=>el("div",{st:{marginBottom:"18px"}},
+    el("div",{st:{fontSize:".66rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:"#5C5345",marginBottom:"4px"}},label),
+    hint?el("div",{cls:"sh",st:{fontSize:".76rem",marginBottom:"8px"}},hint):null,
+    el("div",{st:{display:"flex",flexWrap:"wrap",gap:"6px"}},
+      ...Array.from({length:13},(_,i)=>i+1).map(b=>{const on=d[key].includes(b);
+        return el("button",{type:"button","aria-pressed":on?"true":"false",
+          st:{width:"38px",height:"32px",borderRadius:"999px",cursor:"pointer",fontSize:".8rem",fontWeight:"600",
+            border:"1px solid "+(on?"#a94e2c":"rgba(31,26,18,.18)"),background:on?"rgba(201,106,74,.18)":"transparent",color:on?"#8f3f20":"#443C2F"},
+          onClick:()=>edit(x=>{x[key]=on?x[key].filter(k=>k!==b):[...x[key],b].sort((p,q)=>p-q);})},String(b));})));
+  const list=a=>a.length?a.join(", "):"none";
+  return el("div",null,
+    el("div",{st:{display:"flex",gap:"12px",alignItems:"center",flexWrap:"wrap",marginBottom:"18px"}},
+      el("label",{st:{margin:"0"}},"Rules for"),
+      el("select",{st:{width:"auto"},onChange:e=>set({ctlRulesYear:Number(e.target.value),ctlRules:null})},
+        ...years.map(y=>el("option",{value:String(y),...(y===ay?{selected:""}:{})},nm(y)+(y===CURRENT_ACADEMIC_YEAR?" (live)":"")+(y===LP_AY?" (AY Plan year)":"")))),
+      el("span",{cls:"sh",st:{fontSize:".76rem"}},"Each year keeps its own rules.")),
+    el("div",{cls:"card",st:{marginBottom:"18px"}},
+      el("div",{cls:"card-title"},"Leave plan"),
+      chips("Blocks closed to R1s","An R1 cannot pick leave in these blocks.","r1LockedBlocks"),
+      chips("Blocks for R3s only","Only an R3 can pick leave in these blocks.","r3OnlyBlocks"),
+      chips("Blocks with no cap","Any number of residents can pick these blocks.","uncappedBlocks"),
+      el("div",{st:{display:"flex",gap:"22px",flexWrap:"wrap"}},
+        num("People per half-block","Counted for annual leave only",x=>x.cap,(x,v)=>{x.cap=v;},1,99))),
+    el("div",{cls:"card",st:{marginBottom:"18px"}},
+      el("div",{cls:"card-title"},"Leave quotas"),
+      el("div",{st:{display:"flex",gap:"22px",flexWrap:"wrap"}},
+        num("Annual leave (days)","Used for the balances while this year is live",x=>x.annualQuota,(x,v)=>{x.annualQuota=v;},0,365),
+        num("Educational leave (days)","",x=>x.eduQuota,(x,v)=>{x.eduQuota=v;},0,365))),
+    el("div",{cls:"card",st:{marginBottom:"18px"}},
+      el("div",{cls:"card-title"},"GIM and R4 preferences"),
+      el("div",{st:{display:"flex",gap:"22px",flexWrap:"wrap",marginBottom:"14px"}},
+        ...["R1","R2","R3","R4"].map(l=>num(l+" GIM slots","",x=>x.gimSlots[l],(x,v)=>{x.gimSlots[l]=v;},0,13))),
+      el("div",{st:{display:"flex",gap:"22px",flexWrap:"wrap"}},
+        num("R4 first elective and clinic by block","The latest block allowed",x=>x.r4EarlyMax,(x,v)=>{x.r4EarlyMax=v;},1,13))),
+    el("div",{cls:"card",st:{marginBottom:"18px"}},
+      el("div",{cls:"card-title"},"In effect after saving"),
+      el("p",{cls:"sh",st:{fontSize:".8rem",lineHeight:"1.7",maxWidth:"72ch"}},
+        "R1s cannot pick blocks: "+list(d.r1LockedBlocks)+". Only R3s can pick blocks: "+list(d.r3OnlyBlocks)+". No cap on blocks: "+list(d.uncappedBlocks)+
+        ". Otherwise "+d.cap+" people per half-block. Annual leave "+d.annualQuota+" days, educational "+d.eduQuota+". GIM slots: R1 "+d.gimSlots.R1+", R2 "+d.gimSlots.R2+", R3 "+d.gimSlots.R3+", R4 "+d.gimSlots.R4+
+        ". An R4's first elective and clinic must be in blocks 1 to "+d.r4EarlyMax+"."),
+      el("p",{cls:"sh",st:{fontSize:".74rem",maxWidth:"72ch",marginTop:"6px"}},"Choices residents have already saved are kept. The new rules apply to new picks and to the PD views.")),
+    el("div",{st:{display:"flex",gap:"10px"}},
+      el("button",{cls:"sbtn primary",st:{opacity:dirty?"1":".5"},onClick:()=>{
+        if(!dirty){showToast("Nothing has changed.","warning");return;}
+        const go=()=>ctlSaveRules(ay,d);
+        if(ay===LP_AY||ay===CURRENT_ACADEMIC_YEAR)showConfirm("This year is in use. The new rules take effect for everyone as soon as they next open the page. Save?",go,"Save","warn");else go();
+      }},"Save rules"),
+      el("button",{cls:"sbtn ghost",onClick:()=>{if(dirty)set({ctlRules:null});}},"Discard changes"),
+      el("button",{cls:"sbtn ghost",onClick:()=>edit(x=>{Object.assign(x,JSON.parse(JSON.stringify(AY_RULES_DEFAULT)));})},"Reset to the portal's standard rules")));
+}
 function renderControl(){
   if(!ctlCanUse())return el("div",{cls:"content"},el("p",{cls:"alert-yellow"},"Only the Program Director and the deputy PD can change these settings."));
   const tab=STATE.ctlTab||"year";
@@ -13521,9 +13622,10 @@ function renderControl(){
     el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Control Centre"),
     el("div",{st:{fontSize:".82rem",color:"#5C5345"}},"Change how the portal is set up, without asking a developer."));
   const tabs=el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
-    ...[["year","Year setup"],["committees","Committees"]].map(t=>{const on=tab===t[0];
+    ...[["year","Year setup"],["rules","Leave and rules"],["committees","Committees"]].map(t=>{const on=tab===t[0];
       return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:on?"600":"500",color:on?"#a94e2c":"#5C5345",cursor:"pointer",
         borderBottom:"2px solid "+(on?"#c96a4a":"transparent"),marginBottom:"-1px"},onClick:()=>set({ctlTab:t[0]})},t[1]);}));
+  if(tab==="rules")return el("div",{cls:"content"},head,tabs,ctlRulesView());
   if(tab==="committees"){
     return el("div",{cls:"content"},head,tabs,el("div",{cls:"card"},
       el("div",{cls:"card-title"},"Committees"),
