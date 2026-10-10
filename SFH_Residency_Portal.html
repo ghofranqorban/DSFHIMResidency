@@ -943,8 +943,8 @@ function computeCurrentBlock(today){
   return{block:13,academicYear:y};
 }
 const __CUR=computeCurrentBlock();
-const CURRENT_PERIOD=__CUR.block;
-const CURRENT_ACADEMIC_YEAR=__CUR.academicYear;
+let CURRENT_PERIOD=__CUR.block;
+let CURRENT_ACADEMIC_YEAR=__CUR.academicYear;
 // Full rota grid is DB-backed (table `rotations`, see migration_004_rotations.sql) —
 // loaded per academic year by loadRotations() below. Keyed by real resident_id
 // (matches the `residents` table ids, not any hardcoded demo numbering).
@@ -1742,12 +1742,12 @@ let COMMITTEE_SUM={};     // {resident_id:row} — counts are all-time, not per 
 let CANMEDS_LOADED=false;
 let CANMEDS_ERR=null;
 // LEAVE PLAN (AY 2026-27 planning — separate from leave_records)
-const LP_AY=2026;
+let LP_AY=2026; // the year the AY Plan module works on; the PD moves it in Control Centre > Year setup
 // Counted per half-block period, so a whole block can absorb up to 2x this.
 const LP_CAP=5;
 let LP_DEADLINE=new Date("2026-07-18T23:59:59"); // fallback until loadLpStatus() resolves the DB value
 let LP_STATUS=null; // {academic_year,deadline} — loaded from leave_plan_status, PD/plan_rota-controlled
-function lpDeadlineShort(){return LP_DEADLINE.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
+function lpDeadlineShort(){return LP_DEADLINE.getTime()===0?"no deadline set yet":LP_DEADLINE.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
 function lpDeadlineLong(){
   const wd=LP_DEADLINE.toLocaleDateString("en-GB",{weekday:"long"});
   const dm=LP_DEADLINE.toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
@@ -1755,7 +1755,7 @@ function lpDeadlineLong(){
   return wd+", "+dm+(isMidnight?" at midnight":" at "+LP_DEADLINE.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}));
 }
 let GIM_STATUS=null; // {academic_year,is_open,opened_at,deadline} — loaded from gim_rota_status, PD-controlled
-const LP_PERIODS=[
+const LP_PERIODS_2026=[
   {key:"1a",blk:1,half:"first",label:"Block 1 - First Half",from:"2026-10-04",to:"2026-10-17",disp:"4 - 17 Oct 2026",r1lock:true},
   {key:"1b",blk:1,half:"second",label:"Block 1 - Second Half",from:"2026-10-18",to:"2026-11-01",disp:"18 Oct - 1 Nov 2026",r1lock:true},
   {key:"2a",blk:2,half:"first",label:"Block 2 - First Half",from:"2026-11-02",to:"2026-11-15",disp:"2 - 15 Nov 2026",r1lock:true},
@@ -1783,6 +1783,93 @@ const LP_PERIODS=[
   {key:"13a",blk:13,half:"first",label:"Block 13 - First Half",from:"2027-09-06",to:"2027-09-19",disp:"6 - 19 Sep 2027",r3only:true},
   {key:"13b",blk:13,half:"second",label:"Block 13 - Second Half",from:"2027-09-20",to:"2027-10-03",disp:"20 Sep - 3 Oct 2027",r3only:true},
 ];
+let LP_PERIODS=LP_PERIODS_2026;
+// ─── ACADEMIC YEARS IN THE DATABASE ──────────────────────────────────────────────────────────
+// Table academic_years (supabase/add_academic_years.sql): one row per year with its start date and
+// the length in weeks of each of its 13 blocks. Each row is turned into the three tables the rest
+// of the portal already reads (ROTA_PERIODS_OVERRIDE, AY_START_OVERRIDE, BLOCK_WEEKS_OVERRIDE), so
+// every module follows without being edited. A year with no row keeps the values built into the
+// code, and so does the whole portal if the table is missing.
+let AY_ROWS=[];
+function ayDMY(d){return d.getDate()+"/"+(d.getMonth()+1);}
+function ayAddDays(d,n){return new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);}
+function ayParseISO(iso){const[y,m,d]=String(iso).slice(0,10).split("-").map(Number);return new Date(y,m-1,d);}
+function ayISO(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+// The 13 blocks of a year as {start,end,weeks}, from its start date and block lengths.
+function ayLayout(startDate,weeks){
+  let start=startDate;const out=[];
+  weeks.forEach(w=>{const end=ayAddDays(start,w*7-1);out.push({start,end,weeks:w});start=ayAddDays(end,1);});
+  return out;
+}
+function ayApplyRow(row){
+  const ay=Number(row.ay);
+  const weeks=(Array.isArray(row.block_weeks)&&row.block_weeks.length===13?row.block_weeks:Array(13).fill(4)).map(Number);
+  const start=ayParseISO(row.start_date);
+  const blocks=ayLayout(start,weeks),over={};
+  ROTA_PERIODS_OVERRIDE[ay]=blocks.map(b=>ayDMY(b.start)+"-"+ayDMY(b.end));
+  AY_START_OVERRIDE[ay]=[start.getDate(),start.getMonth()+1];
+  blocks.forEach((b,i)=>{if(b.weeks!==4)over[i+1]=b.weeks;});
+  if(Object.keys(over).length)BLOCK_WEEKS_OVERRIDE[ay]=over;else delete BLOCK_WEEKS_OVERRIDE[ay];
+}
+// Weeks before a block starts, counted from the year's first week. Equal to 4*(blk-1) wherever
+// every earlier block is 4 weeks long, which is every year recorded before this was added.
+function blockWeekOffset(blk,ay){let n=0;for(let b=1;b<blk;b++)n+=blockWeeks(b,ay);return n;}
+function lpAYName(){return"AY "+LP_AY+"-"+String((LP_AY+1)%100).padStart(2,"0");}
+function lpAYShort(){return String(LP_AY%100).padStart(2,"0")+"-"+String((LP_AY+1)%100).padStart(2,"0");}
+function ayFmtRange(a,b){
+  const o={day:"numeric",month:"short"},y={day:"numeric",month:"short",year:"numeric"};
+  const f=(d,fmt)=>d.toLocaleDateString("en-GB",fmt).replace("Sept","Sep");
+  if(a.getFullYear()!==b.getFullYear())return f(a,y)+" - "+f(b,y);
+  if(a.getMonth()!==b.getMonth())return f(a,o)+" - "+f(b,y);
+  return a.getDate()+" - "+f(b,y);
+}
+// Leave-plan half-blocks for a year. 2026-27 keeps the periods already entered by hand, because
+// residents' saved choices are keyed to them. Any other year is generated: the first two weeks of
+// each block, then the rest. Block 1-2 are closed to R1s and block 13 is R3 only, as before.
+function lpBuildPeriods(ay){
+  if(ay===2026)return LP_PERIODS_2026;
+  const ranges=ayBlockRanges(ay),out=[];
+  ranges.forEach((r,i)=>{
+    const b=i+1,s=new Date(r.start.getFullYear(),r.start.getMonth(),r.start.getDate());
+    const e=new Date(r.end.getFullYear(),r.end.getMonth(),r.end.getDate());
+    const mid=ayAddDays(s,13),second=ayAddDays(s,14);
+    const flags=Object.assign({},b<=2?{r1lock:true}:{},b===13?{r3only:true}:{});
+    out.push(Object.assign({key:b+"a",blk:b,half:"first",label:"Block "+b+" - First Half",from:ayISO(s),to:ayISO(mid),disp:ayFmtRange(s,mid)},flags));
+    out.push(Object.assign({key:b+"b",blk:b,half:"second",label:"Block "+b+" - Second Half",from:ayISO(second),to:ayISO(e),disp:ayFmtRange(second,e)},flags));
+  });
+  return out;
+}
+// Points the AY Plan module (leave plan, GIM and R4 windows, chief election) at one year.
+function applyPlanYearLocal(ay){
+  LP_AY=ay;LP_PERIODS=lpBuildPeriods(ay);
+  LEAVE_PLAN={};LP_STATUS=null;GIM_STATUS=null;
+  // A year with no saved deadline stays closed until the PD sets one.
+  LP_DEADLINE=ay===2026?new Date("2026-07-18T23:59:59"):new Date(0);
+  const m=MODS.find(x=>x.id==="leave_plan");
+  if(m){m.label="AY Plan "+lpAYShort();m.desc="Suggested leave & GIM rotation preferences for "+lpAYName();}
+}
+// Recomputes today's block and year after the database has supplied its year definitions.
+function ayRecomputeCurrent(){
+  const c=computeCurrentBlock(),oldP=CURRENT_PERIOD;
+  const changed=c.block!==CURRENT_PERIOD||c.academicYear!==CURRENT_ACADEMIC_YEAR;
+  CURRENT_PERIOD=c.block;CURRENT_ACADEMIC_YEAR=c.academicYear;
+  if(changed){["rotaPeriod","mmBlock","teachBlock"].forEach(k=>{if(STATE[k]===oldP)STATE[k]=CURRENT_PERIOD;});}
+  return changed;
+}
+async function loadAcademicYears(){
+  try{
+    const[a,s]=await Promise.all([
+      sb.from("academic_years").select("*").order("ay"),
+      sb.from("portal_settings").select("*").eq("key","plan_year").maybeSingle()
+    ]);
+    if(a.error){console.warn("academic_years not read, using the built-in years:",a.error.message);}
+    else{AY_ROWS=a.data||[];AY_ROWS.forEach(ayApplyRow);}
+    ayRecomputeCurrent();
+    const py=!s.error&&s.data&&s.data.value?Number(s.data.value.ay):NaN;
+    if(Number.isInteger(py)&&py!==LP_AY)applyPlanYearLocal(py);
+    else if(LP_PERIODS!==LP_PERIODS_2026||LP_AY!==2026)LP_PERIODS=lpBuildPeriods(LP_AY);
+  }catch(e){console.warn("loadAcademicYears",e.message);}
+}
 let LEAVE_PLAN={}; // {resident_id: row}
 let _lpNoteDraft=null;
 function lpPeriodCount(periodKey,excludeResId){
@@ -1926,8 +2013,8 @@ async function lpBulkApproveWithinCap(){
     const prof=PROFILE_BY_RESIDENT[x.res.id];
     if(!prof)return null;
     const msg=x.which.length===2
-      ?"Both of your AY 2026-27 Leave suggestions were approved by the Program Director."
-      :"Your "+(x.which[0]==="first"?"First":"Second")+" Leave suggestion for AY 2026-27 was approved by the Program Director.";
+      ?"Both of your "+lpAYName()+" Leave suggestions were approved by the Program Director."
+      :"Your "+(x.which[0]==="first"?"First":"Second")+" Leave suggestion for "+lpAYName()+" was approved by the Program Director.";
     return{profile_id:prof.id,type:"success",message:msg,link_mod:"leave_plan",link_param:null,read:false};
   }).filter(Boolean);
   if(notifRows.length){
@@ -2185,7 +2272,7 @@ async function chiefPublishResults(){
   const{error}=await sb.from("chief_election").update({results_published:true,results_published_at:new Date().toISOString(),results_snapshot:snap}).eq("academic_year",LP_AY);
   if(error){showToast("Publish failed: "+error.message,"error");return;}
   const winner=resById(snap.winner_resident_id)||anyResById(snap.winner_resident_id);
-  const msg="Chief Resident for AY 2026-27 has been announced: "+(winner?dname(winner.name):"see results")+".";
+  const msg="Chief Resident for "+lpAYName()+" has been announced: "+(winner?dname(winner.name):"see results")+".";
   await Promise.all(RESIDENTS.map(r=>{
     const p=PROFILE_BY_RESIDENT[r.id];
     return p?createNotification(p.id,"info",msg,"leave_plan",null):null;
@@ -4294,6 +4381,7 @@ function renderLogin(){
       return;
     }
     STATE.user=mapProfileToUser(profile);STATE.mod=null;
+    await loadAcademicYears();
     await loadCoreData();
     checkPromotionNeeded();
     loadPendingCounselCount();
@@ -4360,6 +4448,7 @@ function modIcon(id,sz){
     kpi_exec:[["rect",{x:"2",y:"3",width:"20",height:"14",rx:"2"}],["path",{d:"M8 21h8M12 17v4"}],["polyline",{points:"7 10 10 7 13 10 17 6"}]],
     best_resident:[["polygon",{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"}]],
     leave_plan:[["rect",{x:"3",y:"4",width:"18",height:"18",rx:"2"}],["line",{x1:"16",y1:"2",x2:"16",y2:"6"}],["line",{x1:"8",y1:"2",x2:"8",y2:"6"}],["line",{x1:"3",y1:"10",x2:"21",y2:"10"}],["path",{d:"M9 16l2 2 4-4"}]],
+    control:[["line",{x1:"4",y1:"21",x2:"4",y2:"14"}],["line",{x1:"4",y1:"10",x2:"4",y2:"3"}],["line",{x1:"12",y1:"21",x2:"12",y2:"12"}],["line",{x1:"12",y1:"8",x2:"12",y2:"3"}],["line",{x1:"20",y1:"21",x2:"20",y2:"16"}],["line",{x1:"20",y1:"12",x2:"20",y2:"3"}],["line",{x1:"1",y1:"14",x2:"7",y2:"14"}],["line",{x1:"9",y1:"8",x2:"15",y2:"8"}],["line",{x1:"17",y1:"16",x2:"23",y2:"16"}]],
     committees:[["path",{d:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"}],["circle",{cx:"9",cy:"7",r:"4"}],["path",{d:"M23 21v-2a4 4 0 00-3-3.87"}],["path",{d:"M16 3.13a4 4 0 010 7.75"}]],
     home:[["path",{d:"M12 2.5l9.5 8v11a1 1 0 01-1 1h-6v-8h-5v8h-6a1 1 0 01-1-1v-11z",fill:"currentColor",stroke:"none"}]],
     trophy:[["path",{d:"M8 21h8M12 17v4M17 3H7v5a5 5 0 0010 0V3z"}],["path",{d:"M7 5H3v2a4 4 0 004 4"}],["path",{d:"M17 5h4v2a4 4 0 01-4 4"}]],
@@ -4387,6 +4476,7 @@ const MODS=[
   {id:"cumulative_kpi",label:"Training Record",icon:"",desc:"Full academic history — yearly achievements & quarterly milestones per year",color:"#26523A",roles:["pd","deputy_pd","chief"]},
   {id:"best_resident",label:"Best Resident",icon:"",desc:"Quarterly voting, live KPI rankings & Hall of Fame",color:"#B8860B",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"leave_plan",label:"AY Plan 26-27",icon:"",desc:"Suggested leave & GIM rotation preferences for AY 2026-27",color:"#2a6a8a",roles:["pd","deputy_pd","chief","consultant","resident"]},
+  {id:"control",label:"Control Centre",icon:"",desc:"Set up the academic year and manage portal settings",color:"#3a3225",roles:["pd","deputy_pd"]},
   {id:"committees",label:"Committees",icon:"",desc:"Standing committees — leaders, co-leaders, members, meetings & achievements",color:"#8a4a5a",roles:["pd","deputy_pd","chief","consultant","resident"]},
 ];
 function renderSearchOverlay(){
@@ -5539,7 +5629,7 @@ function renderRotTrack(){
   );
 }
 // ─── SHARED: weekly-banded schedule table (mirrors the committee's distributed sheet) ──
-function weekInBlock(s,blk){return s.week_number-4*(blk-1)+1;}
+function weekInBlock(s,blk){return s.week_number-blockWeekOffset(blk,s.academic_year||CURRENT_ACADEMIC_YEAR)+1;}
 function currentWeekInBlock(blk){
   const start=blockStartDate(blk,CURRENT_ACADEMIC_YEAR);if(!start)return null;
   const today=new Date();today.setHours(0,0,0,0);
@@ -5832,7 +5922,7 @@ function renderMMScheduleForm(blk,editingSession){
         const payload={
           academic_year:mmAY(),
           block_number:blk,
-          week_number:4*(blk-1)+week-1,
+          week_number:blockWeekOffset(blk,mmAY())+week-1,
           session_date:date,
           day_label:document.getElementById("mm_f_day").value.trim()||null,
           topic,
@@ -5894,7 +5984,7 @@ async function generateMMSessions(blk){
     if(!toInsert.length){showToast("All session slots for Block "+blk+" already exist.","warning");return;}
     const blockPublished=schedulePublishState(blkSessions)==="published";
     const rows=toInsert.map(d=>({
-      academic_year:ay,block_number:blk,week_number:4*(blk-1)+d.week-1,
+      academic_year:ay,block_number:blk,week_number:blockWeekOffset(blk,ay)+d.week-1,
       session_date:d.date,day_label:d.day,topic:"",published:blockPublished,created_by:STATE.user?.profileId||null
     }));
     const{error}=await sb.from("mm_sessions").insert(rows);
@@ -6375,7 +6465,7 @@ function renderTeachScheduleForm(blk,editingSession){
         const payload={
           academic_year:teachAY(),
           block_number:blk,
-          week_number:4*(blk-1)+week-1,
+          week_number:blockWeekOffset(blk,teachAY())+week-1,
           session_date:date,
           day_label:document.getElementById("teach_f_day").value,
           topic,
@@ -10957,7 +11047,7 @@ function renderLeavePlan(){
   function cdBanner(){
     if(passed){
       return el("div",{st:{background:"rgba(181,32,64,.08)",border:"1px solid rgba(181,32,64,.2)",borderRadius:"10px",padding:"12px 16px",marginBottom:"20px",fontSize:".8rem",color:"#b52040",fontWeight:"600"}},
-        "Submission deadline has passed ("+lpDeadlineShort()+"). Contact the PD to update your plan.");
+        LP_DEADLINE.getTime()===0?"Submissions are closed until the Program Director sets a deadline.":"Submission deadline has passed ("+lpDeadlineShort()+"). Contact the PD to update your plan.");
     }
     const diff=Math.max(0,Math.floor((LP_DEADLINE-now)/1000));
     const d=Math.floor(diff/86400),h=Math.floor((diff%86400)/3600),m=Math.floor((diff%3600)/60),s=diff%60;
@@ -11098,7 +11188,7 @@ function renderLeavePlan(){
       submitted
         ?el("div",{st:{background:"rgba(38,90,72,.08)",border:"1px solid rgba(38,90,72,.2)",borderRadius:"10px",padding:"12px 16px",marginBottom:"20px",fontSize:".82rem",color:"#26523A",fontWeight:"500"}},"Your leave plan has been submitted. You can still edit or cancel your selections anytime before the "+lpDeadlineShort()+" deadline.")
         :el("div",{st:{background:"#fef9ec",border:"1px solid #f0d98a",borderRadius:"10px",padding:"12px 16px",marginBottom:"24px",fontSize:".8rem",color:"#92680a",lineHeight:"1.5"}},
-          "Select your ",el("strong",null,"First Leave")," and ",el("strong",null,"Second Leave")," periods — 2 weeks each. Both will be written into your AY 2026-27 rota once the PD applies the plan."
+          "Select your ",el("strong",null,"First Leave")," and ",el("strong",null,"Second Leave")," periods — 2 weeks each. Both will be written into your "+lpAYName()+" rota once the PD applies the plan."
         ),
       slotBar(),
       periodList(),
@@ -11227,7 +11317,7 @@ function renderLeavePlan(){
     function lpDeadlinePanel(){
       if(STATE.lpDeadlineInput===undefined){
         const d=LP_DEADLINE,pad=n=>String(n).padStart(2,"0");
-        STATE.lpDeadlineInput=d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+"T"+pad(d.getHours())+":"+pad(d.getMinutes());
+        STATE.lpDeadlineInput=d.getTime()===0?"":d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+"T"+pad(d.getHours())+":"+pad(d.getMinutes());
       }
       return el("div",{cls:"card",st:{background:"#fdf5f0",border:"2px solid #c96a4a",marginBottom:"20px",maxWidth:"640px"}},
         el("div",{cls:"card-title",st:{color:"#9c4a2e"}},"Leave Plan — Submission Deadline"),
@@ -11295,7 +11385,7 @@ function renderLeavePlan(){
               const{data:profs}=await sb.from("profiles").select("id,username").in("username",usernames);
               if(!profs||!profs.length){showToast("Could not find resident profiles","error");return;}
               const results=await Promise.all(profs.map(async p=>{
-                const{error}=await sb.from("notifications").insert({profile_id:p.id,type:"info",message:"Reminder: Please submit your AY 2026-27 Leave Plan before "+lpDeadlineShort()+".",link_mod:"leave_plan",link_param:null,read:false});
+                const{error}=await sb.from("notifications").insert({profile_id:p.id,type:"info",message:"Reminder: Please submit your "+lpAYName()+" Leave Plan before "+lpDeadlineShort()+".",link_mod:"leave_plan",link_param:null,read:false});
                 if(error)console.warn("notif insert failed for",p.username,error.message);
                 return !error;
               }));
@@ -11393,7 +11483,7 @@ function renderLeavePlan(){
           el("div",null,"First Leave: "+(fp?fp.label.replace(" - "," — "):"not selected")),
           el("div",{st:{marginTop:"2px"}},"Second Leave: "+(sp?sp.label.replace(" - "," — "):"not selected"))
         )
-      :"Select your two 2-week leave periods for AY 2026-27.";
+      :"Select your two 2-week leave periods for "+lpAYName()+".";
 
     const gimPlan=GIM_PREFS[u.rid]||null;
     const required=gimSlotCount(myLevel);
@@ -11584,7 +11674,7 @@ function renderLeavePlan(){
       const win=snap.winner_resident_id?(resById(snap.winner_resident_id)||anyResById(snap.winner_resident_id)):null;
       if(win){
         const banner=el("div",{st:{position:"relative",overflow:"hidden",borderRadius:"18px",padding:"34px 30px 32px",textAlign:"center",color:"#FEFBF3",marginBottom:"6px",background:"linear-gradient(135deg,#7c3a20 0%,#c96a4a 55%,#e8956d 100%)"}},
-          el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".15em",textTransform:"uppercase",opacity:".8",marginBottom:"20px",lineHeight:"1.5"}},"Chief Resident for AY 2026-27 is"),
+          el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".15em",textTransform:"uppercase",opacity:".8",marginBottom:"20px",lineHeight:"1.5"}},"Chief Resident for "+lpAYName()+" is"),
           el("div",{st:{display:"inline-block",position:"relative",marginBottom:"16px"}},
             el("div",{st:{width:"84px",height:"84px",borderRadius:"50%",background:"rgba(254,251,243,.16)",border:"2.5px solid rgba(254,251,243,.5)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.5rem",fontWeight:"700"}},ini(win.name)),
             el("div",{st:{position:"absolute",bottom:"-4px",right:"-6px",width:"32px",height:"32px",borderRadius:"50%",background:"#FEFBF3",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 2px 8px rgba(31,26,18,.2)"}},modIcon("trophy",17))),
@@ -11634,7 +11724,7 @@ function renderLeavePlan(){
     }
     if(phase==="nominating"){
       sec.appendChild(el("div",{st:{background:"#fef9ec",border:"1px solid #f0d98a",borderRadius:"10px",padding:"12px 16px",fontSize:".8rem",color:"#92680a",lineHeight:"1.5",marginBottom:"18px"}},
-        "Nominations are open. R2 and R3 residents can nominate themselves for Chief Resident of AY 2026-27."));
+        "Nominations are open. R2 and R3 residents can nominate themselves for Chief Resident of "+lpAYName()+"."));
       if(canNominate&&!isNominated){
         sec.appendChild(el("button",{st:{background:"#1a56db",color:"#FEFBF3",border:"none",borderRadius:"9999px",padding:"11px 28px",fontFamily:"Inter,sans-serif",fontWeight:"600",fontSize:".85rem",cursor:"pointer",marginBottom:"20px"},
           async onClick(){await chiefNominate();}},"Nominate Yourself"));
@@ -11897,8 +11987,8 @@ function renderLeavePlan(){
   if(!showSub){
     wrap.appendChild(el("div",{st:{padding:"36px 0 0"}},
       el("div",{st:{fontSize:".67rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#c96a4a",marginBottom:"6px"}},"Academic Year 2026 - 27"),
-      el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.9rem",fontWeight:"600",lineHeight:"1.2",marginBottom:"6px",color:"#1F1A12"}},tab==="mine"?"Academic Year Plan 26-27":"Annual Leave Plan — All Residents"),
-      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},tab==="mine"?"Plan next year's rotations, leave, GIM preferences, and more.":"Two 2-week leave periods per resident — applied directly to the AY 2026-27 rota")
+      el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.9rem",fontWeight:"600",lineHeight:"1.2",marginBottom:"6px",color:"#1F1A12"}},tab==="mine"?"Academic Year Plan "+lpAYShort():"Annual Leave Plan — All Residents"),
+      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},tab==="mine"?"Plan next year's rotations, leave, GIM preferences, and more.":"Two 2-week leave periods per resident — applied directly to the "+lpAYName()+" rota")
     ));
   }
   if(canManage){
@@ -13380,6 +13470,141 @@ function renderCommittees(){
       })),
     tab==="mine"?cteMine():el("div",null,cteCoverage(ay),...CTE_DEFS.map(cteBand))
   );
+}
+// ─── CONTROL CENTRE ──────────────────────────────────────────────────────────────────────────
+// The Program Director's own place to change how the portal is set up, so a change does not have to
+// go through a developer. Year setup is the first piece; committees are managed on their own page and
+// linked from here. Writes are refused by the database for anyone but pd and deputy_pd.
+function ctlCanUse(){const r=STATE.user&&STATE.user.role;return r==="pd"||r==="deputy_pd";}
+function ctlFmt(d){return d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}).replace("Sept","Sep");}
+// What the portal currently has for a year: start, end and block lengths, from its row or its built-in dates.
+function ctlYearInfo(ay){
+  // A year with no row and no dates of its own would silently borrow the shared 2025 list, so it
+  // counts as not set up.
+  if(!AY_ROWS.some(x=>Number(x.ay)===ay)&&!ROTA_PERIODS_OVERRIDE[ay]&&ay>2025)return null;
+  const r=ayBlockRanges(ay);if(!r.length)return null;
+  const weeks=r.map(x=>Math.round((x.end-x.start)/86400000/7));
+  const row=AY_ROWS.find(x=>Number(x.ay)===ay)||null;
+  return{ay,start:r[0].start,end:new Date(r[r.length-1].end.getFullYear(),r[r.length-1].end.getMonth(),r[r.length-1].end.getDate()),weeks,row};
+}
+function ctlStartEdit(ay){
+  const cur=AY_ROWS.find(x=>Number(x.ay)===ay);
+  if(cur)return set({ctlEdit:{ay,start:String(cur.start_date).slice(0,10),weeks:cur.block_weeks.map(Number)}});
+  const inf=ctlYearInfo(ay);
+  if(inf)return set({ctlEdit:{ay,start:ayISO(inf.start),weeks:inf.weeks}});
+  const prev=ctlYearInfo(ay-1);
+  set({ctlEdit:{ay,start:prev?ayISO(ayAddDays(prev.end,1)):"",weeks:Array(13).fill(4)}});
+}
+async function ctlSaveYear(e){
+  const row={ay:e.ay,start_date:e.start,block_weeks:e.weeks,updated_at:new Date().toISOString(),updated_by:STATE.user.profileId};
+  const{error}=await sb.from("academic_years").upsert(row,{onConflict:"ay"});
+  if(error){showToast("Could not save the year: "+error.message);return false;}
+  await loadAcademicYears();
+  set({ctlEdit:null});
+  showToast("AY "+e.ay+"-"+String((e.ay+1)%100).padStart(2,"0")+" saved. Its block dates are now in use.","success");
+  return true;
+}
+// Moves the AY Plan module to another year and reloads what belongs to that year.
+async function ctlSwitchPlanYear(ay){
+  const{error}=await sb.from("portal_settings").upsert({key:"plan_year",value:{ay},updated_at:new Date().toISOString(),updated_by:STATE.user.profileId},{onConflict:"key"});
+  if(error){showToast("Could not switch the planning year: "+error.message);return;}
+  applyPlanYearLocal(ay);
+  await Promise.all([loadLeavePlan(),loadGimPrefs(),loadGimStatus(),loadLpStatus(),loadChiefElection(),loadR4Prefs(),loadR4PrefsStatus()]);
+  render();
+  showToast("The AY Plan module now works on "+lpAYName()+".","success");
+}
+function renderControl(){
+  if(!ctlCanUse())return el("div",{cls:"content"},el("p",{cls:"alert-yellow"},"Only the Program Director and the deputy PD can change these settings."));
+  const tab=STATE.ctlTab||"year";
+  const head=el("div",{st:{marginBottom:"22px"}},
+    el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#a94e2c",marginBottom:"8px"}},"Programme setup"),
+    el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Control Centre"),
+    el("div",{st:{fontSize:".82rem",color:"#5C5345"}},"Change how the portal is set up, without asking a developer."));
+  const tabs=el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
+    ...[["year","Year setup"],["committees","Committees"]].map(t=>{const on=tab===t[0];
+      return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:on?"600":"500",color:on?"#a94e2c":"#5C5345",cursor:"pointer",
+        borderBottom:"2px solid "+(on?"#c96a4a":"transparent"),marginBottom:"-1px"},onClick:()=>set({ctlTab:t[0]})},t[1]);}));
+  if(tab==="committees"){
+    return el("div",{cls:"content"},head,tabs,el("div",{cls:"card"},
+      el("div",{cls:"card-title"},"Committees"),
+      el("p",{cls:"sh",st:{maxWidth:"64ch",marginBottom:"14px"}},"Add, rename, recolour, reorder or retire committees. Seats, meetings and achievements are managed on the Committees page itself."),
+      el("button",{cls:"sbtn primary",onClick:()=>set({mod:"committees",cteMode:"catalogue",cteSel:null})},"Open the committee manager")));
+  }
+  // ── Year setup ──
+  const lastCfg=Math.max(CURRENT_ACADEMIC_YEAR,...AY_ROWS.map(r=>Number(r.ay)),LP_AY);
+  const years=[];for(let y=CURRENT_ACADEMIC_YEAR-1;y<=lastCfg+1;y++)years.push(y);
+  const nm=ay=>"AY "+ay+"-"+String((ay+1)%100).padStart(2,"0");
+  const E=STATE.ctlEdit;
+  const badge=(t,bg,fg)=>el("span",{cls:"bdg",st:{background:bg,color:fg,marginRight:"6px"}},t);
+  const row=ay=>{
+    const inf=ctlYearInfo(ay);
+    const lens=inf?(inf.weeks.every(w=>w===4)?"13 blocks of 4 weeks":inf.weeks.map((w,i)=>w!==4?"block "+(i+1)+": "+w+" weeks":null).filter(Boolean).join(", ")):"";
+    const canEdit=ay>=CURRENT_ACADEMIC_YEAR;
+    return el("tr",null,
+      el("td",null,el("div",{st:{fontWeight:"700",fontSize:".9rem"}},nm(ay)),
+        el("div",{st:{marginTop:"4px"}},
+          ay===CURRENT_ACADEMIC_YEAR?badge("Live now","rgba(42,122,90,.14)","#1d5c43"):null,
+          ay===LP_AY?badge("AY Plan year","rgba(201,106,74,.16)","#8f3f20"):null,
+          ay<CURRENT_ACADEMIC_YEAR?badge("Past","rgba(31,26,18,.07)","#443C2F"):null)),
+      el("td",{st:{fontSize:".84rem"}},inf?ctlFmt(inf.start)+" \u2013 "+ctlFmt(inf.end):el("span",{cls:"sh"},"Not set up yet")),
+      el("td",{cls:"sh"},inf?lens:"\u2014"),
+      el("td",{cls:"sh"},inf?(inf.row?"Set in the portal":"Built into the portal"):"\u2014"),
+      el("td",null,el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap"}},
+        canEdit?el("button",{cls:"sbtn ghost",onClick:()=>ctlStartEdit(ay)},inf?"Edit dates":"Set up this year"):null,
+        inf&&canEdit&&ay!==LP_AY?el("button",{cls:"sbtn ghost",onClick:()=>{
+          showConfirm("Move the AY Plan module to "+nm(ay)+"? The leave plan, GIM and R4 windows and the chief election will then show "+nm(ay)+". Nothing is deleted: each year keeps its own entries, and you can switch back.",
+            ()=>ctlSwitchPlanYear(ay),"Switch","primary");}},"Plan this year"):null)));
+  };
+  let editor=null;
+  if(E){
+    const lay=E.start?ayLayout(ayParseISO(E.start),E.weeks):null;
+    const startD=E.start?ayParseISO(E.start):null;
+    const prev=ctlYearInfo(E.ay-1);
+    const gap=prev&&startD?Math.round((startD-ayAddDays(prev.end,1))/86400000):0;
+    const inUse=E.ay===CURRENT_ACADEMIC_YEAR;
+    editor=el("div",{cls:"card",st:{marginBottom:"22px"}},
+      el("div",{cls:"card-title"},(AY_ROWS.some(r=>Number(r.ay)===E.ay)||ctlYearInfo(E.ay)?"Edit ":"Set up ")+nm(E.ay)),
+      el("div",{st:{display:"flex",gap:"18px",alignItems:"flex-end",flexWrap:"wrap",marginBottom:"14px"}},
+        el("div",null,el("label",null,"First day of block 1"),
+          el("input",{type:"date",value:E.start,st:{maxWidth:"190px"},onChange:ev=>set({ctlEdit:Object.assign({},E,{start:ev.target.value})})})),
+        el("div",{cls:"sh",st:{fontSize:".78rem",maxWidth:"52ch"}},
+          startD&&startD.getDay()!==0?"This is not a Sunday. Every earlier year started on a Sunday.":
+          prev&&startD?(gap===0?"Starts the day after "+nm(E.ay-1)+" ends.":gap>0?gap+" day"+(gap===1?"":"s")+" after "+nm(E.ay-1)+" ends.":Math.abs(gap)+" day"+(Math.abs(gap)===1?"":"s")+" before "+nm(E.ay-1)+" ends.")
+          :"")),
+      el("div",{st:{fontSize:".66rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:"#5C5345",marginBottom:"8px"}},"Weeks in each block"),
+      el("div",{st:{display:"grid",gridTemplateColumns:"repeat(13,minmax(0,1fr))",gap:"6px",marginBottom:"16px",maxWidth:"760px"}},
+        ...E.weeks.map((w,i)=>el("div",{st:{textAlign:"center"}},
+          el("div",{cls:"sh",st:{fontSize:".66rem",marginBottom:"3px"}},"B"+(i+1)),
+          el("input",{type:"number",min:"1",max:"8",value:String(w),st:{width:"100%",padding:"6px 2px",textAlign:"center"},
+            onChange:ev=>{const v=Math.max(1,Math.min(8,parseInt(ev.target.value)||4));const ws=E.weeks.slice();ws[i]=v;set({ctlEdit:Object.assign({},E,{weeks:ws})});}})))),
+      lay?el("div",{cls:"tbl-wrap",st:{marginBottom:"16px",maxWidth:"760px"}},el("table",null,
+        el("thead",null,el("tr",null,el("th",null,"Block"),el("th",null,"Dates"),el("th",{st:{textAlign:"center"}},"Weeks"))),
+        el("tbody",null,...lay.map((b,i)=>el("tr",null,el("td",null,"Block "+(i+1)),el("td",null,ctlFmt(b.start)+" \u2013 "+ctlFmt(b.end)),el("td",{st:{textAlign:"center"}},String(b.weeks)))))
+      )):el("p",{cls:"sh",st:{marginBottom:"14px"}},"Choose the first day to see the 13 blocks."),
+      lay?el("div",{cls:"sh",st:{fontSize:".78rem",marginBottom:"14px"}},"The year runs "+ctlFmt(lay[0].start)+" to "+ctlFmt(lay[12].end)+" ("+E.weeks.reduce((a,b)=>a+b,0)+" weeks). The leave-plan half-blocks are generated from these dates."):null,
+      el("div",{st:{display:"flex",gap:"10px"}},
+        el("button",{cls:"sbtn primary",onClick:()=>{
+          if(!E.start){showToast("Choose the first day of the year.","warning");return;}
+          const go=()=>ctlSaveYear(E);
+          const warn=(inUse?"This year is live, and changing its dates moves block dates everywhere. ":"")+(Math.abs(gap)>0&&prev?"There is a gap or overlap of "+Math.abs(gap)+" day(s) with the previous year. ":"");
+          if(warn)showConfirm(warn+"Save anyway?",go,"Save","warn");else go();
+        }},"Save year"),
+        el("button",{cls:"sbtn ghost",onClick:()=>set({ctlEdit:null})},"Cancel")));
+  }
+  return el("div",{cls:"content"},head,tabs,
+    el("div",{cls:"card",st:{marginBottom:"22px"}},
+      el("div",{cls:"card-title"},"Right now"),
+      el("div",{st:{display:"flex",gap:"36px",flexWrap:"wrap"}},
+        el("div",null,el("div",{cls:"sh",st:{fontSize:".7rem"}},"Live year"),el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.4rem",fontWeight:"700"}},nm(CURRENT_ACADEMIC_YEAR)+" \u00b7 Block "+CURRENT_PERIOD)),
+        el("div",null,el("div",{cls:"sh",st:{fontSize:".7rem"}},"AY Plan works on"),el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.4rem",fontWeight:"700"}},lpAYName()))),
+      el("p",{cls:"sh",st:{marginTop:"12px",fontSize:".78rem",maxWidth:"72ch"}},
+        "The live year follows the dates below. The AY Plan year is the year residents are planning leave, GIM and R4 preferences for, and the one the chief election belongs to.")),
+    editor,
+    el("div",{cls:"card"},
+      el("div",{cls:"card-title"},"Academic years"),
+      el("div",{cls:"tbl-wrap"},el("table",null,
+        el("thead",null,el("tr",null,el("th",null,"Year"),el("th",null,"Runs"),el("th",null,"Blocks"),el("th",null,"Source"),el("th",null,""))),
+        el("tbody",null,...years.map(row))))));
 }
 // ─── BEST RESIDENT MODULE ─────────────────────────────────────────────────────
 function renderBestResident(){
@@ -16669,6 +16894,7 @@ function render(){
         case"best_resident":content=renderBestResident();break;
         case"leave_plan":content=renderLeavePlan();break;
         case"committees":content=renderCommittees();break;
+        case"control":content=renderControl();break;
         default:content=renderModGrid();
       }
     }
@@ -16882,6 +17108,7 @@ function renderCalModal(){
         STATE.user=mapProfileToUser(profile);
         STATE.calToken=profile.calendar_token||null;
         STATE.calPrefs=profile.calendar_prefs||{rota:true,oncall:true,mm:true,teach:false,deadlines:true};
+        await loadAcademicYears();
         await loadCoreData();
         checkPromotionNeeded();
         loadPendingCounselCount();
