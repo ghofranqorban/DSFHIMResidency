@@ -12640,7 +12640,8 @@ function rbCellPanel(){
 // Membership lives in committee_memberships -- the SAME table the CanMEDS
 // Collaborator KPI reads. There is deliberately no second membership table, so a
 // seat recorded here is a seat the KPI counts.
-let CTE_DEFS=[];   // committees catalogue, sorted
+let CTE_DEFS=[];   // committees catalogue, sorted, active only
+let CTE_ALL=[];    // the same including retired ones, for the catalogue editor
 let CTE_MEMB=[];   // committee_memberships for CTE_AY (mapped rows only)
 let CTE_FAC=[];    // committee_faculty for CTE_AY
 let CTE_MTG=[];    // committee_meetings for CTE_AY
@@ -12706,11 +12707,12 @@ async function loadCommitteesAY(ay){
   const bad=[d,m,f,g,a].find(x=>x.error);
   if(bad){
     CTE_ERR=bad.error.message;
-    CTE_DEFS=[];CTE_MEMB=[];CTE_FAC=[];CTE_MTG=[];CTE_ACH=[];
+    CTE_ALL=[];CTE_DEFS=[];CTE_MEMB=[];CTE_FAC=[];CTE_MTG=[];CTE_ACH=[];
     return false;
   }
   CTE_ERR=null;
-  CTE_DEFS=(d.data||[]).filter(c=>c.active!==false);
+  CTE_ALL=d.data||[];
+  CTE_DEFS=CTE_ALL.filter(c=>c.active!==false);
   // Legacy free-text rows carry no committee_id and belong to the CanMEDS page,
   // not here. add_committees.sql section 6 maps them.
   CTE_MEMB=(m.data||[]).filter(x=>x.committee_id!=null);
@@ -12901,6 +12903,7 @@ function cteHeader(ay){
         ...years.map(y=>el("button",{cls:"pill"+(y===ay?" on":""),
           st:y===ay?{background:"#1F1A12",color:"#FEFBF3",borderColor:"#1F1A12"}:{},
           onClick:()=>set({cteAY:y,cteSel:null})},cteAYLabel(y)))),
+      canEditCatalogue()?el("button",{cls:"sbtn ghost",onClick:()=>set({cteMode:"catalogue",cteSel:null})},"Manage committees"):null,
       el("button",{cls:"sbtn ghost",onClick:()=>cteExport(ay)},"Export")
     )
   );
@@ -13202,6 +13205,128 @@ function cteExport(ay){
   XLSX.writeFile(wb,"Committees_"+ay+"-"+String(ay+1).slice(2)+".xlsx");
 }
 
+// ─── COMMITTEE CATALOGUE EDITOR ──────────────────────────────────────────────────────────────
+// Add, rename, recolour, reorder, retire and restore committees. A committee is retired, never
+// deleted: its seats, meetings and achievements stay on record and it can be restored. Who may
+// write the catalogue is decided by the database (committees_write for pd and deputy_pd,
+// committees_manage_priv for manage_committees); this only decides who is shown the button.
+function canEditCatalogue(){
+  const u=STATE.user;if(!u)return false;
+  return u.role==="pd"||u.role==="deputy_pd"||hasPriv(u.profileId,"manage_committees");
+}
+const CTE_PALETTE=["#1a4a7a","#c97a2a","#A47A28","#2a7a5a","#4a5e7a","#6a4a7a","#b52040","#5f6a2a","#c96a4a","#3a3225"];
+function cteSlug(name){
+  const base=name.toLowerCase().replace(/&/g," and ").replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")||"committee";
+  let slug=base,n=2;const taken=new Set(CTE_ALL.map(c=>c.slug));
+  while(taken.has(slug)){slug=base+"_"+n;n++;}
+  return slug;
+}
+async function cteCatSave(id,fields,okMsg){
+  const{error}=await sb.from("committees").update(fields).eq("id",id);
+  if(error){showToast(cteErrMsg(error));return false;}
+  await loadCommitteesAY(cteAY());render();
+  if(okMsg)showToast(okMsg,"success");
+  return true;
+}
+async function cteCatAdd(name,description,color){
+  const id=CTE_ALL.reduce((m,c)=>Math.max(m,Number(c.id)||0),0)+1;
+  const order=CTE_ALL.reduce((m,c)=>Math.max(m,Number(c.sort_order)||0),0)+1;
+  const{error}=await sb.from("committees").insert({id,slug:cteSlug(name),name,description:description||null,color,sort_order:order,active:true,privilege_keys:[]});
+  if(error){showToast(cteErrMsg(error));return false;}
+  await loadCommitteesAY(cteAY());render();
+  showToast(name+" added.","success");
+  return true;
+}
+// Moves one committee up or down among the others and renumbers the sort order from 1.
+async function cteCatMove(id,dir){
+  const list=CTE_ALL.slice();
+  const i=list.findIndex(c=>c.id===id),j=i+dir;
+  if(i<0||j<0||j>=list.length)return;
+  const t=list[i];list[i]=list[j];list[j]=t;
+  for(let k=0;k<list.length;k++){
+    if(Number(list[k].sort_order)!==k+1){
+      const{error}=await sb.from("committees").update({sort_order:k+1}).eq("id",list[k].id);
+      if(error){showToast(cteErrMsg(error));break;}
+    }
+  }
+  await loadCommitteesAY(cteAY());render();
+}
+function cteSwatches(current,onPick){
+  return el("div",{st:{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}},
+    ...CTE_PALETTE.map(c=>el("button",{type:"button",title:c,"aria-label":"Colour "+c,
+      st:{width:"22px",height:"22px",borderRadius:"50%",background:c,cursor:"pointer",padding:"0",
+        border:current&&current.toLowerCase()===c.toLowerCase()?"2px solid #1F1A12":"2px solid transparent",
+        boxShadow:"0 0 0 1px rgba(31,26,18,.15)"},
+      onClick:()=>onPick(c)})));
+}
+function cteCatalogueView(){
+  const ay=cteAY();
+  const seats=id=>CTE_MEMB.filter(m=>m.committee_id==id).length;
+  const taken=(name,exceptId)=>CTE_ALL.some(c=>c.id!==exceptId&&c.name.trim().toLowerCase()===name.trim().toLowerCase());
+  const add=STATE.cteNew||{name:"",description:"",color:CTE_PALETTE[0]};
+  const row=(c,i)=>{
+    const retired=c.active===false;
+    return el("div",{st:{display:"grid",gridTemplateColumns:"auto minmax(0,1.2fr) minmax(0,1.6fr) auto",gap:"14px",alignItems:"center",
+      padding:"14px 6px",borderBottom:"1px solid rgba(31,26,18,.08)",opacity:retired?".6":"1"}},
+      el("div",{st:{display:"flex",flexDirection:"column",gap:"8px",alignItems:"center",width:"58px"}},
+        el("button",{type:"button",title:"Change colour","aria-label":"Change colour of "+c.name,
+          st:{width:"24px",height:"24px",borderRadius:"50%",background:c.color,cursor:"pointer",padding:"0",border:"2px solid #FEFBF3",boxShadow:"0 0 0 1px rgba(31,26,18,.3)"},
+          onClick:()=>set({cteColorFor:STATE.cteColorFor===c.id?null:c.id})}),
+        el("span",{st:{display:"flex",gap:"4px"}},
+          el("button",{cls:"sbtn ghost",st:{padding:"0 7px",fontSize:".8rem",lineHeight:"22px",opacity:i===0?".35":"1"},title:"Move up","aria-label":"Move up",
+            onClick:()=>{if(i>0)cteCatMove(c.id,-1);}},"\u2191"),
+          el("button",{cls:"sbtn ghost",st:{padding:"0 7px",fontSize:".8rem",lineHeight:"22px",opacity:i===CTE_ALL.length-1?".35":"1"},title:"Move down","aria-label":"Move down",
+            onClick:()=>{if(i<CTE_ALL.length-1)cteCatMove(c.id,1);}},"\u2193"))),
+      el("div",null,
+        el("input",{type:"text",value:c.name,maxlength:"80","aria-label":"Committee name",st:{width:"100%",fontWeight:"700"},
+          onChange:e=>{
+            const v=e.target.value.trim();
+            if(!v){showToast("A committee needs a name.","warning");e.target.value=c.name;return;}
+            if(v===c.name)return;
+            if(taken(v,c.id)){showToast("Another committee already has that name.","warning");e.target.value=c.name;return;}
+            cteCatSave(c.id,{name:v},"Renamed.");
+          }}),
+        el("div",{cls:"sh",st:{fontSize:".74rem",marginTop:"4px"}},
+          retired?"Retired \u00b7 seats and records are kept":seats(c.id)+" seat"+(seats(c.id)===1?"":"s")+" in "+cteAYLabel(ay))),
+      el("div",null,
+        el("input",{type:"text",value:c.description||"",maxlength:"200",placeholder:"What this committee does","aria-label":"Description",st:{width:"100%"},
+          onChange:e=>cteCatSave(c.id,{description:e.target.value.trim()||null},"Saved.")}),
+        STATE.cteColorFor===c.id?el("div",{st:{marginTop:"8px"}},cteSwatches(c.color,col=>{STATE.cteColorFor=null;cteCatSave(c.id,{color:col},"Colour saved.");})):null),
+      el("div",null,retired
+        ?el("button",{cls:"sbtn ghost",onClick:()=>cteCatSave(c.id,{active:true},c.name+" restored.")},"Restore")
+        :el("button",{cls:"sbtn ghost",onClick:()=>{
+            const n=seats(c.id);
+            showConfirm("Retire "+c.name+"? It disappears from the Committees page"+(n?", with its "+n+" seat"+(n===1?"":"s")+" in "+cteAYLabel(ay)+" staying on record":"")+". You can restore it later.",
+              ()=>cteCatSave(c.id,{active:false},c.name+" retired."),"Retire","warn");
+          }},"Retire")));
+  };
+  return el("div",null,
+    el("button",{st:{background:"none",border:"none",color:"#a94e2c",cursor:"pointer",fontSize:".82rem",fontWeight:"600",padding:"0",marginBottom:"14px"},
+      onClick:()=>set({cteMode:null,cteNew:null})},"\u2190 Committees"),
+    el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#a94e2c",marginBottom:"8px"}},"Programme Governance"),
+    el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Manage committees"),
+    el("div",{st:{fontSize:".82rem",color:"#5C5345",maxWidth:"70ch",marginBottom:"22px"}},
+      "Add a committee, rename it, change its colour or order, or retire it. Retiring hides a committee but keeps every seat, meeting and achievement on record, so it can be restored."),
+    el("div",{cls:"card",st:{marginBottom:"8px"}},
+      el("div",{cls:"card-title"},"Add a committee"),
+      el("div",{st:{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1.4fr)",gap:"14px",marginBottom:"12px"}},
+        el("div",null,el("label",null,"Name"),el("input",{type:"text",value:add.name,maxlength:"80",placeholder:"e.g. Simulation Committee",
+          onInput:e=>{STATE.cteNew=Object.assign({},add,{name:e.target.value});}})),
+        el("div",null,el("label",null,"Description (optional)"),el("input",{type:"text",value:add.description,maxlength:"200",placeholder:"What this committee does",
+          onInput:e=>{STATE.cteNew=Object.assign({},STATE.cteNew||add,{description:e.target.value});}}))),
+      el("div",{st:{display:"flex",gap:"16px",alignItems:"center",flexWrap:"wrap"}},
+        cteSwatches(add.color,col=>set({cteNew:Object.assign({},STATE.cteNew||add,{color:col})})),
+        el("button",{cls:"sbtn primary",onClick:async()=>{
+          const cur=STATE.cteNew||add,name=(cur.name||"").trim();
+          if(!name){showToast("Give the committee a name first.","warning");return;}
+          const same=CTE_ALL.find(c=>c.name.trim().toLowerCase()===name.toLowerCase());
+          if(same){showToast(same.active===false?name+" already exists but is retired. Restore it from the list below.":"A committee with that name already exists.","warning");return;}
+          if(await cteCatAdd(name,(cur.description||"").trim(),cur.color))set({cteNew:null});
+        }},"Add committee"))),
+    el("div",{cls:"card"},
+      el("div",{cls:"card-title"},"All committees ("+CTE_ALL.length+")"),
+      CTE_ALL.length?el("div",null,...CTE_ALL.map(row)):el("p",{cls:"sh"},"No committees yet.")));
+}
 function renderCommittees(){
   const ay=cteAY();
   if(CTE_AY!==ay){
@@ -13218,6 +13343,7 @@ function renderCommittees(){
       el("p",{cls:"alert-yellow"},"The committee tables are not there yet. Run supabase/add_committees.sql in the Supabase SQL Editor, then reload."),
       el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.35)",marginTop:"10px"}},CTE_ERR));
   }
+  if(STATE.cteMode==="catalogue"&&canEditCatalogue())return el("div",{cls:"content"},cteCatalogueView());
   if(!CTE_DEFS.length){
     return el("div",{cls:"content"},cteHeader(ay),
       el("p",{cls:"alert-yellow"},"No committees are set up yet. Run supabase/add_committees.sql in the Supabase SQL Editor."));
