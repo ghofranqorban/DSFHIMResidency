@@ -3195,6 +3195,11 @@ async function brSaveRow(fields,failMsg){
 // timestamps: sent bare, Postgres reads them as UTC and every time lands three hours late.
 // The wording is sent only when the PD typed one, so a database without the column still
 // takes the dates.
+// Moves the announcement time on its own. Nothing else about the quarter changes: voting stays open
+// (or the winners stay locked) and only the moment the winners appear is edited.
+async function brSaveAnnounceAt(localValue){
+  return brSaveRow({announced_at:brIso(localValue)},"Could not save the announcement date");
+}
 function brNoteFields(note){return note==null?{}:{announcement_note:String(note).trim()||null};}
 async function brOpenVoting(deadline,announceAt,note){
   return brSaveRow(Object.assign({voting_open:true,voting_deadline:brIso(deadline),announced:false,announced_at:brIso(announceAt)},brNoteFields(STATE.brNoteInput!=null?note:null)));
@@ -13299,6 +13304,15 @@ function renderBestResident(){
             "Best Senior: ",el("strong",null,sr?dname(sr.name):"—")," · ",Math.round(st.senior_score)+"/100"),
           el("div",{st:{fontSize:".87rem",color:"#1F1A12",marginBottom:"12px"}},
             "Best Junior: ",el("strong",null,jr?dname(jr.name):"—")," · ",Math.round(st.junior_score)+"/100"),
+          el("div",{st:{display:"flex",gap:"12px",alignItems:"flex-end",flexWrap:"wrap",marginBottom:"4px"}},
+            field("Winners appear on","brAnnounceInput",brLocalInput(st&&st.announced_at)),
+            el("button",{cls:"sbtn ghost",async onClick(){
+              const at=annVal();
+              if(!at){showToast("Enter the date first.","warning");return;}
+              const save=async()=>{if(await brSaveAnnounceAt(at)){STATE.brAnnounceInput=null;showToast("Announcement date saved.","success");}};
+              if(new Date(at)>brNow())await save();
+              else showConfirm("That time has already passed, so the winners would be shown to everyone immediately. Continue?",save,"Show now","warn");
+            }},"Save date")),
           noteField(true),
           el("div",{st:{display:"flex",gap:"12px",flexWrap:"wrap",marginTop:"14px"}},
             el("button",{cls:"sbtn ghost",onClick(){showConfirm("Show the winners to everyone now, instead of waiting for "+annWhen+"?",async()=>{await brRevealNow();},"Reveal now","primary");}},"Reveal now"),
@@ -13310,7 +13324,12 @@ function renderBestResident(){
           el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"12px"}},
             el("div",{cls:"sh",st:{fontWeight:"700",fontSize:".85rem"}},"Total votes cast: "+totalV),
             cd?el("span",{cls:"pill",st:{background:"#f5c518",color:"#3d2b1f"}},cd):null),
-          annWhen?el("div",{cls:"sh",st:{fontSize:".82rem",marginBottom:"12px"}},"Winners announced "+annWhen+"."):null,
+          el("div",{st:{display:"flex",gap:"12px",alignItems:"flex-end",flexWrap:"wrap",marginBottom:"14px"}},
+            field("Winners announced on","brAnnounceInput",brLocalInput(st&&st.announced_at)),
+            el("button",{cls:"sbtn ghost",async onClick(){
+              if(!annVal()){showToast("Enter the announcement date first.","warning");return;}
+              if(await brSaveAnnounceAt(annVal())){STATE.brAnnounceInput=null;showToast("Announcement date saved. The home page now counts down to it.","success");}
+            }},"Save date")),
           el("button",{cls:"sbtn ghost",onClick(){showConfirm("Close voting now? Votes will be locked and no further votes can be submitted.",async()=>{await brCloseVoting();},"Close Voting","warn");}},"Close Voting"),
           noteField(true),
           note("When voting has closed you lock the winners. They stay hidden until the announcement time."));
