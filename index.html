@@ -4146,8 +4146,8 @@ function kpiScoped(ay,fn){
 }
 // One year, every store, in one go: a half-loaded year would score residents against half
 // their evidence. Mapped exactly as the live loaders map, so the readers cannot tell them apart.
-async function loadKpiPast(ay){
-  KPI_PAST[ay]={state:"loading"};render();
+async function loadKpiPast(ay,quiet){
+  KPI_PAST[ay]={state:"loading"};if(!quiet)render();
   const[sc,qr,pr,qd,ad,cm]=await Promise.all([
     sb.from("kpi_scores").select("*").eq("academic_year",ay),
     sb.from("kpi_quarterly").select("*").eq("academic_year",ay),
@@ -4160,7 +4160,7 @@ async function loadKpiPast(ay){
   let scd=[];
   const ids=(qd.data||[]).map(q=>q.id);
   if(!bad&&ids.length){const r=await fetchAllRows(()=>sb.from("quiz_scores").select("*").in("quiz_id",ids).order("id"));if(r.error)bad=r;else scd=r.data||[];}
-  if(bad){KPI_PAST[ay]={state:"error",msg:bad.error.message};render();return;}
+  if(bad){KPI_PAST[ay]={state:"error",msg:bad.error.message};if(!quiet)render();return;}
   const scores={},comm={};
   (sc.data||[]).forEach(k=>{
     scores[k.resident_id]={commScore:k.committee_score||0,researchDone:!!k.research_participated,qiDone:!!k.qi_participated,bonusPublished:!!k.bonus_published,bonusOral:!!k.bonus_oral,bonusPoster:!!k.bonus_poster,awardsHonors:!!k.awards_honors,volunteering:!!k.volunteering,canmedsVerifiedAt:k.canmeds_verified_at||null,canmedsVerifiedBy:k.canmeds_verified_by||null};
@@ -4174,7 +4174,33 @@ async function loadKpiPast(ay){
   KPI_PAST[ay]={state:"ready",scores,comm,proposals:pr.data||[],quarterly,quizzes,
     advocacy:canmedsByRes(ad.data),committees:canmedsByRes(cm.data),
     mmAtt:buildAttMap(MM_ATT_RAW,MM_SESSION_BY_ID,ay).att,teachAtt:buildAttMap(TEACH_ATT_RAW,TEACH_SESSION_BY_ID,ay).att};
+  if(!quiet)render();
+}
+// The Performance Report wants every closed year at once: one render when they are all in,
+// not one per year on a page that rebuilds its whole scroll choreography each time.
+async function loadKpiPastYears(years){
+  const todo=years.filter(y=>!KPI_PAST[y]);
+  if(!todo.length)return;
+  todo.forEach(y=>{KPI_PAST[y]={state:"loading"};});
+  await Promise.all(todo.map(y=>loadKpiPast(y,true)));
   render();
+}
+// Share of all applicable CanMEDS standards that a year's cohort cleared: met summed over
+// residents, divided by applicable summed over residents. The same verdicts the podium ranks
+// on, folded into one figure per year for the Year over Year card. The live year is read off
+// the report's own `scored` rows; a closed year is computed inside its bundle, so its quizzes,
+// attendance, committees and verification state are that year's own.
+function kpiStandardsShare(ay,scoredLive){
+  let m=0,a=0;
+  if(ay===CURRENT_ACADEMIC_YEAR){
+    (scoredLive||[]).forEach(r=>{m+=r.cv.met;a+=r.cv.applicable;});
+    return a?Math.round(m/a*100):null;
+  }
+  const b=KPI_PAST[ay];if(!b||b.state!=="ready")return null;
+  return kpiScoped(ay,()=>{
+    brRoster(ay).forEach(r=>{const k=calcKPI(r.id);const cv=canmedsVerdicts(r.id,{k:k});m+=cv.met;a+=cv.applicable;});
+    return a?Math.round(m/a*100):null;
+  });
 }
 function kpiYearBar(){
   const years=kpiYears();
@@ -14764,9 +14790,9 @@ function renderKPIExecutive(){
 #kpix-wrap .ay-tnode{flex:1;text-align:center;position:relative;z-index:1;}
 #kpix-wrap .ay-tdot{width:12px;height:12px;border-radius:50%;margin:0 auto 8px;border:2px solid rgba(31,26,18,.1);background:var(--cream);}
 #kpix-wrap .ay-tnode.active .ay-tdot{width:18px;height:18px;background:var(--terracotta);border:3px solid var(--cream);box-shadow:0 0 0 3px rgba(201,106,74,.2),0 3px 10px rgba(201,106,74,.3);}
-#kpix-wrap .ay-tyear{font-size:.54rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(31,26,18,.2);}
+#kpix-wrap .ay-tyear{font-size:.56rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5C5345;}
 #kpix-wrap .ay-tnode.active .ay-tyear{color:var(--terracotta-ink);font-size:.6rem;}
-#kpix-wrap .ay-tstatus{font-size:.4rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(31,26,18,.1);margin-top:2px;}
+#kpix-wrap .ay-tstatus{font-size:.56rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5C5345;margin-top:3px;}
 #kpix-wrap .ay-domain-row{display:flex;gap:5px;margin:18px auto 0;max-width:360px;justify-content:center;}
 #kpix-wrap .ay-dbar{flex:1;text-align:center;}
 #kpix-wrap .ay-dbar-track{height:28px;border-radius:4px;position:relative;overflow:hidden;}
@@ -15244,19 +15270,29 @@ function renderKPIExecutive(){
     legendHtml+='<div class="da-legend-item"><div class="da-legend-dot" style="background:'+d.color+';"></div>'+d.label+' <span style="font-family:Playfair Display,serif;font-weight:700;color:'+d.color+';margin-left:2px;">'+d.score+'%</span></div>';
   });
 
-  // ── AY Compare: Mountains + Timeline + Domain bars ──
-  var ayYears=[
-    {y:"2025 - 26",active:true,score:avgKPI},
-    {y:"2024 - 25",active:false,score:null},
-    {y:"2023 - 24",active:false,score:null},
-    {y:"2022 - 23",active:false,score:null}
-  ];
+  // ── AY Compare: this year and the three before it, on the share of CanMEDS standards met ──
+  // Closed years come from the same bundles the KPI Dashboard uses; the ones not loaded yet are
+  // fetched together and the page re-renders once. A year with no sessions on record is "No
+  // data" and is never fetched.
+  var ayClosed=kpiYears().filter(function(y){return y<CURRENT_ACADEMIC_YEAR;});
+  var ayMissing=ayClosed.filter(function(y){return !KPI_PAST[y];});
+  if(ayMissing.length)loadKpiPastYears(ayMissing);
+  var ayShareNow=kpiStandardsShare(CURRENT_ACADEMIC_YEAR,scored);
+  var ayYears=[0,1,2,3].map(function(i){
+    var y=CURRENT_ACADEMIC_YEAR-i,has=i===0||ayClosed.indexOf(y)>=0,b=KPI_PAST[y];
+    var score=i===0?ayShareNow:(has&&b&&b.state==="ready"?kpiStandardsShare(y):null);
+    var status=i===0?null:!has?"No data":(b&&b.state==="error")?"Not loaded":(score==null?"Loading":score+"% met");
+    return{y:String(y)+" - "+String(y+1).slice(2),active:i===0,score:score,status:status};
+  });
   var W=460, svgH=140, baseY=svgH-5;
+  // Peak height follows the score: 0% is a low ridge, 100% fills the card. A year without a
+  // figure stays a ghost ridge, so the skyline keeps its four places and reads as a timeline.
+  function ayH(s){return s==null?16:Math.round(16+s/100*104);}
   var peakDefs=[
-    {x:W*0.14,hw:48,h:28,idx:3},
-    {x:W*0.34,hw:56,h:44,idx:2},
-    {x:W*0.56,hw:64,h:66,idx:1},
-    {x:W*0.80,hw:95,h:120,idx:0}
+    {x:W*0.14,hw:48,h:ayH(ayYears[3].score),idx:3},
+    {x:W*0.34,hw:56,h:ayH(ayYears[2].score),idx:2},
+    {x:W*0.56,hw:64,h:ayH(ayYears[1].score),idx:1},
+    {x:W*0.80,hw:95,h:ayH(ayYears[0].score),idx:0}
   ];
   function buildMtnPath(px,hw,h){
     var x1b=px-hw, x2b=px+hw, apex=baseY-h;
@@ -15288,7 +15324,7 @@ function renderKPIExecutive(){
   var timelineHtml='';
   var nodePositions=[{idx:3,x:W*0.14},{idx:2,x:W*0.34},{idx:1,x:W*0.56},{idx:0,x:W*0.80}];
   nodePositions.forEach(function(np){
-    timelineHtml+='<div class="ay-tnode'+(np.idx===0?" active":"")+'"><div class="ay-tdot"></div><div class="ay-tyear">'+ayYears[np.idx].y+'</div>'+(np.idx===0?'':'<div class="ay-tstatus">Pending</div>')+'</div>';
+    timelineHtml+='<div class="ay-tnode'+(np.idx===0?" active":"")+'"><div class="ay-tdot"></div><div class="ay-tyear">'+ayYears[np.idx].y+'</div>'+(np.idx===0?'':'<div class="ay-tstatus">'+ayYears[np.idx].status+'</div>')+'</div>';
   });
 
   var domainBarsHtml='';
@@ -15610,7 +15646,7 @@ function renderKPIExecutive(){
     +'<div class="ay-mountains" id="kpix-ayMtns">'+mtnSvg+'<div class="ay-score-float" id="kpix-ayScoreFloat" style="left:'+scoreFloatLeft+'%;top:'+scoreFloatTop+'%;">0<sup>%</sup></div></div>'
     +'<div class="ay-timeline" id="kpix-ayTimeline">'+timelineHtml+'</div>'
     +'<div class="ay-domain-row" id="kpix-ayDomains">'+domainBarsHtml+'</div>'
-    +'<div class="ay-detail"><strong>'+total+'</strong> residents &middot; <strong>'+domains.length+'</strong> domains</div>'
+    +'<div class="ay-detail"><strong>'+total+'</strong> residents &middot; <strong>'+domains.length+'</strong> domains &middot; peaks: share of applicable CanMEDS standards met, each year\'s own cohort</div>'
     +'</div></div>'
     +'</div></section>'
 
@@ -15862,7 +15898,7 @@ function renderKPIExecutive(){
     // Hero content starts VISIBLE — ScrollTrigger is progressive enhancement
     updateBurstFill(1);
     var sfElInit=wrap.querySelector("#kpix-ayScoreFloat");
-    if(sfElInit) sfElInit.innerHTML=avgKPI+'<sup>%</sup>';
+    if(sfElInit) sfElInit.innerHTML=(ayShareNow==null?'\u2014':ayShareNow+'<sup>%</sup>');
     wrap.querySelectorAll("#kpix-ayDomains .ay-dbar-fill").forEach(function(f,i){
       f.style.height=domains[i].score+"%";
     });
@@ -15891,7 +15927,7 @@ function renderKPIExecutive(){
               if(p>=0.68){
                 var ayP=gsap.utils.clamp(0,1,(p-0.68)/0.22);
                 var sfEl=wrap.querySelector("#kpix-ayScoreFloat");
-                if(sfEl) sfEl.innerHTML=Math.round(avgKPI*ayP)+'<sup>%</sup>';
+                if(sfEl) sfEl.innerHTML=(ayShareNow==null?'\u2014':Math.round(ayShareNow*ayP)+'<sup>%</sup>');
                 wrap.querySelectorAll("#kpix-ayDomains .ay-dbar-fill").forEach(function(f,i){
                   f.style.height=(domains[i].score*ayP)+"%";
                 });
