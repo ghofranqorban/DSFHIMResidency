@@ -997,7 +997,61 @@ function scfhsTier(weeks,rot){
 // combined bucket worth KPI_W.oral (10%) — achieving either grants the full 10%,
 // achieving both does not grant 20% (see calcKPI()'s oralPosterPct).
 // Quarterly: informational only — not scored
-const KPI_W={quiz:15,mm:15,teach:15,pres:5,comm:10,qi:10,pub:10,oral:10,poster:10,awards:5,volunteering:5};
+// These are the built-in weights; the PD can change them in Control Centre > Scoring (applyScoring()).
+let KPI_W={quiz:15,mm:15,teach:15,pres:5,comm:10,qi:10,pub:10,oral:10,poster:10,awards:5,volunteering:5};
+// ─── SCORING SETTINGS ───────────────────────────────────────────────────────────────────────────
+// One source for every number the scoring screens read: the yearly KPI weights above, the KPI
+// standards (quiz pass mark, attendance bar), the colour bands and tier labels, the "at risk" line and
+// the Best Resident split. Edited in Control Centre > Scoring and kept in portal_settings under the key
+// "scoring" (supabase/add_scoring_settings.sql). Anything not saved there falls back to the values
+// below, which are the numbers the portal has always used.
+const SCORING_DEFAULT={
+  kpiW:{quiz:15,mm:15,teach:15,pres:5,comm:10,qi:10,pub:10,oral:10,awards:5,volunteering:5},
+  standards:{quiz:60,attendance:75},
+  bands:{good:80,fair:60,low:30},
+  tiers:{good:"Outstanding",fair:"Strong Progress",low:"Developing",below:"Needs Improvement"},
+  atRisk:60,
+  br:{kpiPct:60,votePct:40,quiz:30,mm:15,teach:15}
+};
+// Turns whatever is stored into a complete, sane set. A group that does not add up (weights not 100,
+// bands out of order, a Best Resident split that does not add up) is dropped back to the default as a
+// whole, so the screens can never read a half-valid set.
+function scoringFrom(raw){
+  const D=SCORING_DEFAULT,r=(raw&&typeof raw==="object")?raw:{};
+  const num=(v,d,lo,hi)=>{const n=Number(v);return Number.isFinite(n)&&n>=lo&&n<=hi?Math.round(n):d;};
+  const obj=v=>(v&&typeof v==="object")?v:{};
+  const kw=obj(r.kpiW),st=obj(r.standards),bd=obj(r.bands),ti=obj(r.tiers),br=obj(r.br);
+  const kpiW={};Object.keys(D.kpiW).forEach(k=>{kpiW[k]=num(kw[k],D.kpiW[k],0,100);});
+  const out={
+    kpiW:scoringSum(kpiW)===100?kpiW:Object.assign({},D.kpiW),
+    standards:{quiz:num(st.quiz,D.standards.quiz,0,100),attendance:num(st.attendance,D.standards.attendance,0,100)},
+    bands:{good:num(bd.good,D.bands.good,0,100),fair:num(bd.fair,D.bands.fair,0,100),low:num(bd.low,D.bands.low,0,100)},
+    tiers:{},
+    atRisk:num(r.atRisk,D.atRisk,0,100),
+    br:{kpiPct:num(br.kpiPct,D.br.kpiPct,0,100),votePct:num(br.votePct,D.br.votePct,0,100),
+        quiz:num(br.quiz,D.br.quiz,0,100),mm:num(br.mm,D.br.mm,0,100),teach:num(br.teach,D.br.teach,0,100)}
+  };
+  Object.keys(D.tiers).forEach(k=>{out.tiers[k]=(typeof ti[k]==="string"&&ti[k].trim())?ti[k].trim().slice(0,40):D.tiers[k];});
+  if(!(out.bands.good>out.bands.fair&&out.bands.fair>out.bands.low))out.bands=Object.assign({},D.bands);
+  if(out.br.kpiPct+out.br.votePct!==100||out.br.quiz+out.br.mm+out.br.teach!==out.br.kpiPct)out.br=Object.assign({},D.br);
+  return out;
+}
+function scoringSum(o){return Object.values(o).reduce((a,b)=>a+Number(b||0),0);}
+let SCORING=scoringFrom(null);
+// Pushes a settings set into the variables the scoring screens already read.
+function applyScoring(s){
+  SCORING=s;
+  // Oral and poster are one bucket in calcKPI(); the poster key only feeds a line of text on the KPI page.
+  KPI_W=Object.assign({},s.kpiW,{poster:s.kpiW.oral});
+  BR_KPI_PCT=s.br.kpiPct;BR_VOTE_PCT=s.br.votePct;BR_W={quiz:s.br.quiz,mm:s.br.mm,teach:s.br.teach};
+}
+// The band a percentage falls in: good / fair / low / below, or "none" for no value.
+function scoreBand(v){if(v==null||!Number.isFinite(Number(v)))return"none";const b=SCORING.bands;return v>=b.good?"good":v>=b.fair?"fair":v>=b.low?"low":"below";}
+function scoreTier(v){return SCORING.tiers[scoreBand(v)]||SCORING.tiers.below;}
+// Green / amber / red for a percentage, by the bands. Screens pass their own red where it differs.
+function kpiBandColor(v,red){const b=scoreBand(v);return b==="good"?"#26523A":b==="fair"?"#A47A28":(red||"#dc2626");}
+// Background and ink for the small percentage badges.
+function pctBandStyle(pct){const b=scoreBand(pct);return{background:b==="good"?"#dcfce7":b==="fair"?"#fef9c3":"#fee2e2",color:b==="good"?"#166534":b==="fair"?"#854d0e":"#991b1b"};}
 const LC={R1:"#4a6a8a",R2:"#5a8a6a",R3:"#c9913a",R4:"#8a4a2a"};
 const ROT_COLORS={"GIM/CTU":{bg:"#ede9fe",tx:"#5b21b6"},"Night Duty":{bg:"#fef2f2",tx:"#991b1b"},"ICU":{bg:"rgba(38,82,58,.12)",tx:"#26523A"},"Cardiology":{bg:"rgba(201,106,74,.12)",tx:"#9d174d"},"Pulmonology":{bg:"#e0f2fe",tx:"#0c4a6e"},"Nephrology":{bg:"rgba(127,184,156,.15)",tx:"#26523A"},"Gastroenterology":{bg:"rgba(164,122,40,.12)",tx:"#6a4c10"},"Endocrinology":{bg:"#f0fdf4",tx:"#166534"},"Hematology":{bg:"#ffe4e6",tx:"#9f1239"},"Rheumatology":{bg:"#f5f3ff",tx:"#4c1d95"},"Neurology":{bg:"#fdf4ff",tx:"#7e22ce"},"Infectious Disease":{bg:"#fff7ed",tx:"#c2410c"},"Emergency Medicine":{bg:"#fee2e2",tx:"#7f1d1d"},"Oncology":{bg:"#f0f9ff",tx:"#0369a1"},"Outpatient Clinic":{bg:"#F6EFE2",tx:"#475569"},"Elective":{bg:"#f0fdf4",tx:"#166534"},"Annual Leave":{bg:"#fefce8",tx:"#854d0e"},"Maternity Leave":{bg:"#fdf4ff",tx:"#701a75"},"Medical Consult":{bg:"#eff6ff",tx:"#26523A"},"Freeze":{bg:"#f1f5f9",tx:"#64748b",ol:"1px dashed #cbd5e1"}};
 const ROT_ABBR={"GIM/CTU":"CTU","Night Duty":"Night","ICU":"ICU","Cardiology":"Cardio","Pulmonology":"Pulmo","Nephrology":"Nephro","Gastroenterology":"Gastro","Endocrinology":"Endo","Hematology":"Hema","Rheumatology":"Rheuma","Neurology":"Neuro","Infectious Disease":"ID","Emergency Medicine":"ER","Oncology":"Onco","Outpatient Clinic":"Clinic","Elective":"Elect","Annual Leave":"Leave","Maternity Leave":"Matern","Medical Consult":"M.Cons","Freeze":"Freeze"};
@@ -1884,12 +1938,14 @@ function ayRecomputeCurrent(){
 }
 async function loadAcademicYears(){
   try{
-    const[a,s]=await Promise.all([
+    const[a,s,sc]=await Promise.all([
       sb.from("academic_years").select("*").order("ay"),
-      sb.from("portal_settings").select("*").eq("key","plan_year").maybeSingle()
+      sb.from("portal_settings").select("*").eq("key","plan_year").maybeSingle(),
+      sb.from("portal_settings").select("*").eq("key","scoring").maybeSingle()
     ]);
     if(a.error){console.warn("academic_years not read, using the built-in years:",a.error.message);}
     else{AY_ROWS=a.data||[];AY_ROWS.forEach(ayApplyRow);}
+    applyScoring(scoringFrom(!sc.error&&sc.data?sc.data.value:null));
     ayRecomputeCurrent();
     const py=!s.error&&s.data&&s.data.value?Number(s.data.value.ay):NaN;
     if(Number.isInteger(py)&&py!==LP_AY)applyPlanYearLocal(py);
@@ -3253,8 +3309,9 @@ function brAttendance(p){
 // Best Resident score = 60% KPI + 40% votes. The KPI part is quiz 30 + attendance 30 (morning
 // meeting 15, Academic Day 15), in points of the final 100. These are the Best Resident's own
 // weights, deliberately NOT KPI_W, which other screens still read.
-const BR_KPI_PCT=60,BR_VOTE_PCT=40;
-const BR_W={quiz:30,mm:15,teach:15};
+// Built-in values; the PD can change them in Control Centre > Scoring (applyScoring()).
+let BR_KPI_PCT=60,BR_VOTE_PCT=40;
+let BR_W={quiz:30,mm:15,teach:15};
 // The KPI part of the score: morning-meeting and teaching attendance and quiz marks of the
 // quarter being judged, and of nothing else. Presenting or moderating is not counted. A part
 // not held yet in the quarter drops out and the rest are rescaled to 0-100.
@@ -4055,8 +4112,8 @@ function canmedsVerdicts(id,opts){
   // entered by hand later, so waiting for the PD to confirm the record would strand it forever.
   var quizzesSat=QUIZZES.filter(function(q){return q.published&&q.sc[id]!=null;}).length;
   roles.push({key:"expert",role:"Medical Expert",
-    kpi:"Quiz average at least 60%",
-    state:quizzesSat?(k.qAvg>=60?"met":"not_met"):"awaiting",
+    kpi:"Quiz average at least "+SCORING.standards.quiz+"%",
+    state:quizzesSat?(k.qAvg>=SCORING.standards.quiz?"met":"not_met"):"awaiting",
     value:quizzesSat?k.qAvg+"%":"No quiz sat",
     note:quizzesSat?(quizzesSat+" published quiz"+(quizzesSat!==1?"zes":"")+" sat"):"No published quiz has been sat yet"});
 
@@ -4151,16 +4208,16 @@ function canmedsVerdicts(id,opts){
   // mmPct and tPct are null, not 0, when nothing is recorded. null>=75 is false, so comparing
   // without the null test first silently fails a resident who has no sessions at all.
   var mmLeg={label:"Morning Meeting",
-    state:k.mmPct==null?"awaiting":(k.mmPct>=75?"met":"not_met"),
+    state:k.mmPct==null?"awaiting":(k.mmPct>=SCORING.standards.attendance?"met":"not_met"),
     value:k.mmPct==null?"\u2014":k.mmPct+"%",
     note:k.mmPct==null?"No attendance recorded":(k.mmAtt+"/"+k.mmTotal+" sessions")};
   var adLeg={label:"Academic Day",
-    state:k.tPct==null?"awaiting":(k.tPct>=75?"met":"not_met"),
+    state:k.tPct==null?"awaiting":(k.tPct>=SCORING.standards.attendance?"met":"not_met"),
     value:k.tPct==null?"\u2014":k.tPct+"%",
     note:k.tPct==null?"No attendance recorded":(k.tAtt+"/"+k.tTotal+" sessions")};
   var profLegs=[mmLeg,adLeg];
   roles.push({key:"prof",role:"Professional",
-    kpi:"Morning Meeting and Academic Day attendance both at least 75%",
+    kpi:"Morning Meeting and Academic Day attendance both at least "+SCORING.standards.attendance+"%",
     state:canmedsComposite(profLegs),legs:profLegs});
 
   function count(st){return roles.filter(function(r){return r.state===st;}).length;}
@@ -6321,7 +6378,7 @@ function renderMMAttendance(){
     });
   });
   const avgPct=totalSess&&vr.length?Math.round((totalP+totalL+totalE)/(totalSess*vr.length)*100):0;
-  const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#b52040";
+  const kpiColor=v=>kpiBandColor(v,"#b52040");
   function sBox(label,val,color){
     return el("div",{st:{background:"#F6EFE2",borderRadius:"12px",padding:"14px 16px",flex:"1",minWidth:"90px"}},
       el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.6rem",fontWeight:"400",color:color||"#1F1A12",lineHeight:"1"}},(typeof val==="number"?String(val):val)),
@@ -7120,7 +7177,7 @@ function quizMentorSection(QL,cohort){
   const cid=STATE.user.cid;
   const mine=sortByLevel(cohort.filter(r=>MENTORS[r.id]===cid));
   const pub=QL.filter(q=>q.published).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-  const pctBadge=pct=>el("span",{cls:"bdg",st:{background:pct>=80?"#dcfce7":pct>=60?"#fef9c3":"#fee2e2",color:pct>=80?"#166534":pct>=60?"#854d0e":"#991b1b"}},pct+"%");
+  const pctBadge=pct=>el("span",{cls:"bdg",st:pctBandStyle(pct)},pct+"%");
   return el("div",{cls:"card",st:{marginTop:"22px"}},
     el("div",{cls:"card-title"},"Your mentored residents"),
     !mine.length?el("p",{cls:"sh"},"Currently no resident is assigned under your name."):
@@ -7293,7 +7350,7 @@ function renderQuiz(){
                   ),
                   el("td",{st:{textAlign:"center"}},
                     pct!=null
-                      ?el("span",{cls:"bdg",st:{background:pct>=80?"#dcfce7":pct>=60?"#fef9c3":"#fee2e2",color:pct>=80?"#166534":pct>=60?"#854d0e":"#991b1b"}},pct+"%")
+                      ?el("span",{cls:"bdg",st:pctBandStyle(pct)},pct+"%")
                       :el("span",{cls:"sh"},"—")
                   )
                 );
@@ -7450,7 +7507,7 @@ function calcKPIQ(id,qBlocks){
 }
 // Compact quarterly breakdown card — reused in resident KPI page and admin profile.
 function renderQuarterlyKPICard(resId){
-  const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
+  const kpiColor=v=>kpiBandColor(v,"#dc2626");
   const q=STATE.mentorQ||currentQuarter();
   const qBlocks=QUARTER_BLOCKS[q];
   const kq=calcKPIQ(resId,qBlocks);
@@ -7490,7 +7547,7 @@ function renderMentorHome(){
     ),
     el("div",{cls:"card"},el("p",{cls:"sh"},"No residents are currently assigned to you. Ask the Program Director to assign residents."))
   );
-  const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
+  const kpiColor=v=>kpiBandColor(v,"#dc2626");
   const q=STATE.mentorQ||currentQuarter();
   const qBlocks=QUARTER_BLOCKS[q];
   return el("div",{cls:"content"},
@@ -7565,7 +7622,7 @@ function renderMentorHome(){
 }
 // ─── KPI DASHBOARD ───────────────────────────────────────────────────────────
 function exportKpiPDF(res,k){
-  const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
+  const kpiColor=v=>kpiBandColor(v,"#dc2626");
   const row=(label,val,weight,detail)=>`<tr><td>${label}</td><td style="text-align:center;font-weight:700;color:${val==null?"#9ca3af":kpiColor(val)}">${val==null?"N/A":val+"%"}</td><td style="text-align:center">${weight}%</td><td style="color:#6b7280;font-size:.85rem">${detail||""}</td></tr>`;
   const ach=(icon,label,done)=>`<div style="display:inline-flex;align-items:center;gap:6px;background:${done?"#dcfce7":"#FEFBF3"};border-radius:8px;padding:6px 12px;margin:4px;font-size:.84rem;font-weight:600;color:${done?"#166534":"#64748b"}">${icon} ${label}: ${done?" Yes":"— No"}</div>`;
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>KPI Report – ${res.name}</title>
@@ -7891,8 +7948,8 @@ function canmedsPill(state){
 }
 function cmTone(v,threshold){
   if(v==null)return"rgba(31,26,18,.25)";
-  if(v>=80)return"#26523A";
-  if(v>=(threshold||60))return"#A47A28";
+  if(v>=SCORING.bands.good)return"#26523A";
+  if(v>=(threshold||SCORING.bands.fair))return"#A47A28";
   return"#c96a4a";
 }
 
@@ -7923,8 +7980,8 @@ function renderCanmedsView(resId){
       const qz=QUIZZES.filter(q=>q.published&&q.sc[resId]!=null);
       if(!qz.length)return[el("div",{cls:"pfnone"},"No published quiz has been sat yet.")];
       const pcts=qz.map(q=>Math.round(q.sc[resId]/q.max*100));
-      return[pf(k.qAvg,"%",{color:cmTone(k.qAvg,60),text:"across "+qz.length+" published quiz"+(qz.length!==1?"zes":"")}),
-        bar(k.qAvg,cmTone(k.qAvg,60)),
+      return[pf(k.qAvg,"%",{color:cmTone(k.qAvg,SCORING.standards.quiz),text:"across "+qz.length+" published quiz"+(qz.length!==1?"zes":"")}),
+        bar(k.qAvg,cmTone(k.qAvg,SCORING.standards.quiz)),
         el("div",{cls:"pfnote"},"Best "+Math.max(...pcts)+"% \u00b7 weakest "+Math.min(...pcts)+"%")];
     }
     if(key==="comm")return[el("div",{cls:"pfnote",st:{color:"rgba(31,26,18,.32)"}},
@@ -7932,8 +7989,8 @@ function renderCanmedsView(resId){
     if(key==="collab"){
       const out=[];
       if(g.committeeScore!=null){
-        out.push(pf(g.committeeScore,"/10",{color:cmTone(g.committeeScore*10,60),text:"committee score"}));
-        out.push(bar(g.committeeScore*10,cmTone(g.committeeScore*10,60)));
+        out.push(pf(g.committeeScore,"/10",{color:cmTone(g.committeeScore*10,SCORING.bands.fair),text:"committee score"}));
+        out.push(bar(g.committeeScore*10,cmTone(g.committeeScore*10,SCORING.bands.fair)));
       }else{
         out.push(el("div",{cls:"pfnote"},"Committee score \u2014 not scored yet."));
       }
@@ -7972,13 +8029,13 @@ function renderCanmedsView(resId){
     if(key==="prof"){
       const out=[];
       if(k.mmPct==null)out.push(el("div",{cls:"pfnone"},"No Morning Meeting attendance recorded."));
-      else{out.push(pf(k.mmPct,"%",{color:cmTone(k.mmPct,75),text:"MM \u00b7 "+k.mmAtt+" of "+k.mmTotal+" sessions"}));
-        out.push(bar(k.mmPct,cmTone(k.mmPct,75)));}
+      else{out.push(pf(k.mmPct,"%",{color:cmTone(k.mmPct,SCORING.standards.attendance),text:"MM \u00b7 "+k.mmAtt+" of "+k.mmTotal+" sessions"}));
+        out.push(bar(k.mmPct,cmTone(k.mmPct,SCORING.standards.attendance)));}
       if(k.tPct==null)out.push(el("div",{cls:"pfnone"},"No Academic Day attendance recorded."));
       else{out.push(el("div",{cls:"pf",st:{marginTop:"9px"}},
-          el("div",{cls:"v",st:{color:cmTone(k.tPct,75)}},String(k.tPct),el("span",{st:{fontSize:".8rem",color:"rgba(31,26,18,.25)"}},"%")),
+          el("div",{cls:"v",st:{color:cmTone(k.tPct,SCORING.standards.attendance)}},String(k.tPct),el("span",{st:{fontSize:".8rem",color:"rgba(31,26,18,.25)"}},"%")),
           el("div",{cls:"u"},"Academic Day \u00b7 "+k.tAtt+" of "+k.tTotal)));
-        out.push(bar(k.tPct,cmTone(k.tPct,75)));}
+        out.push(bar(k.tPct,cmTone(k.tPct,SCORING.standards.attendance)));}
       return out;
     }
     return[];
@@ -8086,9 +8143,9 @@ function renderPerformanceView(resId){
   }
   const nb=selBlocks.length;
   const metrics=el("div",{cls:"metrics"},
-    tile("Morning Meeting",kq.mmPct,"%",kq.mmPct==null?"no sessions recorded":(kq.mmAtt+" of "+kq.mmTotal+" sessions"),prev&&prev.mmPct,cmTone(kq.mmPct,75)),
-    tile("Academic Day",kq.tPct,"%",kq.tPct==null?"no sessions recorded":(kq.tAtt+" of "+kq.tTotal+" sessions"),prev&&prev.tPct,cmTone(kq.tPct,75)),
-    tile("Quiz average",kq.qAvg,"%",kq.quizCount?(kq.quizCount+" quiz"+(kq.quizCount!==1?"zes":"")+" sat"):"none sat",prev&&prev.qAvg,cmTone(kq.qAvg,60)),
+    tile("Morning Meeting",kq.mmPct,"%",kq.mmPct==null?"no sessions recorded":(kq.mmAtt+" of "+kq.mmTotal+" sessions"),prev&&prev.mmPct,cmTone(kq.mmPct,SCORING.standards.attendance)),
+    tile("Academic Day",kq.tPct,"%",kq.tPct==null?"no sessions recorded":(kq.tAtt+" of "+kq.tTotal+" sessions"),prev&&prev.tPct,cmTone(kq.tPct,SCORING.standards.attendance)),
+    tile("Quiz average",kq.qAvg,"%",kq.quizCount?(kq.quizCount+" quiz"+(kq.quizCount!==1?"zes":"")+" sat"):"none sat",prev&&prev.qAvg,cmTone(kq.qAvg,SCORING.standards.quiz)),
     tile("MM presenter",kq.presCount,"","session"+(kq.presCount!==1?"s":"")+" over "+nb+" block"+(nb!==1?"s":""),prev&&prev.presCount,"#7a5a10","session"));
 
   // Trend strip. All 13 blocks stay on screen at every grain, with the selected period banded,
@@ -8467,7 +8524,7 @@ function renderKPI(){
   const res=resById(selId)||vr[0];
   if(!res)return el("div",null,"No residents");
   const k=calcKPI(res.id);
-  const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
+  const kpiColor=v=>kpiBandColor(v,"#dc2626");
   const tab=STATE.kpiTab||"kpi";
   canmedsInjectCss();
   const cvHead=CANMEDS_LOADED?canmedsVerdicts(res.id,{k:k}):null;
@@ -9750,7 +9807,7 @@ function renderMentorNoteForm(){
 }
 // ─── PD OVERVIEW DASHBOARD ───────────────────────────────────────────────────
 function renderPDOverview(){
-  const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
+  const kpiColor=v=>kpiBandColor(v,"#dc2626");
   const filterLevel=STATE.ovLevel||"all";
   const sortBy=STATE.ovSort||"name";
 
@@ -9774,7 +9831,7 @@ function renderPDOverview(){
     const k=calcKPI(r.id);
     const cRecs=COUNSEL_CACHE[r.id];
     const counselCount=Array.isArray(cRecs)?cRecs.length:null;
-    const atRisk=k.overall<60||(k.mmPct!=null&&k.mmPct<60)||(k.tPct!=null&&k.tPct<60);
+    const atRisk=k.overall<SCORING.atRisk||(k.mmPct!=null&&k.mmPct<SCORING.atRisk)||(k.tPct!=null&&k.tPct<SCORING.atRisk);
     return{...r,k,counselCount,atRisk};
   });
   if(filterLevel!=="all")rows=rows.filter(r=>r.level===filterLevel);
@@ -9799,7 +9856,7 @@ function renderPDOverview(){
   const summary=el("div",{st:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"12px",marginBottom:"24px"}},
     statCard("","Total Residents",total,"#c96a4a"),
     statCard("","Average KPI",avgKPI+"%",kpiColor(avgKPI)),
-    statCard("","At Risk",atRiskCount,"#dc2626","KPI or attendance < 60%"),
+    statCard("","At Risk",atRiskCount,"#dc2626","KPI or attendance < "+SCORING.atRisk+"%"),
     statCard("","With Counseling",withCounsel,"#A47A28","Active records")
   );
 
@@ -9898,9 +9955,9 @@ function renderPDOverview(){
     el("div",{st:{fontWeight:"700",marginBottom:"4px"}},""+atRiskCount+" resident"+(atRiskCount>1?"s":"")+" at risk"),
     ...rows.filter(r=>r.atRisk).map(r=>{
       const flags=[];
-      if(r.k.overall<60)flags.push("KPI "+r.k.overall+"%");
-      if(r.k.mmPct!=null&&r.k.mmPct<60)flags.push("MM "+r.k.mmPct+"%");
-      if(r.k.tPct!=null&&r.k.tPct<60)flags.push("Academic Day "+r.k.tPct+"%");
+      if(r.k.overall<SCORING.atRisk)flags.push("KPI "+r.k.overall+"%");
+      if(r.k.mmPct!=null&&r.k.mmPct<SCORING.atRisk)flags.push("MM "+r.k.mmPct+"%");
+      if(r.k.tPct!=null&&r.k.tPct<SCORING.atRisk)flags.push("Academic Day "+r.k.tPct+"%");
       return el("div",{st:{fontSize:".82rem",marginTop:"3px",cursor:"pointer"},onClick:()=>set({mod:"admin",adminProfile:r.id,adminResTab:"kpi"})}, "– "+r.name+" ("+r.level+") — "+flags.join(", ")+" → Click to view" );
     })
   ):null;
@@ -10803,7 +10860,7 @@ function renderAdminProfile(rid){
 }
 function renderProfileKPI(res){
   const k=calcKPI(res.id);
-  const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
+  const kpiColor=v=>kpiBandColor(v,"#dc2626");
   const achCount=[k.qiPct,k.pubPct,k.oralPosterPct,k.awardsPct,k.volunteeringPct].filter(v=>v>0).length;
   const pendingCount=KPI_PROPOSALS.filter(p=>p.resident_id===res.id&&p.status==="pending").length;
   return el("div",null,
@@ -13721,6 +13778,97 @@ function ctlRulesView(){
       el("button",{cls:"sbtn ghost",onClick:()=>{if(dirty)set({ctlRules:null});}},"Discard changes"),
       el("button",{cls:"sbtn ghost",onClick:()=>edit(x=>{Object.assign(x,JSON.parse(JSON.stringify(AY_RULES_DEFAULT)));})},"Reset to the portal's standard rules")));
 }
+// Scoring: the weights, standards, bands and the Best Resident split, kept as one row in portal_settings.
+async function ctlSaveScoring(v){
+  const{error}=await sb.from("portal_settings").upsert({key:"scoring",value:v,updated_at:new Date().toISOString(),updated_by:STATE.user.profileId},{onConflict:"key"});
+  if(error){showToast("Could not save the scoring settings: "+error.message);return false;}
+  await loadAcademicYears();
+  set({ctlScoring:null});
+  showToast("Scoring settings saved. Every screen now reads them.","success");
+  return true;
+}
+function ctlScoringView(){
+  const saved=SCORING;
+  const d=STATE.ctlScoring?STATE.ctlScoring:JSON.parse(JSON.stringify(saved));
+  const edit=f=>{const v=JSON.parse(JSON.stringify(d));f(v);set({ctlScoring:v});};
+  const dirty=JSON.stringify(d)!==JSON.stringify(saved);
+  const num=(label,hint,get,setf,lo,hi,w)=>el("div",{st:{minWidth:w||"150px"}},
+    el("label",null,label),
+    el("input",{type:"number",min:String(lo),max:String(hi),value:String(get(d)),st:{maxWidth:"96px"},
+      onChange:e=>{const v=Math.max(lo,Math.min(hi,parseInt(e.target.value)||0));edit(x=>setf(x,v));}}),
+    hint?el("div",{cls:"sh",st:{fontSize:".7rem",marginTop:"3px"}},hint):null);
+  const txt=(label,get,setf)=>el("div",{st:{minWidth:"170px"}},
+    el("label",null,label),
+    el("input",{type:"text",maxlength:"40",value:get(d),st:{maxWidth:"170px"},onChange:e=>{const v=e.target.value.trim();if(v)edit(x=>setf(x,v));}}));
+  const row=(...kids)=>el("div",{st:{display:"flex",gap:"22px",flexWrap:"wrap",marginBottom:"14px"}},...kids);
+  const sumLine=(ok,text)=>el("div",{st:{fontSize:".78rem",fontWeight:"600",margin:"-4px 0 16px",color:ok?"#1d5c43":"#b52040"}},text);
+  // -- checks that gate Save, each stated in the words the PD will read --
+  const wSum=scoringSum(d.kpiW);
+  const bandsOk=d.bands.good>d.bands.fair&&d.bands.fair>d.bands.low;
+  const brSplitOk=d.br.kpiPct+d.br.votePct===100;
+  const brPartsOk=d.br.quiz+d.br.mm+d.br.teach===d.br.kpiPct;
+  const problems=[];
+  if(wSum!==100)problems.push("the KPI weights add up to "+wSum+", not 100");
+  if(!bandsOk)problems.push("the bands must go down in order: good above fair above low");
+  if(!brSplitOk)problems.push("the Best Resident KPI and votes shares add up to "+(d.br.kpiPct+d.br.votePct)+", not 100");
+  if(!brPartsOk)problems.push("the Best Resident KPI parts add up to "+(d.br.quiz+d.br.mm+d.br.teach)+", not the KPI share of "+d.br.kpiPct);
+  const W=[["quiz","Quiz average"],["mm","Morning Meeting attendance"],["teach","Academic Day attendance"],["pres","Presenter or moderator"],
+           ["comm","Committee score"],["qi","QI project"],["pub","Research publication"],["oral","Oral or poster presentation"],["awards","Award or honour"],["volunteering","Volunteering"]];
+  const swatch=(c,t)=>el("span",{st:{display:"inline-flex",alignItems:"center",gap:"6px",marginRight:"14px",fontSize:".76rem",color:"#443C2F"}},
+    el("span",{st:{width:"12px",height:"12px",borderRadius:"3px",background:c,display:"inline-block"}}),t);
+  return el("div",null,
+    el("div",{cls:"card",st:{marginBottom:"18px"}},
+      el("div",{cls:"card-title"},"KPI standards"),
+      el("p",{cls:"sh",st:{fontSize:".78rem",maxWidth:"72ch",marginBottom:"12px"}},"The pass marks behind the met / not met verdicts on each resident's KPI page, and the programme standards in the Performance Report. One number each, read in both places."),
+      row(num("Quiz pass mark (%)","Quiz average at least this",x=>x.standards.quiz,(x,v)=>{x.standards.quiz=v;},0,100),
+          num("Attendance bar (%)","Morning Meeting and Academic Day, each",x=>x.standards.attendance,(x,v)=>{x.standards.attendance=v;},0,100))),
+    el("div",{cls:"card",st:{marginBottom:"18px"}},
+      el("div",{cls:"card-title"},"Yearly KPI score weights"),
+      el("p",{cls:"sh",st:{fontSize:".78rem",maxWidth:"72ch",marginBottom:"12px"}},"The weighted score on the Residents table, the resident profile, the PDF export and the Performance Report. Points of 100; oral and poster share one weight."),
+      row(...W.slice(0,4).map(([k,l])=>num(l,"",x=>x.kpiW[k],(x,v)=>{x.kpiW[k]=v;},0,100,"170px"))),
+      row(...W.slice(4).map(([k,l])=>num(l,"",x=>x.kpiW[k],(x,v)=>{x.kpiW[k]=v;},0,100,"170px"))),
+      sumLine(wSum===100,"Total "+wSum+" of 100"+(wSum===100?"":" \u2014 the weights must add up to 100"))),
+    el("div",{cls:"card",st:{marginBottom:"18px"}},
+      el("div",{cls:"card-title"},"Score bands"),
+      el("p",{cls:"sh",st:{fontSize:".78rem",maxWidth:"72ch",marginBottom:"12px"}},"How a percentage is coloured and named wherever a score is shown: green from the good line, amber from the fair line, red below. The Performance Report headline uses the four tier names."),
+      el("div",{st:{marginBottom:"12px"}},swatch("#26523A","good"),swatch("#A47A28","fair"),swatch("#dc2626","below fair")),
+      row(num("Good from (%)","",x=>x.bands.good,(x,v)=>{x.bands.good=v;},0,100,"130px"),
+          num("Fair from (%)","",x=>x.bands.fair,(x,v)=>{x.bands.fair=v;},0,100,"130px"),
+          num("Low from (%)","Below this is the bottom tier",x=>x.bands.low,(x,v)=>{x.bands.low=v;},0,100,"130px"),
+          num("At risk below (%)","Residents table flag: KPI or attendance under this",x=>x.atRisk,(x,v)=>{x.atRisk=v;},0,100,"170px")),
+      bandsOk?null:sumLine(false,"The bands must go down in order: good above fair above low"),
+      row(txt("Tier name: good and above",x=>x.tiers.good,(x,v)=>{x.tiers.good=v;}),
+          txt("Tier name: fair",x=>x.tiers.fair,(x,v)=>{x.tiers.fair=v;}),
+          txt("Tier name: low",x=>x.tiers.low,(x,v)=>{x.tiers.low=v;}),
+          txt("Tier name: below low",x=>x.tiers.below,(x,v)=>{x.tiers.below=v;}))),
+    el("div",{cls:"card",st:{marginBottom:"18px"}},
+      el("div",{cls:"card-title"},"Best Resident"),
+      el("p",{cls:"sh",st:{fontSize:".78rem",maxWidth:"72ch",marginBottom:"12px"}},"The final score is the KPI share plus the votes share. The KPI share is made of quiz marks and the two attendances, in points of the final 100."),
+      row(num("KPI share (%)","",x=>x.br.kpiPct,(x,v)=>{x.br.kpiPct=v;},0,100,"130px"),
+          num("Votes share (%)","",x=>x.br.votePct,(x,v)=>{x.br.votePct=v;},0,100,"130px")),
+      sumLine(brSplitOk,"KPI + votes = "+(d.br.kpiPct+d.br.votePct)+(brSplitOk?"":" \u2014 must be 100")),
+      row(num("Quiz marks (points)","",x=>x.br.quiz,(x,v)=>{x.br.quiz=v;},0,100,"150px"),
+          num("Morning Meeting (points)","",x=>x.br.mm,(x,v)=>{x.br.mm=v;},0,100,"170px"),
+          num("Academic Day (points)","",x=>x.br.teach,(x,v)=>{x.br.teach=v;},0,100,"150px")),
+      sumLine(brPartsOk,"Quiz + Morning Meeting + Academic Day = "+(d.br.quiz+d.br.mm+d.br.teach)+(brPartsOk?"":" \u2014 must equal the KPI share of "+d.br.kpiPct))),
+    el("div",{cls:"card",st:{marginBottom:"18px"}},
+      el("div",{cls:"card-title"},"In effect after saving"),
+      el("p",{cls:"sh",st:{fontSize:".8rem",lineHeight:"1.7",maxWidth:"72ch"}},
+        "A resident meets the quiz standard at "+d.standards.quiz+"% and the attendance standard at "+d.standards.attendance+"%. "+
+        "Scores read "+d.tiers.good+" from "+d.bands.good+"%, "+d.tiers.fair+" from "+d.bands.fair+"%, "+d.tiers.low+" from "+d.bands.low+"%, and "+d.tiers.below+" under that; a resident is flagged at risk under "+d.atRisk+"%. "+
+        "Best Resident: KPI "+d.br.kpiPct+"% (quiz "+d.br.quiz+", Morning Meeting "+d.br.mm+", Academic Day "+d.br.teach+") plus votes "+d.br.votePct+"%."),
+      el("p",{cls:"sh",st:{fontSize:".74rem",maxWidth:"72ch",marginTop:"6px"}},"Nothing is stored per resident: every screen recalculates from these numbers when it opens. Best Resident winners already locked keep the numbers they were locked with.")),
+    problems.length?el("div",{st:{background:"#fdecef",border:"1px solid #f0a8b8",borderRadius:"10px",padding:"12px 16px",fontSize:".8rem",color:"#8f1730",lineHeight:"1.5",marginBottom:"14px"}},
+      "Cannot save yet: "+problems.join("; ")+"."):null,
+    el("div",{st:{display:"flex",gap:"10px"}},
+      el("button",{cls:"sbtn primary",st:{opacity:dirty&&!problems.length?"1":".5"},onClick:()=>{
+        if(!dirty){showToast("Nothing has changed.","warning");return;}
+        if(problems.length){showToast("Fix the totals first.","error");return;}
+        showConfirm("Every scoring screen changes as soon as people next open it, including the live Best Resident standings for the quarter being judged. Save?",()=>ctlSaveScoring(d),"Save","warn");
+      }},"Save scoring"),
+      el("button",{cls:"sbtn ghost",onClick:()=>{if(dirty)set({ctlScoring:null});}},"Discard changes"),
+      el("button",{cls:"sbtn ghost",onClick:()=>set({ctlScoring:JSON.parse(JSON.stringify(SCORING_DEFAULT))})},"Reset to the portal's standard scoring")));
+}
 function renderControl(){
   if(!ctlCanUse())return el("div",{cls:"content"},el("p",{cls:"alert-yellow"},"Only the Program Director and the deputy PD can change these settings."));
   const tab=STATE.ctlTab||"year";
@@ -13729,10 +13877,11 @@ function renderControl(){
     el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Control Centre"),
     el("div",{st:{fontSize:".82rem",color:"#5C5345"}},"Change how the portal is set up, without asking a developer."));
   const tabs=el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
-    ...[["year","Year setup"],["rules","Leave and rules"],["committees","Committees"]].map(t=>{const on=tab===t[0];
+    ...[["year","Year setup"],["rules","Leave and rules"],["scoring","Scoring"],["committees","Committees"]].map(t=>{const on=tab===t[0];
       return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:on?"600":"500",color:on?"#a94e2c":"#5C5345",cursor:"pointer",
         borderBottom:"2px solid "+(on?"#c96a4a":"transparent"),marginBottom:"-1px"},onClick:()=>set({ctlTab:t[0]})},t[1]);}));
   if(tab==="rules")return el("div",{cls:"content"},head,tabs,ctlRulesView());
+  if(tab==="scoring")return el("div",{cls:"content"},head,tabs,ctlScoringView());
   if(tab==="committees"){
     return el("div",{cls:"content"},head,tabs,el("div",{cls:"card"},
       el("div",{cls:"card-title"},"Committees"),
@@ -14210,7 +14359,7 @@ function renderBrDetailModal(){
   const votePct=totalVoters>0?Math.round(votes/totalVoters*100):0;
   const kpi=k.score;
   const final=Math.round(kpi*BR_KPI_PCT/100+votePct*BR_VOTE_PCT/100);
-  const kpiColor=v=>v>=80?"#26523A":v>=60?"#A47A28":"#dc2626";
+  const kpiColor=v=>kpiBandColor(v,"#dc2626");
   // share of the FINAL score each part carries, given which parts have been held this quarter
   const heldW=BR_W.quiz*(k.held.quiz?1:0)+BR_W.mm*(k.held.mm?1:0)+BR_W.teach*(k.held.teach?1:0);
   const share=(key)=>k.held[key]&&heldW?Math.round(BR_W[key]/heldW*BR_KPI_PCT):0;
@@ -14585,8 +14734,8 @@ function renderKPIExecutive(){
   // ── Local helpers ──
   function iniL(name){const n=(name||"").replace(/^Dr\.\s*/i,"");return n.split(" ").slice(0,2).map(w=>w[0]||"").join("").toUpperCase();}
   function dnameL(name){return(name||"").replace(/^Dr\.\s*/i,"");}
-  function scoreClrL(v){return v>=80?"var(--green-dark)":v>=60?"var(--gold)":v>0?"var(--terracotta)":"rgba(31,26,18,.3)";}
-  function barClrL(v){return v>=80?"var(--green)":v>=60?"var(--gold-light)":v>0?"var(--terracotta)":"rgba(31,26,18,.1)";}
+  function scoreClrL(v){var b=scoreBand(v);return b==="good"?"var(--green-dark)":b==="fair"?"var(--gold)":v>0?"var(--terracotta)":"rgba(31,26,18,.3)";}
+  function barClrL(v){var b=scoreBand(v);return b==="good"?"var(--green)":b==="fair"?"var(--gold-light)":v>0?"var(--terracotta)":"rgba(31,26,18,.1)";}
   var svgIcons={
     mm:'<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
     teach:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/>',
@@ -14634,7 +14783,7 @@ function renderKPIExecutive(){
       return false;
     }).length;
   }
-  const tierLabel=avgKPI>=80?"Outstanding":avgKPI>=60?"Strong Progress":avgKPI>=30?"Developing":"Needs Improvement";
+  const tierLabel=scoreTier(avgKPI);
 
   // ── Programme KPI: six standards, each plotted against its OWN target ──────────────────────
   // Five different thresholds (75/60/25/25/50) cannot share a y-axis: 18% published would look
@@ -14653,11 +14802,11 @@ function renderKPIExecutive(){
   // Attendance and quiz are the SHARE of residents personally clearing the bar, not the cohort
   // mean: a mean can pass while a third of the programme fails, and the department cannot claim a
   // standard its residents individually miss. The mean is department PERFORMANCE, reported
-  // separately and never scored. The personal bars are >=75 and >=60 to match canmedsVerdicts
-  // exactly -- if these drifted, this page would fail a resident whose own KPI page says met.
+  // separately and never scored. The personal bars are SCORING.standards, the same numbers
+  // canmedsVerdicts reads -- so this page can never fail a resident whose own KPI page says met.
   // Residents with no data are left out of the denominator rather than counted as failing.
-  var pkMmDen=mmScored.length, pkMmN=mmScored.filter(function(r){return r.k.mmPct>=75;}).length;
-  var pkQzDen=qScored.length,  pkQzN=qScored.filter(function(r){return r.k.qAvg>=60;}).length;
+  var pkMmDen=mmScored.length, pkMmN=mmScored.filter(function(r){return r.k.mmPct>=SCORING.standards.attendance;}).length;
+  var pkQzDen=qScored.length,  pkQzN=qScored.filter(function(r){return r.k.qAvg>=SCORING.standards.quiz;}).length;
   function pkPublished(r){return (RESEARCH_PROJECTS[r.id]||[]).some(function(p){return p.status==="published";});}
   var pkPubN=pkReady?pkCount(pkPublished):null;
   // Counted exclusively: a resident who has published is not also counted as in progress. If the
@@ -14679,10 +14828,10 @@ function renderKPIExecutive(){
     // "more than 75% of residents attend at least 75%". One constant each to change.
     // The personal bar rides in the name, so the "need" line underneath can only be read as the
     // share -- otherwise both numbers print as 75% on the same axis and neither says which is which.
-    {name:"Attendance &ge; 75%",target:75,op:">",
+    {name:"Attendance &ge; "+SCORING.standards.attendance+"%",target:SCORING.standards.attendance,op:">",
      value:pkPct(pkMmN,pkMmDen),
      basis:pkMmDen?pkMmN+" of "+pkMmDen:null},
-    {name:"Quiz &ge; 60%",target:60,op:">",
+    {name:"Quiz &ge; "+SCORING.standards.quiz+"%",target:SCORING.standards.quiz,op:">",
      value:pkPct(pkQzN,pkQzDen),
      basis:pkQzDen?pkQzN+" of "+pkQzDen+" who sat one":null},
     {name:"Research published",label:"Share of residents published",target:25,op:">=",
