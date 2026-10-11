@@ -4719,13 +4719,19 @@ function renderLogin(){
     btn.disabled=true;btn.textContent="Signing in…";
     const{data,error}=await sb.auth.signInWithPassword({email:u+"@"+AUTH_EMAIL_DOMAIN,password:p});
     if(error){
-      errEl.textContent="Invalid username or password";
+      errEl.textContent=/banned/i.test(error.message||"")?"This login has been disabled. Contact the PD.":"Invalid username or password";
       btn.disabled=false;btn.textContent="Sign In";
       return;
     }
     const{data:profile,error:perr}=await sb.from("profiles").select("*").eq("id",data.user.id).single();
     if(perr||!profile){
       errEl.textContent="No profile found for this account. Contact the PD.";
+      await sb.auth.signOut();
+      btn.disabled=false;btn.textContent="Sign In";
+      return;
+    }
+    if(profile.login_disabled_at){
+      errEl.textContent="This login has been disabled. Contact the PD.";
       await sb.auth.signOut();
       btn.disabled=false;btn.textContent="Sign In";
       return;
@@ -10409,6 +10415,43 @@ async function resetLoginFor(kind,record){
     },
     "Reset Password","warn");
 }
+// Disabling a login bans the auth user through the edge function and marks the profile, so the
+// badge below and the sign-in screen both know. Enabling lifts the ban. PD only, like reset, and
+// the server refuses the oversight roles and the PD's own account whatever this screen shows.
+function loginDisabled(profile){return!!(profile&&profile.login_disabled_at);}
+function loginCanToggle(profile){return canResetLogins()&&profile&&!["pd","deputy_pd","dio","ceo"].includes(profile.role)&&profile.id!==STATE.user.profileId;}
+async function toggleLoginFor(profile,name){
+  if(!loginCanToggle(profile)){showToast("This login cannot be changed here.","warning");return;}
+  const disable=!loginDisabled(profile);
+  showConfirm(disable
+      ?"Disable the login for "+name+"? They are signed out and cannot sign in again until you enable it. Nothing is deleted: their records, privileges and password stay."
+      :"Enable the login for "+name+"? Their old password works again.",
+    async()=>{
+      const{data:sess}=await sb.auth.getSession();
+      const token=sess?.session?.access_token;
+      if(!token){showToast("Your session expired \u2014 please sign in again.");return;}
+      const{data,error}=await sb.functions.invoke(CREATE_LOGIN_FN,{
+        body:{action:disable?"disable":"enable",profileId:profile.id},
+        headers:{Authorization:"Bearer "+token}
+      });
+      if(error){showToast("Could not "+(disable?"disable":"enable")+": "+(await fnErrorText(error)),"error");return;}
+      if(data?.error){showToast("Could not "+(disable?"disable":"enable")+": "+data.error,"error");return;}
+      await loadCoreData();render();
+      showToast("Login for "+name+(disable?" disabled.":" enabled."),"success");
+    },disable?"Disable login":"Enable login",disable?"warn":"primary");
+}
+function loginToggleBtn(profile,name){
+  if(!loginCanToggle(profile))return null;
+  const off=loginDisabled(profile);
+  return el("button",{cls:"sbtn ghost",st:{fontSize:".72rem",padding:"3px 8px",marginLeft:"6px",color:off?"#1d5c43":"#b52040"},
+    title:off?"Let "+name+" sign in again":"Stop "+name+" from signing in",
+    onClick:()=>toggleLoginFor(profile,name)},off?"Enable login":"Disable login");
+}
+function loginBadge(profile){
+  if(!profile)return el("span",{cls:"bdg",st:{background:"#fef9c3",color:"#854d0e"}},"No Login Yet");
+  if(loginDisabled(profile))return el("span",{cls:"bdg",st:{background:"rgba(31,26,18,.08)",color:"#5C5345"}},"Login Disabled");
+  return el("span",{cls:"bdg",st:{background:"#dcfce7",color:"#166534"}},"Login Active");
+}
 function resetLoginBtn(kind,record){
   if(!canResetLogins())return null;
   return el("button",{cls:"sbtn ghost",st:{fontSize:".72rem",padding:"3px 8px",marginLeft:"6px",color:"#b52040"},
@@ -10733,10 +10776,10 @@ function renderAccountRow(row){
         el("div",{cls:"name"},row.name),
         el("div",{cls:"sub"},row.sub+(row.profile?" · "+row.profile.username:"")+(row.profile?.contact_email?" · "+row.profile.contact_email:""))
       ),
-      row.profile?el("span",{cls:"bdg",st:{background:"#dcfce7",color:"#166534"}},"Login Active"):
-        el("span",{cls:"bdg",st:{background:"#fef9c3",color:"#854d0e"}},"No Login Yet"),
+      loginBadge(row.profile),
       row.kind==="resident"?el("button",{cls:"sbtn ghost",st:{fontSize:".75rem"},onClick:()=>set({mod:"kpi",kpiSelRes:row.id,kpiDrill:true})}," KPI"):null,
-      row.profile?el("button",{cls:"sbtn ghost",st:{fontSize:".75rem"},onClick:()=>set({adminPrivFor:open?null:row.profile.id})},open?"Hide Privileges":"Privileges"):null
+      row.profile?el("button",{cls:"sbtn ghost",st:{fontSize:".75rem"},onClick:()=>set({adminPrivFor:open?null:row.profile.id})},open?"Hide Privileges":"Privileges"):null,
+      row.profile?loginToggleBtn(row.profile,row.name):null
     ),
     tags.length?el("div",{cls:"flex-wrap",st:{marginTop:"6px",gap:"4px"}},
       ...tags.map(t=>el("span",{cls:"bdg",st:{background:t.bg,color:t.fg,fontSize:".72rem"}},t.label))
@@ -10751,17 +10794,30 @@ function renderAdminAccounts(){
     .slice().sort((a,b)=>(levelOrder[a.level]??9)-(levelOrder[b.level]??9))
     .map(r=>({kind:"resident",id:r.id,name:r.name,sub:r.level,level:r.level,profile:PROFILE_BY_RESIDENT[r.id]}));
   const mentorRows=CONSULTANTS.map(c=>({kind:"consultant",id:c.id,name:c.name,sub:"Mentor / Consultant",level:"Mentor",profile:PROFILE_BY_CONSULTANT[c.id]}));
+  // Profiles the two lists cannot reach: not linked to a listed resident or consultant, and not an
+  // oversight role (those never belong here).
+  const listed=new Set([...resRows,...mentorRows].map(r=>r.profile&&r.profile.id).filter(Boolean));
+  const otherRows=Object.values(PROFILE_BY_ID).filter(p=>!listed.has(p.id)&&!["pd","deputy_pd","dio","ceo"].includes(p.role)).sort((a,b)=>String(a.username).localeCompare(String(b.username)));
   return el("div",null,
     el("div",{cls:"card",st:{marginBottom:"12px"}},
       el("div",{cls:"card-title"},"Residents ("+resRows.length+")"),
       el("p",{cls:"sh",st:{marginBottom:"10px"}},"Sorted by level. Click Privileges to grant specific editing rights — these are enforced in the database, not just the UI."),
       el("div",null,...resRows.map(renderAccountRow))
     ),
-    el("div",{cls:"card"},
+    el("div",{cls:"card",st:{marginBottom:"12px"}},
       el("div",{cls:"card-title"},"Mentors / Consultants ("+mentorRows.length+")"),
       el("p",{cls:"sh",st:{marginBottom:"10px"}},"Mentors can view their assigned residents' KPI, marks, attendance and counseling. Use Privileges to grant additional editing rights."),
       el("div",null,...mentorRows.map(renderAccountRow))
-    )
+    ),
+    otherRows.length?el("div",{cls:"card"},
+      el("div",{cls:"card-title"},"Other logins ("+otherRows.length+")"),
+      el("p",{cls:"sh",st:{marginBottom:"10px"}},"Logins that are not linked to anyone on the two lists above. Disable one you do not recognise; nothing is deleted."),
+      el("div",null,...otherRows.map(p=>el("div",{st:{border:"1px solid #e2e8f0",borderRadius:"10px",padding:"12px 14px",marginBottom:"8px"}},
+        el("div",{cls:"flex-gap",st:{flexWrap:"wrap",gap:"6px"}},
+          el("span",{cls:"bdg",st:{background:"#64748b",color:"#fff",fontSize:".72rem",minWidth:"32px",textAlign:"center"}},ROLE_LABELS[p.role]||p.role),
+          el("div",{st:{flex:"1",minWidth:"160px"}},el("div",{cls:"name"},p.display_name||p.username),el("div",{cls:"sub"},p.username+(p.contact_email?" \u00b7 "+p.contact_email:""))),
+          loginBadge(p),
+          loginToggleBtn(p,p.display_name||p.username)))))):null
   );
 }
 // ─── ADMIN: IMPORT ROTA (Excel upload → parse → match → review → commit) ────
@@ -17933,7 +17989,9 @@ function renderCalModal(){
     const{data:{session}}=await sb.auth.getSession();
     if(session){
       const{data:profile}=await sb.from("profiles").select("*").eq("id",session.user.id).single();
-      if(profile){
+      // A session that outlived a disable is dropped here; the ban stops any new sign-in.
+      if(profile&&profile.login_disabled_at){await sb.auth.signOut();}
+      else if(profile){
         STATE.user=mapProfileToUser(profile);
         STATE.calToken=profile.calendar_token||null;
         STATE.calPrefs=profile.calendar_prefs||{rota:true,oncall:true,mm:true,teach:false,deadlines:true};

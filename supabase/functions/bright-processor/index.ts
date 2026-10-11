@@ -21,6 +21,11 @@
 // self-service "forgot password" — without this the PD has to open the Supabase
 // dashboard every time a resident forgets theirs.
 //
+// It also handles { action: "disable" | "enable", profileId }, which bans or unbans the auth
+// user (ban_duration) and mirrors that on profiles.login_disabled_at so the portal can show
+// it. Same strictness as reset: PD only, never the oversight roles, never yourself. Nothing is
+// deleted, so enabling restores the account exactly as it was, privileges included.
+//
 // Reset is deliberately STRICTER than create:
 //   - only "pd" may call it, NOT "chief". The chief is themselves a resident, and
 //     letting them reset arbitrary passwords would let them take over the PD's
@@ -82,9 +87,41 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { type, recordId, username, displayName, action } = body as {
-      type?: string; recordId?: number; username?: string; displayName?: string; action?: string;
+    const { type, recordId, username, displayName, action, profileId } = body as {
+      type?: string; recordId?: number; username?: string; displayName?: string; action?: string; profileId?: string;
     };
+
+    if (action === "disable" || action === "enable") {
+      if (callerProfile.role !== "pd") {
+        return json({ error: "Only the Program Director can disable or enable a login." }, 403);
+      }
+      if (!profileId) return json({ error: "Missing profileId." }, 400);
+      const { data: target } = await admin
+        .from("profiles")
+        .select("id, username, role")
+        .eq("id", profileId)
+        .maybeSingle();
+      if (!target) return json({ error: "No such login." }, 400);
+      if (target.id === callerData.user.id) return json({ error: "You cannot disable your own login." }, 400);
+      if (["pd", "deputy_pd", "dio", "ceo"].includes(target.role)) {
+        return json({ error: "This role's login cannot be disabled here. Use the Supabase dashboard." }, 403);
+      }
+      const disable = action === "disable";
+      // "876600h" is a hundred years; "none" lifts the ban.
+      const { error: banErr } = await admin.auth.admin.updateUserById(target.id, {
+        ban_duration: disable ? "876600h" : "none",
+      });
+      if (banErr) return json({ error: banErr.message }, 400);
+      const { error: flagErr } = await admin
+        .from("profiles")
+        .update({ login_disabled_at: disable ? new Date().toISOString() : null })
+        .eq("id", target.id);
+      if (flagErr) {
+        return json({ error: "The login was " + (disable ? "disabled" : "enabled") + " but the profile could not be marked: " + flagErr.message + " (run supabase/add_login_disable.sql)" }, 400);
+      }
+      return json({ username: target.username, disabled: disable });
+    }
+
     const isReset = action === "reset";
     if (!type || !["resident", "consultant"].includes(type) || !recordId || (!isReset && !username)) {
       return json({ error: "Missing or invalid fields." }, 400);
