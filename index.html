@@ -1969,22 +1969,25 @@ function ayRecomputeCurrent(){
 }
 async function loadAcademicYears(){
   try{
-    const[a,s,sc,rc,ac]=await Promise.all([
+    const[a,ps,rc,ac]=await Promise.all([
       sb.from("academic_years").select("*").order("ay"),
-      sb.from("portal_settings").select("*").eq("key","plan_year").maybeSingle(),
-      sb.from("portal_settings").select("*").eq("key","scoring").maybeSingle(),
+      sb.from("portal_settings").select("*"),
       sb.from("rotation_catalogue").select("*").order("sort_order"),
       sb.from("announcement_categories").select("*").order("sort_order")
     ]);
     if(a.error){console.warn("academic_years not read, using the built-in years:",a.error.message);}
     else{AY_ROWS=a.data||[];AY_ROWS.forEach(ayApplyRow);}
-    applyScoring(scoringFrom(!sc.error&&sc.data?sc.data.value:null));
+    if(ps.error)console.warn("portal_settings not read, using the built-in settings:",ps.error.message);
+    const setting=k=>{const row=!ps.error&&(ps.data||[]).find(x=>x.key===k);return row?row.value:null;};
+    applyScoring(scoringFrom(setting("scoring")));
+    applyModuleSettings(setting("modules"));
+    applyPrivilegeSettings(setting("privileges"));
     // An empty table is treated like a missing one: the built-in lists stay, and nothing goes blank.
     LISTS_ERR=(rc.error&&rc.error.message)||(ac.error&&ac.error.message)||null;
     if(!rc.error&&rc.data&&rc.data.length)applyRotationCatalogue(rc.data);
     if(!ac.error&&ac.data&&ac.data.length)ANN_CATS=ac.data.slice().sort((x,y)=>Number(x.sort_order)-Number(y.sort_order));
     ayRecomputeCurrent();
-    const py=!s.error&&s.data&&s.data.value?Number(s.data.value.ay):NaN;
+    const pyv=setting("plan_year"),py=pyv?Number(pyv.ay):NaN;
     if(Number.isInteger(py)&&py!==LP_AY)applyPlanYearLocal(py);
     else LP_PERIODS=lpBuildPeriods(LP_AY);
   }catch(e){console.warn("loadAcademicYears",e.message);}
@@ -4805,7 +4808,7 @@ function modIcon(id,sz){
   const shapes=D[id]||[["circle",{cx:"12",cy:"12",r:"10"}]];
   return s("svg",{width:String(sz),height:String(sz),viewBox:"0 0 24 24",fill:"none",stroke:"currentColor","stroke-width":"2","stroke-linecap":"round","stroke-linejoin":"round"},...shapes.map(([t,a])=>s(t,a)));
 }
-const MODS=[
+let MODS=[
   {id:"rota",label:"Rota Schedule",icon:"",desc:"Master rotation plan for all residents",color:"#2a7a5a",roles:["pd","chief","consultant","resident"]},
   {id:"oncall",label:"On-Call Schedule",icon:"",desc:"Duty assignments, personal schedule & on-call statistics",color:"#1a4a7a",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"calendar",label:"Calendar",icon:"",desc:"Your month at a glance — rotation, on-call, meetings, leave & program events",color:"#c96a4a",roles:["pd","deputy_pd","chief","consultant","resident"]},
@@ -4826,6 +4829,60 @@ const MODS=[
   {id:"control",label:"Control Centre",icon:"",desc:"Set up the academic year and manage portal settings",color:"#3a3225",roles:["pd","deputy_pd"]},
   {id:"committees",label:"Committees",icon:"",desc:"Standing committees — leaders, co-leaders, members, meetings & achievements",color:"#8a4a5a",roles:["pd","deputy_pd","chief","consultant","resident"]},
 ];
+// ─── MODULES AND ACCESS ──────────────────────────────────────────────────────────────────────────
+// The PD decides in Control Centre > Modules and access which roles see each module, what it is
+// called, and in what order; and how each account privilege is named and which kinds of account it
+// is offered to. Kept in portal_settings ("modules" and "privileges"); what is not saved keeps the
+// built-in values above. Hiding a module removes it from the menu and blocks its page in the app;
+// the database rules on what each role may read or write are separate and do not change here.
+const MODS_DEFAULT=MODS.map(m=>({id:m.id,label:m.label,desc:m.desc,roles:m.roles.slice()}));
+const MOD_ROLES=[["pd","PD"],["deputy_pd","Deputy PD"],["chief","Chief"],["consultant","Consultant"],["resident","Resident"]];
+// The PD must always keep these two, or the portal could be locked from the inside.
+const MOD_PD_LOCKED=["admin","control"];
+function applyModuleSettings(raw){
+  const r=(raw&&typeof raw==="object")?raw:{},by=(r.modules&&typeof r.modules==="object")?r.modules:{};
+  const valid=new Set(MOD_ROLES.map(x=>x[0]));
+  MODS.forEach(m=>{
+    const d=MODS_DEFAULT.find(x=>x.id===m.id),o=by[m.id];
+    if(!d)return;
+    // AY Plan is named after the planning year by applyPlanYearLocal, so its label is never overridden.
+    if(m.id!=="leave_plan"){m.label=(o&&typeof o.label==="string"&&o.label.trim())?o.label.trim().slice(0,40):d.label;
+      m.desc=(o&&typeof o.desc==="string"&&o.desc.trim())?o.desc.trim().slice(0,120):d.desc;}
+    let roles=(o&&Array.isArray(o.roles))?o.roles.filter(x=>valid.has(x)):d.roles.slice();
+    if(MOD_PD_LOCKED.includes(m.id)&&!roles.includes("pd"))roles.push("pd");
+    m.roles=roles;
+  });
+  const order=Array.isArray(r.order)?r.order:[];
+  const pos=id=>{const i=order.indexOf(id);return i>=0?i:order.length+MODS_DEFAULT.findIndex(x=>x.id===id);};
+  MODS.sort((x,y)=>pos(x.id)-pos(y.id));
+}
+// The privileges the database accepts (account_privileges' check constraint); a new key needs SQL
+// and code, so only the wording and who is offered each one are settable here.
+const PRIV_DEFS=[
+  {key:"edit_mm_attendance",label:"Update Morning Meeting attendance",kinds:["resident","consultant"],unlocks:"Attendance buttons on Morning Meetings, and every resident's attendance in view"},
+  {key:"edit_teach_attendance",label:"Update Academic Day attendance",kinds:["resident","consultant"],unlocks:"Attendance buttons on Academic Day, and every resident's attendance in view"},
+  {key:"edit_mm_schedule",label:"Enter/edit Morning Meeting schedule (Teaching Committee)",kinds:["resident"],unlocks:"Add and edit Morning Meeting sessions"},
+  {key:"edit_teach_schedule",label:"Enter/edit Academic Day schedule (Teaching Committee)",kinds:["resident"],unlocks:"Add and edit Academic Day sessions"},
+  {key:"edit_quiz_marks",label:"Enter/edit quiz marks (all quizzes)",kinds:["consultant"],unlocks:"Marks on every quiz, not only the ones assigned to them"},
+  {key:"edit_oncall",label:"Enter/edit On-Call schedule (Oncall Committee)",kinds:["resident"],unlocks:"The On-Call schedule editor"},
+  {key:"plan_rota",label:"View all residents leave plan & manage AY rota planning",kinds:["resident"],unlocks:"The leave plan of every resident and the AY Plan set-up"},
+  {key:"manage_committees",label:"Manage Committees (assign members and faculty, meetings, achievements)",kinds:["resident","consultant"],unlocks:"The committee manager and every committee's seats, faculty, meetings and achievements"},
+  {key:"edit_kpi_notes",label:"Edit KPI notes",kinds:["resident","consultant"],unlocks:"Nothing today: no screen or database rule checks this privilege"}
+];
+let PRIV_SETTINGS={};
+function applyPrivilegeSettings(raw){
+  const r=(raw&&typeof raw==="object")?raw:{};
+  PRIV_SETTINGS={};
+  PRIV_LABELS_RESIDENT={};PRIV_LABELS_CONSULTANT={};
+  PRIV_DEFS.forEach(d=>{
+    const o=r[d.key]||{};
+    const label=(typeof o.label==="string"&&o.label.trim())?o.label.trim().slice(0,90):d.label;
+    const kinds=Array.isArray(o.kinds)?o.kinds.filter(k=>k==="resident"||k==="consultant"):d.kinds.slice();
+    PRIV_SETTINGS[d.key]={label,kinds};
+    if(kinds.includes("resident"))PRIV_LABELS_RESIDENT[d.key]=label;
+    if(kinds.includes("consultant"))PRIV_LABELS_CONSULTANT[d.key]=label;
+  });
+}
 function renderSearchOverlay(){
   const q=(STATE.searchQ||"").trim().toLowerCase();
   if(!q)return null;
@@ -10604,7 +10661,7 @@ function renderAdminMentors(){
   );
 }
 // Privileges available to residents vs mentors (different capability sets)
-const PRIV_LABELS_RESIDENT={
+let PRIV_LABELS_RESIDENT={
   edit_mm_attendance:"Update Morning Meeting attendance",
   edit_teach_attendance:"Update Academic Day attendance",
   edit_mm_schedule:"Enter/edit Morning Meeting schedule (Teaching Committee)",
@@ -10614,7 +10671,7 @@ const PRIV_LABELS_RESIDENT={
   plan_rota:"View all residents leave plan & manage AY rota planning",
   manage_committees:"Manage Committees (assign members and faculty, meetings, achievements)"
 };
-const PRIV_LABELS_CONSULTANT={
+let PRIV_LABELS_CONSULTANT={
   edit_quiz_marks:"Enter/edit quiz marks (all quizzes)",
   edit_mm_attendance:"Update Morning Meeting attendance",
   edit_teach_attendance:"Update Academic Day attendance",
@@ -14185,6 +14242,86 @@ function ctlListsView(){
         }},"Add category")),
       el("div",null,...ANN_CATS.map(catRow))));
 }
+// Modules and access: which roles see each module and how privileges are offered, saved as two rows
+// of portal_settings in one go.
+async function ctlSaveAccess(d){
+  const now=new Date().toISOString(),by=STATE.user.profileId;
+  const modules={};d.modules.forEach(m=>{modules[m.id]={label:m.label,desc:m.desc,roles:m.roles};});
+  const privileges={};d.privileges.forEach(p=>{privileges[p.key]={label:p.label,kinds:p.kinds};});
+  const{error}=await sb.from("portal_settings").upsert([
+    {key:"modules",value:{modules,order:d.modules.map(m=>m.id)},updated_at:now,updated_by:by},
+    {key:"privileges",value:privileges,updated_at:now,updated_by:by}
+  ],{onConflict:"key"});
+  if(error){showToast("Could not save: "+error.message);return false;}
+  await loadAcademicYears();
+  set({ctlAccess:null});
+  showToast("Modules and access saved. Menus follow on the next page load.","success");
+  return true;
+}
+function ctlAccessDraft(){
+  return{modules:MODS.map(m=>({id:m.id,label:m.label,desc:m.desc,roles:m.roles.slice()})),
+    privileges:PRIV_DEFS.map(p=>({key:p.key,label:PRIV_SETTINGS[p.key]?PRIV_SETTINGS[p.key].label:p.label,kinds:PRIV_SETTINGS[p.key]?PRIV_SETTINGS[p.key].kinds.slice():p.kinds.slice()}))};
+}
+function ctlAccessView(){
+  const saved=ctlAccessDraft();
+  const d=STATE.ctlAccess||JSON.parse(JSON.stringify(saved));
+  const edit=f=>{const v=JSON.parse(JSON.stringify(d));f(v);set({ctlAccess:v});};
+  const dirty=JSON.stringify(d)!==JSON.stringify(saved);
+  const smallLabel=t=>el("div",{st:{fontSize:".62rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:"#5C5345",marginBottom:"3px"}},t);
+  const tick=(on,disabled,label,onChange)=>el("label",{title:disabled?"The Program Director always keeps this module":"",
+      st:{display:"flex",flexDirection:"column",alignItems:"center",gap:"4px",fontSize:".66rem",fontWeight:"600",color:disabled?"rgba(31,26,18,.45)":"#443C2F",margin:"0",cursor:disabled?"not-allowed":"pointer",minWidth:"54px"}},
+    el("input",{type:"checkbox",...(on?{checked:""}:{}),...(disabled?{disabled:""}:{}),"aria-label":label,st:{width:"auto",margin:"0"},onChange:e=>onChange(!!e.target.checked)}),label);
+  const modRow=(m,i)=>{
+    const hidden=!m.roles.length,fixedName=m.id==="leave_plan";
+    return el("div",{st:{display:"grid",gridTemplateColumns:"auto minmax(220px,1fr) auto",gap:"16px",alignItems:"center",padding:"10px 6px",borderBottom:"1px solid rgba(31,26,18,.08)",opacity:hidden?".6":"1"}},
+      el("span",{st:{display:"flex",gap:"4px"}},
+        el("button",{cls:"sbtn ghost",st:{padding:"0 7px",fontSize:".8rem",lineHeight:"22px",opacity:i===0?".35":"1"},title:"Move up","aria-label":"Move up",
+          onClick:()=>{if(i>0)edit(v=>{const t=v.modules[i-1];v.modules[i-1]=v.modules[i];v.modules[i]=t;});}},"\u2191"),
+        el("button",{cls:"sbtn ghost",st:{padding:"0 7px",fontSize:".8rem",lineHeight:"22px",opacity:i===d.modules.length-1?".35":"1"},title:"Move down","aria-label":"Move down",
+          onClick:()=>{if(i<d.modules.length-1)edit(v=>{const t=v.modules[i+1];v.modules[i+1]=v.modules[i];v.modules[i]=t;});}},"\u2193")),
+      el("div",null,
+        fixedName?el("div",{st:{fontWeight:"700",fontSize:".9rem",padding:"4px 0"}},m.label,el("span",{cls:"sh",st:{fontSize:".7rem",fontWeight:"500",marginLeft:"8px"}},"named after the planning year"))
+          :el("input",{type:"text",value:m.label,maxlength:"40","aria-label":"Module name",st:{width:"100%",maxWidth:"320px",fontWeight:"700"},
+            onChange:e=>{const v=e.target.value.trim();if(!v){e.target.value=m.label;return;}edit(x=>{x.modules[i].label=v;});}}),
+        fixedName?el("div",{cls:"sh",st:{fontSize:".74rem",marginTop:"2px"}},m.desc)
+          :el("input",{type:"text",value:m.desc||"",maxlength:"120","aria-label":"Module description",st:{width:"100%",maxWidth:"520px",marginTop:"6px",fontSize:".8rem"},
+            onChange:e=>{const v=e.target.value.trim();edit(x=>{x.modules[i].desc=v;});}}),
+        hidden?el("div",{st:{fontSize:".7rem",fontWeight:"700",color:"#8f1730",marginTop:"4px"}},"Hidden from everyone"):null),
+      el("div",{st:{display:"flex",gap:"10px"}},
+        ...MOD_ROLES.map(([role,lbl])=>{const locked=role==="pd"&&MOD_PD_LOCKED.includes(m.id);
+          return tick(m.roles.includes(role),locked,lbl,on=>edit(x=>{const r=x.modules[i].roles.filter(k=>k!==role);if(on)r.push(role);x.modules[i].roles=r;}));})));
+  };
+  const privRow=(p,i)=>{
+    const def=PRIV_DEFS.find(x=>x.key===p.key)||{};
+    return el("div",{st:{display:"grid",gridTemplateColumns:"minmax(260px,1fr) auto",gap:"16px",alignItems:"center",padding:"10px 6px",borderBottom:"1px solid rgba(31,26,18,.08)"}},
+      el("div",null,
+        el("input",{type:"text",value:p.label,maxlength:"90","aria-label":"Privilege wording",st:{width:"100%",maxWidth:"560px",fontWeight:"600"},
+          onChange:e=>{const v=e.target.value.trim();if(!v){e.target.value=p.label;return;}edit(x=>{x.privileges[i].label=v;});}}),
+        el("div",{cls:"sh",st:{fontSize:".72rem",marginTop:"3px"}},"Unlocks: "+(def.unlocks||"")+" \u00b7 stored as \""+p.key+"\""),
+        p.kinds.length?null:el("div",{st:{fontSize:".7rem",fontWeight:"700",color:"#8f1730",marginTop:"4px"}},"Offered to nobody; existing grants still apply")),
+      el("div",{st:{display:"flex",gap:"10px"}},
+        ...[["resident","Residents"],["consultant","Consultants"]].map(([k,lbl])=>tick(p.kinds.includes(k),false,lbl,on=>edit(x=>{const r=x.privileges[i].kinds.filter(q=>q!==k);if(on)r.push(k);x.privileges[i].kinds=r;})))));
+  };
+  return el("div",null,
+    el("div",{cls:"card",st:{marginBottom:"18px"}},
+      el("div",{cls:"card-title"},"Modules"),
+      el("p",{cls:"sh",st:{fontSize:".78rem",maxWidth:"76ch",marginBottom:"6px"}},"Which roles see each module in the menu and on the home screen, what it is called, and the order. The DIO and CEO accounts see what the PD sees. Hiding a module removes it from the menu and blocks its page; what each role may read or write in the database is set by the database rules and does not change here."),
+      el("div",{st:{display:"flex",justifyContent:"flex-end",gap:"10px",padding:"6px 6px 0",fontSize:".62rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:"#5C5345"}},
+        ...MOD_ROLES.map(([k,l])=>el("span",{st:{minWidth:"54px",textAlign:"center"}},l))),
+      el("div",null,...d.modules.map(modRow))),
+    el("div",{cls:"card",st:{marginBottom:"18px"}},
+      el("div",{cls:"card-title"},"Account privileges"),
+      el("p",{cls:"sh",st:{fontSize:".78rem",maxWidth:"76ch",marginBottom:"10px"}},"The privileges the PD can grant per account under PD Admin Panel > Accounts. Change the wording shown there and which kinds of account each one is offered to. The list itself is fixed by the database: a new privilege needs a code change."),
+      el("div",null,...d.privileges.map(privRow))),
+    el("div",{st:{display:"flex",gap:"10px"}},
+      el("button",{cls:"sbtn primary",st:{opacity:dirty?"1":".5"},onClick:()=>{
+        if(!dirty){showToast("Nothing has changed.","warning");return;}
+        showConfirm("Menus and the privilege list change for everyone on their next page load. Save?",()=>ctlSaveAccess(d),"Save","warn");
+      }},"Save modules and access"),
+      el("button",{cls:"sbtn ghost",onClick:()=>{if(dirty)set({ctlAccess:null});}},"Discard changes"),
+      el("button",{cls:"sbtn ghost",onClick:()=>set({ctlAccess:{modules:MODS_DEFAULT.map(m=>({id:m.id,label:m.id==="leave_plan"?(MODS.find(x=>x.id===m.id)||m).label:m.label,desc:m.id==="leave_plan"?(MODS.find(x=>x.id===m.id)||m).desc:m.desc,roles:m.roles.slice()})),
+        privileges:PRIV_DEFS.map(p=>({key:p.key,label:p.label,kinds:p.kinds.slice()}))}})},"Reset to the portal's standard set-up")));
+}
 function renderControl(){
   if(!ctlCanUse())return el("div",{cls:"content"},el("p",{cls:"alert-yellow"},"Only the Program Director and the deputy PD can change these settings."));
   const tab=STATE.ctlTab||"year";
@@ -14193,12 +14330,13 @@ function renderControl(){
     el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Control Centre"),
     el("div",{st:{fontSize:".82rem",color:"#5C5345"}},"Change how the portal is set up, without asking a developer."));
   const tabs=el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
-    ...[["year","Year setup"],["rules","Leave and rules"],["scoring","Scoring"],["lists","Lists"],["committees","Committees"]].map(t=>{const on=tab===t[0];
+    ...[["year","Year setup"],["rules","Leave and rules"],["scoring","Scoring"],["lists","Lists"],["access","Modules and access"],["committees","Committees"]].map(t=>{const on=tab===t[0];
       return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:on?"600":"500",color:on?"#a94e2c":"#5C5345",cursor:"pointer",
         borderBottom:"2px solid "+(on?"#c96a4a":"transparent"),marginBottom:"-1px"},onClick:()=>set({ctlTab:t[0]})},t[1]);}));
   if(tab==="rules")return el("div",{cls:"content"},head,tabs,ctlRulesView());
   if(tab==="scoring")return el("div",{cls:"content"},head,tabs,ctlScoringView());
   if(tab==="lists")return el("div",{cls:"content"},head,tabs,ctlListsView());
+  if(tab==="access")return el("div",{cls:"content"},head,tabs,ctlAccessView());
   if(tab==="committees"){
     return el("div",{cls:"content"},head,tabs,el("div",{cls:"card"},
       el("div",{cls:"card-title"},"Committees"),
