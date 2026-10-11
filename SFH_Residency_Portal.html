@@ -15674,7 +15674,10 @@ function renderKPIExecutive(){
     hzLegendHtml+='</div>';
   });
   hzLegendHtml+='</div>';
-  var hzBadgeHtml='<div class="hz-badge" id="kpix-hzBadge"><div class="hz-badge-val" id="kpix-hzScore">'+avgKPI+'<sup>%</sup></div><div class="hz-badge-lbl">Overall</div></div>';
+  // The badge is the share of applicable CanMEDS standards met, the same figure as the active peak
+  // on the Year over Year card, so the two can never disagree. The retired weighted average used to
+  // sit here under "Overall".
+  var hzBadgeHtml='<div class="hz-badge" id="kpix-hzBadge"><div class="hz-badge-val" id="kpix-hzScore">'+(ayShareNow==null?'\u2014':ayShareNow+'<sup>%</sup>')+'</div><div class="hz-badge-lbl">Standards met</div></div>';
 
   // ── Drilldown HTML ──
   var drilldownHtml='';
@@ -15773,7 +15776,7 @@ function renderKPIExecutive(){
     +'<div class="kpix-scene1" id="kpix-scene1">'
     +'<div class="hero-eyebrow">Academic Year '+selYear+'</div>'
     +'<h1 class="hero-title">Performance <em>Report</em></h1>'
-    +'<div class="burst-zone" id="kpix-burstZone">'+burstSvgStr+'<div class="burst-center"><div class="burst-num" id="kpix-burstVal">0<sup>%</sup></div><div class="burst-label">Program Health</div></div></div>'
+    +'<div class="burst-zone" id="kpix-burstZone">'+burstSvgStr+'<div class="burst-center"><div class="burst-num" id="kpix-burstVal">0<sup>%</sup></div><div class="burst-label">Standards met</div></div></div>'
     +'<div class="da-legend" id="kpix-burstLegend">'+legendHtml+'</div>'
     +'<div class="scroll-cue"><div class="lbl" style="letter-spacing:.2em;">Scroll</div><svg class="chevbounce" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></div>'
     +'</div>'
@@ -16028,8 +16031,9 @@ function renderKPIExecutive(){
         a.setAttribute("stroke-dashoffset",200*(1-arcP));
         a.setAttribute("opacity",arcP>0?0.25*Math.min(arcP*2,1):0);
       });
-      var val=Math.round(avgKPI*burstP);
-      if(burstValEl) burstValEl.innerHTML=val+'<sup>%</sup>';
+      // the share of applicable CanMEDS standards met, not the retired weighted average
+      var val=Math.round((ayShareNow==null?0:ayShareNow)*burstP);
+      if(burstValEl) burstValEl.innerHTML=(ayShareNow==null?'\u2014':val+'<sup>%</sup>');
     }
 
     // ── ScrollTrigger config ──
@@ -16128,7 +16132,7 @@ function renderKPIExecutive(){
     if(crownEl){crownEl.style.opacity="1";crownEl.style.transform="translateX(-50%) scale(1)";}
     // Horizon landscape: mountains visible by default (no opacity 0 — content-visible pattern)
     var hzScoreEl=wrap.querySelector("#kpix-hzScore");
-    if(hzScoreEl) hzScoreEl.innerHTML=avgKPI+'<sup>%</sup>';
+    if(hzScoreEl) hzScoreEl.innerHTML=(ayShareNow==null?'\u2014':ayShareNow+'<sup>%</sup>');
     // Drilldown bar fills
     wrap.querySelectorAll(".drow .fill").forEach(function(f){
       f.style.width=(f.dataset.w||0)+"%";
@@ -16206,7 +16210,7 @@ function renderKPIExecutive(){
         var badge=wrap.querySelector("#kpix-hzBadge");
         if(badge) gsap.fromTo(badge,{opacity:0,scale:.85},{opacity:1,scale:1,duration:D(.6),delay:D(.6),ease:E("back.out(2)")});
         // Score counts up
-        gsap.to({v:0},{v:avgKPI,duration:D(1.5),delay:D(.3),ease:E("power2.out"),onUpdate:function(){
+        if(ayShareNow!=null)gsap.to({v:0},{v:ayShareNow,duration:D(1.5),delay:D(.3),ease:E("power2.out"),onUpdate:function(){
           var hs=wrap.querySelector("#kpix-hzScore");
           if(hs) hs.innerHTML=Math.round(this.targets()[0].v)+'<sup>%</sup>';
         }});
