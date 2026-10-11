@@ -3452,22 +3452,46 @@ function oncallHoursLabel(slotKey,ds){
   if(x&&x.hours_mode==="day")return"08:00 - 16:00";
   return isWeekendDate(ds)?"08:00 - 22:00":"16:00 - 22:00";
 }
-function canEditOncall(){const u=STATE.user;if(!u)return false;if(isPdRole(u.role)||u.role==="chief")return true;return hasPriv(u.profileId,"edit_oncall");}
+// Role only: who may edit on-call at all. canEditOncall() adds "and the year on screen is not
+// closed", which is what every button and write in the module must ask.
+function isOncallEditor(){const u=STATE.user;if(!u)return false;if(isPdRole(u.role)||u.role==="chief")return true;return hasPriv(u.profileId,"edit_oncall");}
+function canEditOncall(){return isOncallEditor()&&!ocIsPast();}
 // The year the on-call module is pointed at. Only the live year and the one after it: the
 // survey for Block 1 has to run before that year begins, which is the whole reason this exists.
 // Everything in the module reads the year through here, reads AND writes, so a save can never
 // land in a different year from the one on screen.
-function ocAY(){return ayClamp(STATE.oncallAY);}
-function ocIsPlanYear(){return ocAY()!==CURRENT_ACADEMIC_YEAR;}
-function ocData(){return ocIsPlanYear()?(ONCALL_PLAN_DATA||[]):ONCALL_DATA;}
-function ocPrefs(){return ocIsPlanYear()?(ONCALL_PREFS_PLAN||[]):ONCALL_PREFS;}
-function ocPrefsStatus(){return ocIsPlanYear()?(ONCALL_PREFS_STATUS_PLAN||{}):ONCALL_PREFS_STATUS;}
+// Closed years live here, one entry per year, loaded on first look. The live year stays in
+// ONCALL_DATA and next year in ONCALL_PLAN_DATA, untouched: the calendar, the dashboard and the
+// ICS feed read ONCALL_DATA directly and must keep meaning "the year we are living in".
+let ONCALL_PAST={};
+// Earliest year the viewer can read on-call rows for. Residents only read published rows, so a
+// year that was never published is not offered to them. Until it is known the picker offers
+// the live year and next year, exactly as before.
+let ONCALL_MIN_YEAR=null;
+let ONCALL_RANGE_STATE="idle";
+function ocYears(){
+  const out=[];
+  if(ONCALL_MIN_YEAR!=null)for(let y=ONCALL_MIN_YEAR;y<CURRENT_ACADEMIC_YEAR;y++)out.push(y);
+  out.push(CURRENT_ACADEMIC_YEAR,CURRENT_ACADEMIC_YEAR+1);
+  return out;
+}
+function ocAY(){return ayClampTo(STATE.oncallAY,ocYears());}
+function ocIsPlanYear(){return ocAY()>CURRENT_ACADEMIC_YEAR;}
+function ocIsPast(){return ocAY()<CURRENT_ACADEMIC_YEAR;}
+function ocPast(){return ONCALL_PAST[ocAY()]||null;}
+function ocData(){return ocIsPast()?((ocPast()||{}).data||[]):ocIsPlanYear()?(ONCALL_PLAN_DATA||[]):ONCALL_DATA;}
+function ocPrefs(){return ocIsPast()?((ocPast()||{}).prefs||[]):ocIsPlanYear()?(ONCALL_PREFS_PLAN||[]):ONCALL_PREFS;}
+// A closed year has no survey window, whatever its status rows say: a window left open with
+// no deadline would otherwise let a resident file preferences against a finished year.
+function ocPrefsStatus(){return ocIsPast()?{}:ocIsPlanYear()?(ONCALL_PREFS_STATUS_PLAN||{}):ONCALL_PREFS_STATUS;}
 function ocAYLabel(y){return ayLabel(y);}
 // Who is actually in the programme in the year on screen. On the live year this is today's
 // roster, untouched. On the plan year the graduating R4s drop out and the incoming cohort
 // joins at R1 — otherwise Block 1 gets built around residents who have left and surveys never
 // reach the residents who have arrived.
 function ocRoster(){
+  // A closed year: that year's cohort at the levels they held, graduates included.
+  if(ocIsPast())return brRoster(ocAY());
   if(!ocIsPlanYear())return RESIDENTS;
   const y=ocAY(),out=[];
   allRoster().forEach(r=>{const lv=levelInAY(r,y);if(lv)out.push({...r,level:lv});});
@@ -3588,10 +3612,15 @@ async function loadOncallData(ay){
   // (schedule_date, slot_key) unique constraint.
   const yr=ay==null?CURRENT_ACADEMIC_YEAR:ay;
   const{data,error}=await fetchAllRows(()=>sb.from("oncall_schedule").select("*").eq("academic_year",yr).order("schedule_date").order("slot_key"));
-  if(!error&&data){if(yr===CURRENT_ACADEMIC_YEAR)ONCALL_DATA=data;else ONCALL_PLAN_DATA=data;}
+  if(!error&&data){
+    if(yr===CURRENT_ACADEMIC_YEAR)ONCALL_DATA=data;
+    else if(yr>CURRENT_ACADEMIC_YEAR)ONCALL_PLAN_DATA=data;
+    else ONCALL_PAST[yr]=Object.assign(ONCALL_PAST[yr]||{},{data:data});
+  }
   render();
 }
 async function saveOncallDay(blockNum,date,entries){
+  if(ocIsPast()){showToast("This year is closed and cannot be changed.");return;}
   const yr=ocAY();
   const priorForDate={};
   ocData().filter(e=>e.schedule_date===date).forEach(e=>{priorForDate[e.slot_key]=e;});
@@ -3603,6 +3632,7 @@ async function saveOncallDay(blockNum,date,entries){
   await loadOncallData(yr);
 }
 async function saveOncallCell(blk,date,slotKey,residentId,residentName){
+  if(ocIsPast()){showToast("This year is closed and cannot be changed.");return;}
   const yr=ocAY();
   const existing=ocData().find(e=>e.schedule_date===date&&e.slot_key===slotKey);
   const blockPublished=schedulePublishState(ocData().filter(e=>e.block_number===blk))==="published";
@@ -3630,7 +3660,9 @@ async function loadOncallPrefs(ay){
   const yr=ay==null?CURRENT_ACADEMIC_YEAR:ay;
   const{data,error}=await fetchAllRows(()=>sb.from("oncall_prefs").select("*").eq("academic_year",yr).order("id"));
   if(error){console.warn("oncall_prefs load",error.message);return;}
-  if(yr===CURRENT_ACADEMIC_YEAR)ONCALL_PREFS=data||[];else ONCALL_PREFS_PLAN=data||[];
+  if(yr===CURRENT_ACADEMIC_YEAR)ONCALL_PREFS=data||[];
+  else if(yr>CURRENT_ACADEMIC_YEAR)ONCALL_PREFS_PLAN=data||[];
+  else ONCALL_PAST[yr]=Object.assign(ONCALL_PAST[yr]||{},{prefs:data||[]});
 }
 async function loadOncallPrefsStatus(ay){
   const yr=ay==null?CURRENT_ACADEMIC_YEAR:ay;
@@ -3638,7 +3670,9 @@ async function loadOncallPrefsStatus(ay){
   if(error){console.warn("oncall_prefs_status load",error.message);return;}
   const m={};
   (data||[]).forEach(r=>{m[r.block_number]=r;});
-  if(yr===CURRENT_ACADEMIC_YEAR)ONCALL_PREFS_STATUS=m;else ONCALL_PREFS_STATUS_PLAN=m;
+  if(yr===CURRENT_ACADEMIC_YEAR)ONCALL_PREFS_STATUS=m;
+  else if(yr>CURRENT_ACADEMIC_YEAR)ONCALL_PREFS_STATUS_PLAN=m;
+  else ONCALL_PAST[yr]=Object.assign(ONCALL_PAST[yr]||{},{status:m});
 }
 // Pulls next year in on first look. ONCALL_PLAN_DATA stays null until then, which is also how
 // the toggle knows whether it still has to fetch.
@@ -3649,11 +3683,29 @@ async function ocLoadPlanYear(){
 }
 // Block and picker state are cleared on the way across, so a draft typed against Block 3 of
 // one year cannot be saved into Block 3 of the other.
+// A closed year: its prefs first (the outcome view needs them), then its schedule, which
+// renders. The entry is created up front so the picker knows the year is on its way.
+async function ocLoadPastYear(yr){
+  ONCALL_PAST[yr]=ONCALL_PAST[yr]||{};
+  await loadOncallPrefs(yr);
+  await loadOncallData(yr);
+}
+async function ocLoadYearRange(){
+  if(ONCALL_RANGE_STATE!=="idle")return;
+  ONCALL_RANGE_STATE="loading";
+  const{data,error}=await sb.from("oncall_schedule").select("academic_year").order("academic_year",{ascending:true}).limit(1);
+  if(error){console.warn("oncall year range",error.message);ONCALL_RANGE_STATE="error";return;}
+  const y=data&&data[0]?Number(data[0].academic_year):CURRENT_ACADEMIC_YEAR;
+  ONCALL_MIN_YEAR=Math.min(y,CURRENT_ACADEMIC_YEAR);
+  ONCALL_RANGE_STATE="ready";
+  render();
+}
 function ocSetYear(y){
   if(y===ocAY())return;
-  const plan=y!==CURRENT_ACADEMIC_YEAR;
-  set({oncallAY:y,oncallBlock:plan?1:CURRENT_PERIOD,oncallInlineEdit:null,ocPrefBlk:null,ocPrefSel:{}});
-  if(plan&&ONCALL_PLAN_DATA===null)ocLoadPlanYear();
+  const live=y===CURRENT_ACADEMIC_YEAR;
+  set({oncallAY:y,oncallBlock:live?CURRENT_PERIOD:1,oncallInlineEdit:null,oncallEditDate:null,ocPrefBlk:null,ocPrefSel:{}});
+  if(y>CURRENT_ACADEMIC_YEAR&&ONCALL_PLAN_DATA===null)ocLoadPlanYear();
+  if(y<CURRENT_ACADEMIC_YEAR&&!ONCALL_PAST[y])ocLoadPastYear(y);
 }
 function oncallPrefsIsOpen(blk){
   const w=ocPrefsStatus()[blk];
@@ -3678,6 +3730,7 @@ function oncallPrefsOpenBlock(){
   return keys.find(oncallPrefsIsOpen)||null;
 }
 async function oncallPrefsOpenWindow(blk,deadline){
+  if(ocIsPast())return;
   const{error}=await sb.from("oncall_prefs_status").upsert({academic_year:ocAY(),block_number:blk,is_open:true,opened_at:new Date().toISOString(),deadline:deadline||null},{onConflict:"academic_year,block_number"});
   if(error){showToast("Error: "+error.message,"error");return;}
   await loadOncallPrefsStatus(ocAY());
@@ -3727,6 +3780,7 @@ function oncallPrefClashes(blk){
 // Saving replaces the resident's rows for the block rather than diffing them.
 async function saveOncallPrefs(blk,sel,status){
   const u=STATE.user;if(!u?.rid)return;
+  if(ocIsPast())return;
   const yr=ocAY();
   const dates=Object.keys(sel).filter(d=>sel[d]).sort();
   const we=dates.filter(isWeekendDate).length,wd=dates.length-we;
@@ -5007,7 +5061,7 @@ function renderModGrid(){
     // prominent place in the portal -- the first card a resident sees on login -- announced a
     // shift from an unpublished block. ONCALL_DATA rather than ocData() is deliberate here:
     // the dashboard always means the year we are living in.
-    const nextOc=ONCALL_DATA.filter(e=>e.resident_id===u.rid&&(canEditOncall()||e.published)&&e.schedule_date>=ocToday).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date))[0];
+    const nextOc=ONCALL_DATA.filter(e=>e.resident_id===u.rid&&(isOncallEditor()||e.published)&&e.schedule_date>=ocToday).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date))[0];
     if(nextOc){
       const ocSlot=ocSlotByKey(nextOc.slot_key);
       const ocLabel=ocSlot?ocSlot.label:nextOc.slot_key;
@@ -16132,6 +16186,7 @@ function renderCalendar(){
 function renderOncall(){
   const u=STATE.user;
   const blk=STATE.oncallBlock||CURRENT_PERIOD;
+  if(ONCALL_RANGE_STATE==="idle")ocLoadYearRange();
   const tab=STATE.oncallTab||(u.role==="resident"?"mine":"schedule");
   const canEdit=canEditOncall();
   // Build the full block date list (28 days, or 35 where the block runs 5 weeks)
@@ -16416,7 +16471,7 @@ function renderOncall(){
             el("div",{cls:"card-title"},"Upcoming On-Calls"),
             el("div",null,...upcoming.map(entryRow))
           )
-        :el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},"No upcoming on-calls scheduled for you this academic year."),
+        :ocIsPast()?null:el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},"No upcoming on-calls scheduled for you this academic year."),
       myEntries.length>0
         ?null
         :null,
@@ -16711,8 +16766,9 @@ function renderOncall(){
         el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.45)"}},ocAYLabel(ocAY())+" · Block "+blk+(blkPeriodOC?" · "+blkPeriodOC:""))
       )
     ),
-    renderAYBar(ocAY(),ocSetYear,ONCALL_PLAN_DATA===null&&ocIsPlanYear()?("Loading "+ocAYLabel(CURRENT_ACADEMIC_YEAR+1)+"…"):null),
-    renderBlockPills(blk,n=>set({oncallBlock:n,oncallTab:tab}),{st:{marginBottom:"20px"},cur:!ocIsPlanYear(),inactiveBg:"#F6EFE2"}),
+    renderAYBar(ocAY(),ocSetYear,ONCALL_PLAN_DATA===null&&ocIsPlanYear()?("Loading "+ocAYLabel(CURRENT_ACADEMIC_YEAR+1)+"\u2026"):null,
+      {years:ocYears(),pastNote:ocIsPast()&&!(ocPast()&&ocPast().data)?("Loading "+ocAYLabel(ocAY())+"\u2026"):null}),
+    renderBlockPills(blk,n=>set({oncallBlock:n,oncallTab:tab}),{st:{marginBottom:"20px"},cur:ocAY()===CURRENT_ACADEMIC_YEAR,inactiveBg:"#F6EFE2"}),
     el("div",{cls:"oc-tabs",st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
       ...["schedule","mine","prefs","stats"].map(t=>{const lbs={schedule:"Schedule",mine:"My On-Calls",prefs:"Preferences",stats:"Statistics"};const active=tab===t;return el("div",{cls:"oc-tab",st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({oncallTab:t})},lbs[t]);})),
     tab==="schedule"?renderScheduleTab():tab==="mine"?renderMineTab():tab==="prefs"?renderPrefsTab():renderStatsTab()
