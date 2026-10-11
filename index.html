@@ -4020,6 +4020,7 @@ function canEditAttSession(dateStr){
 // KPI edits (committee score, quiz marks for a resident): PD or that resident's assigned mentor
 function canEditKPI(resId){
   const u=STATE.user;if(!u)return false;
+  if(kpiIsPast())return false;
   if(u.role==="pd"||u.role==="dio"||u.role==="ceo")return true;
   if(u.role==="consultant"&&MENTORS[resId]===u.cid)return true;
   return false;
@@ -4030,6 +4031,7 @@ function canEditKPI(resId){
 // reusing it would show them buttons that answer with a bare 403.
 function canEditCanmeds(resId){
   const u=STATE.user;if(!u)return false;
+  if(kpiIsPast())return false;
   if(u.role==="pd"||u.role==="deputy_pd"||u.role==="chief")return true;
   if(u.role==="consultant"&&MENTORS[resId]===u.cid)return true;
   return false;
@@ -4064,7 +4066,7 @@ function calcKPI(id){
   // return null for no data, so every "val==null -> N/A" branch downstream now covers quiz too.
   // The overall sum below is unaffected: null*weight/100 is 0, exactly as it was.
   const qAvg=pubQ.length?Math.round(pubQ.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/pubQ.length):null;
-  const presSessions=MM_SESSIONS.filter(m=>m.academic_year===CURRENT_ACADEMIC_YEAR);
+  const presSessions=MM_SESSIONS.filter(m=>m.academic_year===kpiAY());
   const pres=presSessions.some(m=>m.presenter_resident_id===id)||presSessions.some(m=>m.moderator_resident_id===id);
   const presCount=presSessions.filter(m=>m.presenter_resident_id===id||m.moderator_resident_id===id).length;
   const commPct=Math.round(((COMM_SC[id]||0)/10)*100);
@@ -4106,6 +4108,96 @@ function canmedsStateStyle(s){return CANMEDS_STATES[s]||CANMEDS_STATES.awaiting;
 // The PD has confirmed this resident's year is completely recorded. Until then an empty
 // domain means "nobody has typed it in", not "the resident did not do it".
 function canmedsRecordComplete(id){return !!(KPI_SCORES[id]||{}).canmedsVerifiedAt;}
+// ═══ KPI Dashboard: viewing a closed year ═════════════════════════════════════════════════
+// The dashboard computes from nine stores that all hold the live year. Rather than teach every
+// reader a year argument, a closed year is loaded into a bundle and swapped INTO those stores
+// for the duration of one render of the module, then swapped back out (kpiScoped). Everything
+// the page computes - calcKPI, calcKPIQ, canmedsVerdicts, the Yearly tab - therefore sees the
+// closed year without knowing it. KPI_SCOPE_AY is the year the stores currently describe.
+let KPI_PAST={};          // {ay:{state,msg,scores,comm,proposals,quarterly,quizzes,advocacy,committees,mmAtt,teachAtt}}
+let KPI_SCOPE_AY=null;
+function kpiAY(){return KPI_SCOPE_AY||CURRENT_ACADEMIC_YEAR;}
+function kpiIsPast(){return kpiAY()<CURRENT_ACADEMIC_YEAR;}
+// Closed years with attendance data, the live year, never next year: a KPI cannot be read
+// before the year has been lived. Residents hold only published sessions, so an unpublished
+// year is not offered to them.
+function kpiYears(){return sessionYears(MM_SESSIONS.concat(TEACH_SESSIONS),false);}
+function kpiViewAY(){return ayClampTo(STATE.kpiAY,kpiYears());}
+function kpiSetYear(y){
+  if(y===kpiViewAY())return;
+  set({kpiAY:y,perfPeriod:null,mentorQ:null,kpiPropModal:null,canmedsModal:null});
+  if(y<CURRENT_ACADEMIC_YEAR&&!KPI_PAST[y])loadKpiPast(y);
+}
+// PD-only edits on this page ask this instead of isPD(): a closed year takes no edits from anyone.
+function kpiPdEdit(){return isPD()&&!kpiIsPast();}
+// Default quarter: the live one, or the last one once the year is closed.
+function kpiQuarterDefault(){return kpiIsPast()?4:currentQuarter();}
+function kpiScoped(ay,fn){
+  const b=KPI_PAST[ay];
+  if(ay===CURRENT_ACADEMIC_YEAR||!b||b.state!=="ready")return fn();
+  const s={KPI_SCORES,COMM_SC,KPI_PROPOSALS,KPI_QUARTERLY,QUIZZES,ADVOCACY,COMMITTEES,MM_ATT_LIVE,TEACH_ATT_LIVE};
+  KPI_SCOPE_AY=ay;KPI_SCORES=b.scores;COMM_SC=b.comm;KPI_PROPOSALS=b.proposals;KPI_QUARTERLY=b.quarterly;
+  QUIZZES=b.quizzes;ADVOCACY=b.advocacy;COMMITTEES=b.committees;MM_ATT_LIVE=b.mmAtt;TEACH_ATT_LIVE=b.teachAtt;
+  try{return fn();}
+  finally{
+    KPI_SCOPE_AY=null;KPI_SCORES=s.KPI_SCORES;COMM_SC=s.COMM_SC;KPI_PROPOSALS=s.KPI_PROPOSALS;KPI_QUARTERLY=s.KPI_QUARTERLY;
+    QUIZZES=s.QUIZZES;ADVOCACY=s.ADVOCACY;COMMITTEES=s.COMMITTEES;MM_ATT_LIVE=s.MM_ATT_LIVE;TEACH_ATT_LIVE=s.TEACH_ATT_LIVE;
+  }
+}
+// One year, every store, in one go: a half-loaded year would score residents against half
+// their evidence. Mapped exactly as the live loaders map, so the readers cannot tell them apart.
+async function loadKpiPast(ay){
+  KPI_PAST[ay]={state:"loading"};render();
+  const[sc,qr,pr,qd,ad,cm]=await Promise.all([
+    sb.from("kpi_scores").select("*").eq("academic_year",ay),
+    sb.from("kpi_quarterly").select("*").eq("academic_year",ay),
+    sb.from("kpi_proposals").select("*").eq("academic_year",ay).order("proposed_at",{ascending:false}),
+    sb.from("quizzes").select("*").eq("academic_year",ay).order("date"),
+    fetchAllRows(()=>sb.from("advocacy_activities").select("*").eq("academic_year",ay).order("id",{ascending:true})),
+    fetchAllRows(()=>sb.from("committee_memberships").select("*").eq("academic_year",ay).order("id",{ascending:true}))
+  ]);
+  let bad=[sc,qr,pr,qd,ad,cm].find(r=>r.error);
+  let scd=[];
+  const ids=(qd.data||[]).map(q=>q.id);
+  if(!bad&&ids.length){const r=await fetchAllRows(()=>sb.from("quiz_scores").select("*").in("quiz_id",ids).order("id"));if(r.error)bad=r;else scd=r.data||[];}
+  if(bad){KPI_PAST[ay]={state:"error",msg:bad.error.message};render();return;}
+  const scores={},comm={};
+  (sc.data||[]).forEach(k=>{
+    scores[k.resident_id]={commScore:k.committee_score||0,researchDone:!!k.research_participated,qiDone:!!k.qi_participated,bonusPublished:!!k.bonus_published,bonusOral:!!k.bonus_oral,bonusPoster:!!k.bonus_poster,awardsHonors:!!k.awards_honors,volunteering:!!k.volunteering,canmedsVerifiedAt:k.canmeds_verified_at||null,canmedsVerifiedBy:k.canmeds_verified_by||null};
+    comm[k.resident_id]=k.committee_score||0;
+  });
+  const quarterly={};
+  (qr.data||[]).forEach(r=>{if(!quarterly[r.resident_id])quarterly[r.resident_id]={};quarterly[r.resident_id][r.quarter]=r;});
+  const scByQuiz={};
+  scd.forEach(s=>{if(!scByQuiz[s.quiz_id])scByQuiz[s.quiz_id]={};scByQuiz[s.quiz_id][s.resident_id]=s.score;});
+  const quizzes=(qd.data||[]).map(q=>({id:q.id,title:q.title,date:q.date,block:q.block_number,max:q.max_score,published:q.published,assigned_mentor_id:q.assigned_mentor_id,sc:scByQuiz[q.id]||{}}));
+  KPI_PAST[ay]={state:"ready",scores,comm,proposals:pr.data||[],quarterly,quizzes,
+    advocacy:canmedsByRes(ad.data),committees:canmedsByRes(cm.data),
+    mmAtt:buildAttMap(MM_ATT_RAW,MM_SESSION_BY_ID,ay).att,teachAtt:buildAttMap(TEACH_ATT_RAW,TEACH_SESSION_BY_ID,ay).att};
+  render();
+}
+function kpiYearBar(){
+  const years=kpiYears();
+  if(years.length<2)return null;
+  return el("div",{st:{padding:"14px 28px 0"}},renderAYBar(kpiViewAY(),kpiSetYear,null,{years:years}));
+}
+// The render entry for the module: a closed year is drawn inside kpiScoped once its bundle is
+// in; until then, or on an error, the page shows the year bar and a line, never live numbers
+// under a closed-year label. Mentors' own landing page always reads the live year.
+function renderKPIYear(){
+  const ay=kpiViewAY();
+  if(ay===CURRENT_ACADEMIC_YEAR||(isConsultant()&&!STATE.kpiDrill))return renderKPI();
+  const b=KPI_PAST[ay];
+  if(!b)loadKpiPast(ay);
+  const shell=(msg,cls)=>el("div",{st:{background:"#FEFBF3",minHeight:"100%"}},kpiYearBar(),
+    el("div",{st:{padding:"8px 28px 40px"}},el("p",{cls:cls||"sh"},msg)));
+  if(!b||b.state==="loading")return shell("Loading "+ayLabel(ay)+"\u2026");
+  if(b.state==="error")return shell("Could not load "+ayLabel(ay)+": "+b.msg,"alert-red");
+  return kpiScoped(ay,()=>{
+    if(!yearVisRes(ay).length)return shell(isResident()?"You were not on the programme in "+ayLabel(ay)+".":"Nobody you can see was on the programme in "+ayLabel(ay)+".");
+    return renderKPI();
+  });
+}
 // Circuit breaker: zero awareness campaigns exist programme-wide and the activity is opt-in,
 // so nobody has been offered one and nobody can have missed one. Delete this function and the
 // single branch that reads it once the first campaign is recorded.
@@ -4231,6 +4323,7 @@ function canmedsVerdicts(id,opts){
   var presLeg=MM_SESSIONS.length
     ?(k.presCount>0
       ?{state:"met",value:k.presCount+" session"+(k.presCount!==1?"s":""),note:"Presented or moderated this year"}
+      :kpiIsPast()?{state:"not_met",value:"None",note:"No presentation in "+ayLabel(kpiAY())}
       :{state:"in_progress",value:"None yet",note:"Due by the end of the academic year"})
     :{state:"awaiting",value:"\u2014",note:"The Morning Meeting schedule has not loaded."};
   var scholarLegs=[
@@ -7539,13 +7632,13 @@ function calcKPIQ(id,qBlocks){
   const tPct=tTotal?Math.round(tScore/tTotal*100):null;
   const pubQ=QUIZZES.filter(q=>q.published&&q.sc[id]!=null&&qBlocks.includes(q.block));
   const qAvg=pubQ.length?Math.round(pubQ.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/pubQ.length):null;
-  const presCount=MM_SESSIONS.filter(s=>(s.presenter_resident_id===id||s.moderator_resident_id===id)&&s.academic_year===CURRENT_ACADEMIC_YEAR&&qBlocks.includes(s.block_number)).length;
+  const presCount=MM_SESSIONS.filter(s=>(s.presenter_resident_id===id||s.moderator_resident_id===id)&&s.academic_year===kpiAY()&&qBlocks.includes(s.block_number)).length;
   return{mmPct,mmAtt,mmTotal,tPct,tAtt,tTotal,qAvg,quizCount:pubQ.length,presCount};
 }
 // Compact quarterly breakdown card — reused in resident KPI page and admin profile.
 function renderQuarterlyKPICard(resId){
   const kpiColor=v=>kpiBandColor(v,"#dc2626");
-  const q=STATE.mentorQ||currentQuarter();
+  const q=STATE.mentorQ||kpiQuarterDefault();
   const qBlocks=QUARTER_BLOCKS[q];
   const kq=calcKPIQ(resId,qBlocks);
   const miniStat=(label,val,detail)=>el("div",{st:{flex:"1",minWidth:"0"}},
@@ -7585,7 +7678,7 @@ function renderMentorHome(){
     el("div",{cls:"card"},el("p",{cls:"sh"},"No residents are currently assigned to you. Ask the Program Director to assign residents."))
   );
   const kpiColor=v=>kpiBandColor(v,"#dc2626");
-  const q=STATE.mentorQ||currentQuarter();
+  const q=STATE.mentorQ||kpiQuarterDefault();
   const qBlocks=QUARTER_BLOCKS[q];
   return el("div",{cls:"content"},
     el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
@@ -7671,7 +7764,7 @@ function exportKpiPDF(res,k){
   .footer{margin-top:32px;font-size:.75rem;color:#9ca3af}@media print{body{margin:16px}}</style></head>
   <body>
   <h1>KPI Report — ${res.name}</h1>
-  <div class="sub">${res.level} · Mentor: ${mentorName(res.id)} · AY ${CURRENT_ACADEMIC_YEAR}–${CURRENT_ACADEMIC_YEAR+1}</div>
+  <div class="sub">${res.level} · Mentor: ${mentorName(res.id)} · AY ${kpiAY()}–${kpiAY()+1}</div>
   <div class="score">${k.overall}%</div><div style="color:#6b7280;margin-bottom:8px">Overall KPI Score</div>
   <div style="background:#e5e7eb;border-radius:4px;height:10px"><div style="background:${kpiColor(k.overall)};width:${Math.min(k.overall,100)}%;height:10px;border-radius:4px"></div></div>
   <h2> Ongoing Performance (50%)</h2>
@@ -8139,12 +8232,12 @@ function renderCanmedsView(resId){
 // Block n is [n], quarter q is QUARTER_BLOCKS[q], annual is all 13 blocks. No new aggregation
 // is defined here on purpose, so these numbers cannot drift from the quarterly card.
 function renderPerformanceView(resId){
-  const allBlocks=rotaPeriods(CURRENT_ACADEMIC_YEAR).map((_,i)=>i+1);
+  const allBlocks=rotaPeriods(kpiAY()).map((_,i)=>i+1);
   const grain=STATE.perfGrain||"block";
   const periods=grain==="block"?allBlocks:grain==="quarter"?[1,2,3,4]:[0];
   let sel=STATE.perfPeriod;
   if(grain==="annual")sel=0;
-  else if(periods.indexOf(sel)<0)sel=grain==="block"?CURRENT_PERIOD:currentQuarter();
+  else if(periods.indexOf(sel)<0)sel=kpiIsPast()?(grain==="block"?allBlocks[allBlocks.length-1]:4):(grain==="block"?CURRENT_PERIOD:currentQuarter());
   const blocksFor=p=>grain==="block"?[p]:grain==="quarter"?(QUARTER_BLOCKS[p]||[]):allBlocks;
   const selBlocks=blocksFor(sel);
   const kq=calcKPIQ(resId,selBlocks);
@@ -8157,11 +8250,11 @@ function renderPerformanceView(resId){
     ...[["block","Block"],["quarter","Quarter"],["annual","Annual"]].map(gg=>
       el("button",{cls:grain===gg[0]?"on":"",onClick:()=>set({perfGrain:gg[0]})},gg[1])));
   const chipRow=grain==="annual"
-    ?el("div",{cls:"pcap"},"All "+allBlocks.length+" blocks \u00b7 AY "+CURRENT_ACADEMIC_YEAR+"\u2013"+(CURRENT_ACADEMIC_YEAR+1))
+    ?el("div",{cls:"pcap"},"All "+allBlocks.length+" blocks \u00b7 AY "+kpiAY()+"\u2013"+(kpiAY()+1))
     :el("div",{cls:"pchips"},...periods.map(p=>el("button",{cls:"pchip"+(p===sel?" on":""),
         onClick:()=>set({perfPeriod:p})},grain==="block"?("B"+p):("Q"+p))));
   const periodCap=grain==="block"
-    ?el("div",{cls:"pcap"},"Block "+sel+" \u00b7 "+rotaPeriods(CURRENT_ACADEMIC_YEAR)[sel-1])
+    ?el("div",{cls:"pcap"},"Block "+sel+" \u00b7 "+rotaPeriods(kpiAY())[sel-1])
     :grain==="quarter"?el("div",{cls:"pcap"},QUARTER_LABELS[sel]+" \u00b7 blocks "+selBlocks.join(", ")):null;
 
   function delta(cur,pv,noun){
@@ -8552,13 +8645,13 @@ function renderCanmedsRecords(resId){
 }
 
 function renderKPI(){
-  const vr=visRes();
+  const vr=yearVisRes(kpiAY());
   const u=STATE.user;
   // Mentors land on their own home, but must be able to open a mentee's KPI page --
   // renderMentorHome's own cards link into it, so an unconditional bounce made them dead.
   if(isConsultant()&&!STATE.kpiDrill)return renderMentorHome();
   let selId=isResident()?u.rid:(STATE.kpiSelRes||vr[0]?.id);
-  const res=resById(selId)||vr[0];
+  const res=vr.find(r=>r.id===selId)||resById(selId)||vr[0];
   if(!res)return el("div",null,"No residents");
   const k=calcKPI(res.id);
   const kpiColor=v=>kpiBandColor(v,"#dc2626");
@@ -8566,9 +8659,9 @@ function renderKPI(){
   canmedsInjectCss();
   const cvHead=CANMEDS_LOADED?canmedsVerdicts(res.id,{k:k}):null;
   const canEdit_=canEditKPI(res.id);
-  const isMyRes=isResident()&&u.rid===res.id;
+  const isMyRes=isResident()&&u.rid===res.id&&!kpiIsPast();
   const isMentor=isConsultant()&&MENTORS[res.id]===u.cid;
-  const canSetMilestone=isPD()||STATE.user?.role==="chief"||isMentor;
+  const canSetMilestone=(kpiPdEdit()||STATE.user?.role==="chief"||isMentor)&&!kpiIsPast();
 
   // ── Achievement card with proposal/approval flow ──────────────
   function renderProposalDetails(p){
@@ -8612,10 +8705,10 @@ function renderKPI(){
       // All approved proposals with individual undo buttons
       ...approvedProps.map(ap=>el("div",{st:{borderTop:"1px solid #dcfce7",paddingTop:"8px",marginTop:"4px"}},
         renderProposalDetails(ap),
-        isPD()?el("button",{cls:"sbtn ghost",st:{fontSize:".7rem",padding:"2px 8px",color:"#dc2626",borderColor:"#fca5a5",marginTop:"4px"},onClick:()=>revokeKpiApproval(res.id,fieldKey,ap.id)},"Undo"):null
+        kpiPdEdit()?el("button",{cls:"sbtn ghost",st:{fontSize:".7rem",padding:"2px 8px",color:"#dc2626",borderColor:"#fca5a5",marginTop:"4px"},onClick:()=>revokeKpiApproval(res.id,fieldKey,ap.id)},"Undo"):null
       )),
       // PD review panel for pending proposals
-      isPD()&&pending.length?el("div",{st:{marginTop:"6px"}},
+      kpiPdEdit()&&pending.length?el("div",{st:{marginTop:"6px"}},
         ...pending.map(p=>el("div",{st:{background:"#fff",border:"1px solid #fde68a",borderRadius:"8px",padding:"8px 10px",marginBottom:"4px"}},
           el("div",{st:{fontSize:".78rem",fontWeight:"600",marginBottom:"6px"}}, "Submitted by "+(p.proposed_by_role==="resident"?"the resident":p.proposed_by_role==="consultant"?"the mentor":p.proposed_by_role==="chief"?"Chief Resident":p.proposed_by_role)+ " · "+new Date(p.proposed_at).toLocaleDateString("en-GB",{day:"numeric",month:"short"})
           ),
@@ -8639,7 +8732,7 @@ function renderKPI(){
 
   // ── Quarterly milestone card ──────────────────────────────────
   function milestoneCard(type,iconPaths,textKey,achievedKey,placeholder){
-    const q=STATE.mentorQ||currentQuarter();
+    const q=STATE.mentorQ||kpiQuarterDefault();
     const qd=(KPI_QUARTERLY[res.id]||{})[q]||{};
     const text=qd[textKey]||"";
     const achieved=!!qd[achievedKey];
@@ -8675,9 +8768,9 @@ function renderKPI(){
         el("div",{st:{fontSize:".68rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.35)",marginBottom:"8px"}},"Achievement Status"),
         achieved?el("div",{st:{display:"flex",alignItems:"center",gap:"8px"}},
           el("span",{st:{fontSize:".82rem",fontWeight:"600",color:"#26523A"}},"Achieved this quarter"),
-          canSetMilestone||isPD()?el("button",{cls:"sbtn ghost",st:{fontSize:".72rem",padding:"3px 10px"},onClick:()=>saveKpiQuarterly(res.id,q,{[achievedKey]:false})},"Undo"):null
+          canSetMilestone||kpiPdEdit()?el("button",{cls:"sbtn ghost",st:{fontSize:".72rem",padding:"3px 10px"},onClick:()=>saveKpiQuarterly(res.id,q,{[achievedKey]:false})},"Undo"):null
         ):pendingProp.length?el("div",null,
-          isPD()?el("div",null,...pendingProp.map(p=>el("div",{st:{background:"rgba(203,161,85,.08)",border:"1px solid rgba(203,161,85,.3)",borderRadius:"10px",padding:"10px 12px",marginBottom:"6px"}},
+          kpiPdEdit()?el("div",null,...pendingProp.map(p=>el("div",{st:{background:"rgba(203,161,85,.08)",border:"1px solid rgba(203,161,85,.3)",borderRadius:"10px",padding:"10px 12px",marginBottom:"6px"}},
             el("div",{st:{fontSize:".74rem",fontWeight:"600",marginBottom:"6px",color:"rgba(31,26,18,.55)"}}, "Claimed by "+(p.proposed_by_role==="resident"?"the resident":p.proposed_by_role==="consultant"?"the mentor":"Chief Resident")+" · "+new Date(p.proposed_at).toLocaleDateString("en-GB",{day:"numeric",month:"short"})
             ),
             p.note?el("div",{st:{fontSize:".8rem",marginBottom:"8px",fontStyle:"italic",color:"rgba(31,26,18,.6)"}},"\""+p.note+"\""):null,
@@ -8687,10 +8780,10 @@ function renderKPI(){
             )
           ))):el("div",{st:{fontSize:".8rem",color:"#7a5a10"}},"Submitted — awaiting PD review")
         ):el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap"}},
-          isPD()||canSetMilestone?el("button",{cls:"sbtn primary",st:{fontSize:".78rem"},onClick:async()=>{
-            if(isPD()){await saveKpiQuarterly(res.id,q,{[achievedKey]:true});}
+          kpiPdEdit()||canSetMilestone?el("button",{cls:"sbtn primary",st:{fontSize:".78rem"},onClick:async()=>{
+            if(kpiPdEdit()){await saveKpiQuarterly(res.id,q,{[achievedKey]:true});}
             else{const note=window.prompt("Optional note:","");if(note===null)return;await submitKpiProposal(res.id,achievedKey,q,note||null);}
-          }},isPD()?"Mark Achieved":"Submit as Achieved"):null,
+          }},kpiPdEdit()?"Mark Achieved":"Submit as Achieved"):null,
           isMyRes&&!canSetMilestone?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem"},onClick:async()=>{
             const note=window.prompt("Optional supporting note:","");if(note===null)return;
             await submitKpiProposal(res.id,achievedKey,q,note||null);
@@ -8702,7 +8795,7 @@ function renderKPI(){
 
   // ── Quarterly tab ─────────────────────────────────────────────
   function renderQuarterlyTab(){
-    const q=STATE.mentorQ||currentQuarter();
+    const q=STATE.mentorQ||kpiQuarterDefault();
     const qBlocks=QUARTER_BLOCKS[q];
     const kq=calcKPIQ(res.id,qBlocks);
     const statBox=(label,iconPaths,mainVal,detail,subColor)=>el("div",{st:{flex:"1",minWidth:"0",padding:"16px 18px",background:"#F6EFE2",borderRadius:"12px"}},
@@ -8761,7 +8854,7 @@ function renderKPI(){
       // Expanded view for approved proposals
       ...approvedProps.map(ap=>el("div",{st:{padding:"6px 12px 6px 33px",background:"rgba(127,184,156,.07)",borderBottom:"1px solid rgba(31,26,18,.04)",fontSize:".74rem",color:"rgba(31,26,18,.5)"}},
         renderProposalDetails(ap),
-        isPD()?el("button",{cls:"sbtn ghost",st:{fontSize:".68rem",padding:"2px 8px",color:"#dc2626",borderColor:"#fca5a5",marginTop:"4px"},onClick:()=>revokeKpiApproval(res.id,fieldKey,ap.id)},"Undo"):null
+        kpiPdEdit()?el("button",{cls:"sbtn ghost",st:{fontSize:".68rem",padding:"2px 8px",color:"#dc2626",borderColor:"#fca5a5",marginTop:"4px"},onClick:()=>revokeKpiApproval(res.id,fieldKey,ap.id)},"Undo"):null
       )),
       // The research record, which carries through the whole training. A proposal is one year's
       // evidence; these rows are why the standard still reads as met in the years after it.
@@ -8771,7 +8864,7 @@ function renderKPI(){
         el("div",{st:{fontSize:".66rem",marginTop:"2px",color:"#5C5345",fontStyle:"italic"}},"On the research record \u2014 counts for the whole training, not only this year")
       )):[]),
       // PD review panel
-      isPD()&&pending.length?el("div",{st:{padding:"8px 12px 8px 33px",background:"rgba(203,161,85,.06)",borderBottom:"1px solid rgba(31,26,18,.04)"}},
+      kpiPdEdit()&&pending.length?el("div",{st:{padding:"8px 12px 8px 33px",background:"rgba(203,161,85,.06)",borderBottom:"1px solid rgba(31,26,18,.04)"}},
         ...pending.map(p=>el("div",{st:{marginBottom:"6px"}},
           el("div",{st:{fontSize:".72rem",fontWeight:"600",marginBottom:"4px",color:"rgba(31,26,18,.5)"}}, "Submitted by "+(p.proposed_by_role==="resident"?"the resident":p.proposed_by_role==="consultant"?"the mentor":"Chief Resident")+ " · "+new Date(p.proposed_at).toLocaleDateString("en-GB",{day:"numeric",month:"short"})
           ),
@@ -8807,7 +8900,7 @@ function renderKPI(){
       ),
       el("div",{st:{flex:"1"}},
         el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1.2rem",fontWeight:"600",color:"#FEFBF3",lineHeight:"1.2"}},res.name,chiefBadge(res.id)),
-        el("div",{st:{fontSize:".73rem",color:"rgba(254,251,243,.65)",marginTop:"3px"}},res.level+" · Mentor: "+mentorName(res.id)+" · AY "+CURRENT_ACADEMIC_YEAR+"–"+(CURRENT_ACADEMIC_YEAR+1))
+        el("div",{st:{fontSize:".73rem",color:"rgba(254,251,243,.65)",marginTop:"3px"}},res.level+" · Mentor: "+mentorName(res.id)+" · AY "+kpiAY()+"–"+(kpiAY()+1))
       ),
       el("div",{st:{textAlign:"center"}},
         el("div",{st:{position:"relative",width:"64px",height:"64px"}},
@@ -8831,7 +8924,7 @@ function renderKPI(){
         ),
         el("div",{st:{fontSize:".6rem",color:"rgba(254,251,243,.6)",fontWeight:"600",textTransform:"uppercase",letterSpacing:".06em",marginTop:"4px"}},"KPI met")
       ),
-      el("button",{st:{marginLeft:"8px",display:"flex",alignItems:"center",gap:"5px",padding:"7px 14px",borderRadius:"9999px",border:"1px solid rgba(255,255,255,.25)",background:"rgba(255,255,255,.1)",fontSize:".74rem",fontWeight:"600",color:"rgba(254,251,243,.8)",cursor:"pointer",transition:"all .15s"},onClick:()=>exportKpiPDF(res,k)},
+      el("button",{st:{marginLeft:"8px",display:"flex",alignItems:"center",gap:"5px",padding:"7px 14px",borderRadius:"9999px",border:"1px solid rgba(255,255,255,.25)",background:"rgba(255,255,255,.1)",fontSize:".74rem",fontWeight:"600",color:"rgba(254,251,243,.8)",cursor:"pointer",transition:"all .15s"},onClick:()=>kpiScoped(kpiViewAY(),()=>exportKpiPDF(res,k))},
         svgIcon('<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',13,13), "PDF" )
     )
   );
@@ -8854,7 +8947,7 @@ function renderKPI(){
           svgIcon('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',10,10),"Performance" )
       ),
       el("div",{st:{background:"#FEFBF3",borderRadius:"16px",padding:"16px 14px",textAlign:"center",cursor:"pointer",boxShadow:"0 4px 20px rgba(31,26,18,.10)",border:"2px solid "+(tab==="quarterly"?"#7c3aed":"transparent"),transition:"border-color .2s"},onClick:()=>set({kpiTab:"quarterly"})},
-        el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1.5rem",fontWeight:"700",lineHeight:"1",marginBottom:"4px",color:"#7c3aed"}}, "Q"+(STATE.mentorQ||currentQuarter())
+        el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1.5rem",fontWeight:"700",lineHeight:"1",marginBottom:"4px",color:"#7c3aed"}}, "Q"+(STATE.mentorQ||kpiQuarterDefault())
         ),
         el("div",{st:{fontSize:".65rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.35)",display:"flex",alignItems:"center",justifyContent:"center",gap:"4px"}},
           svgIcon('<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',10,10),"Quarterly" )
@@ -8888,7 +8981,7 @@ function renderKPI(){
       txt,el("div",{st:{flex:"1",height:"1px",background:"rgba(31,26,18,.08)"}})
     );
     return el("div",null,
-      isPD()&&pendingCount>0?el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},pendingCount+" achievement submission"+(pendingCount>1?"s":"")+" pending your review."):null,
+      kpiPdEdit()&&pendingCount>0?el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},pendingCount+" achievement submission"+(pendingCount>1?"s":"")+" pending your review."):null,
       sectionLbl("Committee Participation · "+KPI_W.comm+"% weight"),
       el("div",{st:{marginBottom:"28px",display:"flex",alignItems:"center",gap:"16px"}},
         canEdit_?el("div",{st:{display:"flex",alignItems:"center",gap:"10px"}},
@@ -8960,6 +9053,7 @@ function renderKPI(){
   ):null;
 
   return el("div",{st:{background:"#FEFBF3",minHeight:"100%"}},
+    kpiYearBar(),
     isConsultant()?el("div",{st:{padding:"14px 28px 0"}},
       el("span",{st:{fontSize:".78rem",fontWeight:"600",color:"#c96a4a",cursor:"pointer"},
         onClick:()=>set({kpiDrill:false})},"\u2190 Back to my mentees")):null,
@@ -17437,7 +17531,7 @@ function render(){
         case"rottrack":content=renderRotTrack();break;
         case"morning":content=renderMorning();break;
         case"teaching":content=renderTeaching();break;
-        case"kpi":content=renderKPI();break;
+        case"kpi":content=renderKPIYear();break;
         case"quiz":content=renderQuiz();break;
         case"leave":content=renderLeave();break;
         case"counseling":content=renderCounseling();break;
