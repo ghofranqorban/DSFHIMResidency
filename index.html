@@ -962,18 +962,18 @@ let HIST_ROTA_STATE="idle"; // idle | loading | ready | error
 // Chief Resident designation (one chief, one co-chief max)
 let CHIEF_RES_ID=null;
 let CO_CHIEF_RES_ID=null;
-const MANDATORY=["GIM/CTU","Cardiology","Pulmonology","Nephrology","Gastroenterology","Endocrinology","Hematology","Rheumatology","Neurology","Infectious Disease","ICU","Emergency Medicine","Oncology"];
+let MANDATORY=["GIM/CTU","Cardiology","Pulmonology","Nephrology","Gastroenterology","Endocrinology","Hematology","Rheumatology","Neurology","Infectious Disease","ICU","Emergency Medicine","Oncology"];
 // Minimum weeks per rotation, SCFHS Saudi Board Internal Medicine curriculum (2015),
 // p.23 junior (R1-R2) and p.25 senior (R3-R4). Neurology is printed in BOTH the 8-week
 // and the 4-week senior lists; the rotations roadmap on p.27 gives R3 two Neurology
 // blocks, so 8 is the figure used here and the 4-week entry is treated as a misprint.
-const SCFHS_JUNIOR={"GIM/CTU":24,"Emergency Medicine":8,"ICU":8,"Cardiology":8,"Pulmonology":8,"Gastroenterology":8,"Nephrology":8,"Endocrinology":4,"Infectious Disease":4,"Rheumatology":4,"Neurology":4};
-const SCFHS_SENIOR={"GIM/CTU":16,"Cardiology":8,"Gastroenterology":8,"Endocrinology":8,"Hematology":8,"Neurology":8,"Infectious Disease":8,"Rheumatology":8,"ICU":4,"Pulmonology":4,"Nephrology":4,"Oncology":4};
-const SCFHS_TOTAL={};
+let SCFHS_JUNIOR={"GIM/CTU":24,"Emergency Medicine":8,"ICU":8,"Cardiology":8,"Pulmonology":8,"Gastroenterology":8,"Nephrology":8,"Endocrinology":4,"Infectious Disease":4,"Rheumatology":4,"Neurology":4};
+let SCFHS_SENIOR={"GIM/CTU":16,"Cardiology":8,"Gastroenterology":8,"Endocrinology":8,"Hematology":8,"Neurology":8,"Infectious Disease":8,"Rheumatology":8,"ICU":4,"Pulmonology":4,"Nephrology":4,"Oncology":4};
+let SCFHS_TOTAL={};
 MANDATORY.forEach(m=>{SCFHS_TOTAL[m]=(SCFHS_JUNIOR[m]||0)+(SCFHS_SENIOR[m]||0);});
 // Night Duty and Medical Consult are general medicine on the wards, so their weeks count
 // toward the SCFHS General Internal Medicine requirement. Outpatient Clinic does not.
-const SCFHS_CREDIT={"Night Duty":"GIM/CTU","Medical Consult":"GIM/CTU"};
+let SCFHS_CREDIT={"Night Duty":"GIM/CTU","Medical Consult":"GIM/CTU"};
 // Weeks toward one SCFHS rotation: the rotation itself plus whatever is credited to it.
 function scfhsWeeks(cum,rot){
   let w=cum[rot]||0;
@@ -1053,9 +1053,40 @@ function kpiBandColor(v,red){const b=scoreBand(v);return b==="good"?"#26523A":b=
 // Background and ink for the small percentage badges.
 function pctBandStyle(pct){const b=scoreBand(pct);return{background:b==="good"?"#dcfce7":b==="fair"?"#fef9c3":"#fee2e2",color:b==="good"?"#166534":b==="fair"?"#854d0e":"#991b1b"};}
 const LC={R1:"#4a6a8a",R2:"#5a8a6a",R3:"#c9913a",R4:"#8a4a2a"};
-const ROT_COLORS={"GIM/CTU":{bg:"#ede9fe",tx:"#5b21b6"},"Night Duty":{bg:"#fef2f2",tx:"#991b1b"},"ICU":{bg:"rgba(38,82,58,.12)",tx:"#26523A"},"Cardiology":{bg:"rgba(201,106,74,.12)",tx:"#9d174d"},"Pulmonology":{bg:"#e0f2fe",tx:"#0c4a6e"},"Nephrology":{bg:"rgba(127,184,156,.15)",tx:"#26523A"},"Gastroenterology":{bg:"rgba(164,122,40,.12)",tx:"#6a4c10"},"Endocrinology":{bg:"#f0fdf4",tx:"#166534"},"Hematology":{bg:"#ffe4e6",tx:"#9f1239"},"Rheumatology":{bg:"#f5f3ff",tx:"#4c1d95"},"Neurology":{bg:"#fdf4ff",tx:"#7e22ce"},"Infectious Disease":{bg:"#fff7ed",tx:"#c2410c"},"Emergency Medicine":{bg:"#fee2e2",tx:"#7f1d1d"},"Oncology":{bg:"#f0f9ff",tx:"#0369a1"},"Outpatient Clinic":{bg:"#F6EFE2",tx:"#475569"},"Elective":{bg:"#f0fdf4",tx:"#166534"},"Annual Leave":{bg:"#fefce8",tx:"#854d0e"},"Maternity Leave":{bg:"#fdf4ff",tx:"#701a75"},"Medical Consult":{bg:"#eff6ff",tx:"#26523A"},"Freeze":{bg:"#f1f5f9",tx:"#64748b",ol:"1px dashed #cbd5e1"}};
-const ROT_ABBR={"GIM/CTU":"CTU","Night Duty":"Night","ICU":"ICU","Cardiology":"Cardio","Pulmonology":"Pulmo","Nephrology":"Nephro","Gastroenterology":"Gastro","Endocrinology":"Endo","Hematology":"Hema","Rheumatology":"Rheuma","Neurology":"Neuro","Infectious Disease":"ID","Emergency Medicine":"ER","Oncology":"Onco","Outpatient Clinic":"Clinic","Elective":"Elect","Annual Leave":"Leave","Maternity Leave":"Matern","Medical Consult":"M.Cons","Freeze":"Freeze"};
-const ALL_ROTATIONS=["GIM/CTU","Night Duty","ICU","Cardiology","Pulmonology","Nephrology","Gastroenterology","Endocrinology","Hematology","Rheumatology","Neurology","Infectious Disease","Emergency Medicine","Oncology","Outpatient Clinic","Elective","Annual Leave","Maternity Leave","Medical Consult","Freeze"];
+let ROT_COLORS={"GIM/CTU":{bg:"#ede9fe",tx:"#5b21b6"},"Night Duty":{bg:"#fef2f2",tx:"#991b1b"},"ICU":{bg:"rgba(38,82,58,.12)",tx:"#26523A"},"Cardiology":{bg:"rgba(201,106,74,.12)",tx:"#9d174d"},"Pulmonology":{bg:"#e0f2fe",tx:"#0c4a6e"},"Nephrology":{bg:"rgba(127,184,156,.15)",tx:"#26523A"},"Gastroenterology":{bg:"rgba(164,122,40,.12)",tx:"#6a4c10"},"Endocrinology":{bg:"#f0fdf4",tx:"#166534"},"Hematology":{bg:"#ffe4e6",tx:"#9f1239"},"Rheumatology":{bg:"#f5f3ff",tx:"#4c1d95"},"Neurology":{bg:"#fdf4ff",tx:"#7e22ce"},"Infectious Disease":{bg:"#fff7ed",tx:"#c2410c"},"Emergency Medicine":{bg:"#fee2e2",tx:"#7f1d1d"},"Oncology":{bg:"#f0f9ff",tx:"#0369a1"},"Outpatient Clinic":{bg:"#F6EFE2",tx:"#475569"},"Elective":{bg:"#f0fdf4",tx:"#166534"},"Annual Leave":{bg:"#fefce8",tx:"#854d0e"},"Maternity Leave":{bg:"#fdf4ff",tx:"#701a75"},"Medical Consult":{bg:"#eff6ff",tx:"#26523A"},"Freeze":{bg:"#f1f5f9",tx:"#64748b",ol:"1px dashed #cbd5e1"}};
+let ROT_ABBR={"GIM/CTU":"CTU","Night Duty":"Night","ICU":"ICU","Cardiology":"Cardio","Pulmonology":"Pulmo","Nephrology":"Nephro","Gastroenterology":"Gastro","Endocrinology":"Endo","Hematology":"Hema","Rheumatology":"Rheuma","Neurology":"Neuro","Infectious Disease":"ID","Emergency Medicine":"ER","Oncology":"Onco","Outpatient Clinic":"Clinic","Elective":"Elect","Annual Leave":"Leave","Maternity Leave":"Matern","Medical Consult":"M.Cons","Freeze":"Freeze"};
+let ALL_ROTATIONS=["GIM/CTU","Night Duty","ICU","Cardiology","Pulmonology","Nephrology","Gastroenterology","Endocrinology","Hematology","Rheumatology","Neurology","Infectious Disease","Emergency Medicine","Oncology","Outpatient Clinic","Elective","Annual Leave","Maternity Leave","Medical Consult","Freeze"];
+// ─── LISTS: ROTATION CATALOGUE AND ANNOUNCEMENT CATEGORIES ─────────────────────────────────────
+// The lists above are the portal's built-in values. When supabase/add_lists.sql has been run, the
+// rotation_catalogue and announcement_categories tables replace them at sign-in (loadAcademicYears),
+// and the PD edits them in Control Centre > Lists. A rotation's NAME is the key the rota tables and
+// the portal's own rules store, so it is never renamed: only its abbreviation, colours, SCFHS weeks,
+// credit, import spellings, order and active flag change. Retired rotations keep their colour and
+// label so old rota cells still render; they just leave the pickers and the SCFHS lists.
+let ROT_CATALOGUE=[];   // every row, retired included, in sort order
+let LISTS_ERR=null;     // why the tables could not be read, shown in the Lists tab
+// Names the portal's own code relies on (leave handling, the builder, imports). They cannot be retired.
+const ROT_FIXED=["GIM/CTU","Night Duty","Elective","Annual Leave","Maternity Leave","Medical Consult","Outpatient Clinic","Freeze"];
+let ANN_CATS=[{key:"task",label:"Task"},{key:"research",label:"Research"},{key:"qi",label:"QI Project"},{key:"presentation",label:"Presentation"},
+  {key:"deadline",label:"Deadline"},{key:"other",label:"Other"},{key:"general",label:"General"}];
+function applyRotationCatalogue(rows){
+  ROT_CATALOGUE=rows.slice().sort((a,b)=>(Number(a.sort_order)-Number(b.sort_order))||String(a.name).localeCompare(String(b.name)));
+  const active=ROT_CATALOGUE.filter(r=>r.active!==false);
+  ALL_ROTATIONS=active.map(r=>r.name);
+  MANDATORY=active.filter(r=>r.mandatory).map(r=>r.name);
+  RB_EXTRA=active.filter(r=>!r.mandatory&&r.name!=="Freeze").map(r=>r.name);
+  SCFHS_JUNIOR={};SCFHS_SENIOR={};SCFHS_TOTAL={};SCFHS_CREDIT={};ROT_COLORS={};ROT_ABBR={};
+  ROT_CATALOGUE.forEach(r=>{
+    if(Number(r.junior_weeks)>0)SCFHS_JUNIOR[r.name]=Number(r.junior_weeks);
+    if(Number(r.senior_weeks)>0)SCFHS_SENIOR[r.name]=Number(r.senior_weeks);
+    if(r.credits_to)SCFHS_CREDIT[r.name]=r.credits_to;
+    const c={bg:r.color_bg||"#FEFBF3",tx:r.color_tx||"#475569"};if(r.outline)c.ol=r.outline;ROT_COLORS[r.name]=c;
+    ROT_ABBR[r.name]=r.abbr||r.name;
+    (r.aliases||[]).forEach(a=>{const k=String(a).trim().toLowerCase();if(k)ROTA_ALIAS_MAP[k]=r.name;});
+  });
+  MANDATORY.forEach(m=>{SCFHS_TOTAL[m]=(SCFHS_JUNIOR[m]||0)+(SCFHS_SENIOR[m]||0);});
+  RB_MANDATORY_TOTAL=MANDATORY.reduce((s,m)=>s+SCFHS_TOTAL[m],0);
+}
 let ROT_H={};
 // ─── ROTA EXCEL IMPORT — parsing/classification helpers ─────────────────────
 // Pure functions (no DOM, no Supabase) so they can be unit-tested directly.
@@ -1063,7 +1094,7 @@ let ROT_H={};
 //   row 1: block numbers (1-13) starting a couple columns in
 //   row 2: date ranges (not parsed — ROTA_PERIODS is the source of truth for those)
 //   row 3+: PG level | resident name | 13 block cells
-const ROTA_ALIAS_MAP={ "matrnty":"Maternity Leave","maternity":"Maternity Leave","mat leave":"Maternity Leave", "vacation":"Annual Leave","annual leave":"Annual Leave","leave":"Annual Leave","al":"Annual Leave", "m.con":"Medical Consult","m.cons":"Medical Consult","mcons":"Medical Consult","med consult":"Medical Consult", "er":"Emergency Medicine","er main":"Emergency Medicine","em":"Emergency Medicine", "2w":"2wks","2wk":"2wks","2wks":"2wks"
+let ROTA_ALIAS_MAP={ "matrnty":"Maternity Leave","maternity":"Maternity Leave","mat leave":"Maternity Leave", "vacation":"Annual Leave","annual leave":"Annual Leave","leave":"Annual Leave","al":"Annual Leave", "m.con":"Medical Consult","m.cons":"Medical Consult","mcons":"Medical Consult","med consult":"Medical Consult", "er":"Emergency Medicine","er main":"Emergency Medicine","em":"Emergency Medicine", "2w":"2wks","2wk":"2wks","2wks":"2wks"
 };
 function normalizeRotToken(tok){
   tok=(tok==null?"":String(tok)).trim();
@@ -1938,14 +1969,20 @@ function ayRecomputeCurrent(){
 }
 async function loadAcademicYears(){
   try{
-    const[a,s,sc]=await Promise.all([
+    const[a,s,sc,rc,ac]=await Promise.all([
       sb.from("academic_years").select("*").order("ay"),
       sb.from("portal_settings").select("*").eq("key","plan_year").maybeSingle(),
-      sb.from("portal_settings").select("*").eq("key","scoring").maybeSingle()
+      sb.from("portal_settings").select("*").eq("key","scoring").maybeSingle(),
+      sb.from("rotation_catalogue").select("*").order("sort_order"),
+      sb.from("announcement_categories").select("*").order("sort_order")
     ]);
     if(a.error){console.warn("academic_years not read, using the built-in years:",a.error.message);}
     else{AY_ROWS=a.data||[];AY_ROWS.forEach(ayApplyRow);}
     applyScoring(scoringFrom(!sc.error&&sc.data?sc.data.value:null));
+    // An empty table is treated like a missing one: the built-in lists stay, and nothing goes blank.
+    LISTS_ERR=(rc.error&&rc.error.message)||(ac.error&&ac.error.message)||null;
+    if(!rc.error&&rc.data&&rc.data.length)applyRotationCatalogue(rc.data);
+    if(!ac.error&&ac.data&&ac.data.length)ANN_CATS=ac.data.slice().sort((x,y)=>Number(x.sort_order)-Number(y.sort_order));
     ayRecomputeCurrent();
     const py=!s.error&&s.data&&s.data.value?Number(s.data.value.ay):NaN;
     if(Number.isInteger(py)&&py!==LP_AY)applyPlanYearLocal(py);
@@ -3983,7 +4020,6 @@ function canEditAttSession(dateStr){
 // KPI edits (committee score, quiz marks for a resident): PD or that resident's assigned mentor
 function canEditKPI(resId){
   const u=STATE.user;if(!u)return false;
-  if(kpiIsPast())return false;
   if(u.role==="pd"||u.role==="dio"||u.role==="ceo")return true;
   if(u.role==="consultant"&&MENTORS[resId]===u.cid)return true;
   return false;
@@ -3994,7 +4030,6 @@ function canEditKPI(resId){
 // reusing it would show them buttons that answer with a bare 403.
 function canEditCanmeds(resId){
   const u=STATE.user;if(!u)return false;
-  if(kpiIsPast())return false;
   if(u.role==="pd"||u.role==="deputy_pd"||u.role==="chief")return true;
   if(u.role==="consultant"&&MENTORS[resId]===u.cid)return true;
   return false;
@@ -4029,7 +4064,7 @@ function calcKPI(id){
   // return null for no data, so every "val==null -> N/A" branch downstream now covers quiz too.
   // The overall sum below is unaffected: null*weight/100 is 0, exactly as it was.
   const qAvg=pubQ.length?Math.round(pubQ.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/pubQ.length):null;
-  const presSessions=MM_SESSIONS.filter(m=>m.academic_year===kpiAY());
+  const presSessions=MM_SESSIONS.filter(m=>m.academic_year===CURRENT_ACADEMIC_YEAR);
   const pres=presSessions.some(m=>m.presenter_resident_id===id)||presSessions.some(m=>m.moderator_resident_id===id);
   const presCount=presSessions.filter(m=>m.presenter_resident_id===id||m.moderator_resident_id===id).length;
   const commPct=Math.round(((COMM_SC[id]||0)/10)*100);
@@ -4071,96 +4106,6 @@ function canmedsStateStyle(s){return CANMEDS_STATES[s]||CANMEDS_STATES.awaiting;
 // The PD has confirmed this resident's year is completely recorded. Until then an empty
 // domain means "nobody has typed it in", not "the resident did not do it".
 function canmedsRecordComplete(id){return !!(KPI_SCORES[id]||{}).canmedsVerifiedAt;}
-// ═══ KPI Dashboard: viewing a closed year ═════════════════════════════════════════════════
-// The dashboard computes from nine stores that all hold the live year. Rather than teach every
-// reader a year argument, a closed year is loaded into a bundle and swapped INTO those stores
-// for the duration of one render of the module, then swapped back out (kpiScoped). Everything
-// the page computes - calcKPI, calcKPIQ, canmedsVerdicts, the Yearly tab - therefore sees the
-// closed year without knowing it. KPI_SCOPE_AY is the year the stores currently describe.
-let KPI_PAST={};          // {ay:{state,msg,scores,comm,proposals,quarterly,quizzes,advocacy,committees,mmAtt,teachAtt}}
-let KPI_SCOPE_AY=null;
-function kpiAY(){return KPI_SCOPE_AY||CURRENT_ACADEMIC_YEAR;}
-function kpiIsPast(){return kpiAY()<CURRENT_ACADEMIC_YEAR;}
-// Closed years with attendance data, the live year, never next year: a KPI cannot be read
-// before the year has been lived. Residents hold only published sessions, so an unpublished
-// year is not offered to them.
-function kpiYears(){return sessionYears(MM_SESSIONS.concat(TEACH_SESSIONS),false);}
-function kpiViewAY(){return ayClampTo(STATE.kpiAY,kpiYears());}
-function kpiSetYear(y){
-  if(y===kpiViewAY())return;
-  set({kpiAY:y,perfPeriod:null,mentorQ:null,kpiPropModal:null,canmedsModal:null});
-  if(y<CURRENT_ACADEMIC_YEAR&&!KPI_PAST[y])loadKpiPast(y);
-}
-// PD-only edits on this page ask this instead of isPD(): a closed year takes no edits from anyone.
-function kpiPdEdit(){return isPD()&&!kpiIsPast();}
-// Default quarter: the live one, or the last one once the year is closed.
-function kpiQuarterDefault(){return kpiIsPast()?4:currentQuarter();}
-function kpiScoped(ay,fn){
-  const b=KPI_PAST[ay];
-  if(ay===CURRENT_ACADEMIC_YEAR||!b||b.state!=="ready")return fn();
-  const s={KPI_SCORES,COMM_SC,KPI_PROPOSALS,KPI_QUARTERLY,QUIZZES,ADVOCACY,COMMITTEES,MM_ATT_LIVE,TEACH_ATT_LIVE};
-  KPI_SCOPE_AY=ay;KPI_SCORES=b.scores;COMM_SC=b.comm;KPI_PROPOSALS=b.proposals;KPI_QUARTERLY=b.quarterly;
-  QUIZZES=b.quizzes;ADVOCACY=b.advocacy;COMMITTEES=b.committees;MM_ATT_LIVE=b.mmAtt;TEACH_ATT_LIVE=b.teachAtt;
-  try{return fn();}
-  finally{
-    KPI_SCOPE_AY=null;KPI_SCORES=s.KPI_SCORES;COMM_SC=s.COMM_SC;KPI_PROPOSALS=s.KPI_PROPOSALS;KPI_QUARTERLY=s.KPI_QUARTERLY;
-    QUIZZES=s.QUIZZES;ADVOCACY=s.ADVOCACY;COMMITTEES=s.COMMITTEES;MM_ATT_LIVE=s.MM_ATT_LIVE;TEACH_ATT_LIVE=s.TEACH_ATT_LIVE;
-  }
-}
-// One year, every store, in one go: a half-loaded year would score residents against half
-// their evidence. Mapped exactly as the live loaders map, so the readers cannot tell them apart.
-async function loadKpiPast(ay){
-  KPI_PAST[ay]={state:"loading"};render();
-  const[sc,qr,pr,qd,ad,cm]=await Promise.all([
-    sb.from("kpi_scores").select("*").eq("academic_year",ay),
-    sb.from("kpi_quarterly").select("*").eq("academic_year",ay),
-    sb.from("kpi_proposals").select("*").eq("academic_year",ay).order("proposed_at",{ascending:false}),
-    sb.from("quizzes").select("*").eq("academic_year",ay).order("date"),
-    fetchAllRows(()=>sb.from("advocacy_activities").select("*").eq("academic_year",ay).order("id",{ascending:true})),
-    fetchAllRows(()=>sb.from("committee_memberships").select("*").eq("academic_year",ay).order("id",{ascending:true}))
-  ]);
-  let bad=[sc,qr,pr,qd,ad,cm].find(r=>r.error);
-  let scd=[];
-  const ids=(qd.data||[]).map(q=>q.id);
-  if(!bad&&ids.length){const r=await fetchAllRows(()=>sb.from("quiz_scores").select("*").in("quiz_id",ids).order("id"));if(r.error)bad=r;else scd=r.data||[];}
-  if(bad){KPI_PAST[ay]={state:"error",msg:bad.error.message};render();return;}
-  const scores={},comm={};
-  (sc.data||[]).forEach(k=>{
-    scores[k.resident_id]={commScore:k.committee_score||0,researchDone:!!k.research_participated,qiDone:!!k.qi_participated,bonusPublished:!!k.bonus_published,bonusOral:!!k.bonus_oral,bonusPoster:!!k.bonus_poster,awardsHonors:!!k.awards_honors,volunteering:!!k.volunteering,canmedsVerifiedAt:k.canmeds_verified_at||null,canmedsVerifiedBy:k.canmeds_verified_by||null};
-    comm[k.resident_id]=k.committee_score||0;
-  });
-  const quarterly={};
-  (qr.data||[]).forEach(r=>{if(!quarterly[r.resident_id])quarterly[r.resident_id]={};quarterly[r.resident_id][r.quarter]=r;});
-  const scByQuiz={};
-  scd.forEach(s=>{if(!scByQuiz[s.quiz_id])scByQuiz[s.quiz_id]={};scByQuiz[s.quiz_id][s.resident_id]=s.score;});
-  const quizzes=(qd.data||[]).map(q=>({id:q.id,title:q.title,date:q.date,block:q.block_number,max:q.max_score,published:q.published,assigned_mentor_id:q.assigned_mentor_id,sc:scByQuiz[q.id]||{}}));
-  KPI_PAST[ay]={state:"ready",scores,comm,proposals:pr.data||[],quarterly,quizzes,
-    advocacy:canmedsByRes(ad.data),committees:canmedsByRes(cm.data),
-    mmAtt:buildAttMap(MM_ATT_RAW,MM_SESSION_BY_ID,ay).att,teachAtt:buildAttMap(TEACH_ATT_RAW,TEACH_SESSION_BY_ID,ay).att};
-  render();
-}
-function kpiYearBar(){
-  const years=kpiYears();
-  if(years.length<2)return null;
-  return el("div",{st:{padding:"14px 28px 0"}},renderAYBar(kpiViewAY(),kpiSetYear,null,{years:years}));
-}
-// The render entry for the module: a closed year is drawn inside kpiScoped once its bundle is
-// in; until then, or on an error, the page shows the year bar and a line, never live numbers
-// under a closed-year label. Mentors' own landing page always reads the live year.
-function renderKPIYear(){
-  const ay=kpiViewAY();
-  if(ay===CURRENT_ACADEMIC_YEAR||(isConsultant()&&!STATE.kpiDrill))return renderKPI();
-  const b=KPI_PAST[ay];
-  if(!b)loadKpiPast(ay);
-  const shell=(msg,cls)=>el("div",{st:{background:"#FEFBF3",minHeight:"100%"}},kpiYearBar(),
-    el("div",{st:{padding:"8px 28px 40px"}},el("p",{cls:cls||"sh"},msg)));
-  if(!b||b.state==="loading")return shell("Loading "+ayLabel(ay)+"\u2026");
-  if(b.state==="error")return shell("Could not load "+ayLabel(ay)+": "+b.msg,"alert-red");
-  return kpiScoped(ay,()=>{
-    if(!yearVisRes(ay).length)return shell(isResident()?"You were not on the programme in "+ayLabel(ay)+".":"Nobody you can see was on the programme in "+ayLabel(ay)+".");
-    return renderKPI();
-  });
-}
 // Circuit breaker: zero awareness campaigns exist programme-wide and the activity is opt-in,
 // so nobody has been offered one and nobody can have missed one. Delete this function and the
 // single branch that reads it once the first campaign is recorded.
@@ -4286,7 +4231,6 @@ function canmedsVerdicts(id,opts){
   var presLeg=MM_SESSIONS.length
     ?(k.presCount>0
       ?{state:"met",value:k.presCount+" session"+(k.presCount!==1?"s":""),note:"Presented or moderated this year"}
-      :kpiIsPast()?{state:"not_met",value:"None",note:"No presentation in "+ayLabel(kpiAY())}
       :{state:"in_progress",value:"None yet",note:"Due by the end of the academic year"})
     :{state:"awaiting",value:"\u2014",note:"The Morning Meeting schedule has not loaded."};
   var scholarLegs=[
@@ -7595,13 +7539,13 @@ function calcKPIQ(id,qBlocks){
   const tPct=tTotal?Math.round(tScore/tTotal*100):null;
   const pubQ=QUIZZES.filter(q=>q.published&&q.sc[id]!=null&&qBlocks.includes(q.block));
   const qAvg=pubQ.length?Math.round(pubQ.reduce((a,q)=>a+Math.round(q.sc[id]/q.max*100),0)/pubQ.length):null;
-  const presCount=MM_SESSIONS.filter(s=>(s.presenter_resident_id===id||s.moderator_resident_id===id)&&s.academic_year===kpiAY()&&qBlocks.includes(s.block_number)).length;
+  const presCount=MM_SESSIONS.filter(s=>(s.presenter_resident_id===id||s.moderator_resident_id===id)&&s.academic_year===CURRENT_ACADEMIC_YEAR&&qBlocks.includes(s.block_number)).length;
   return{mmPct,mmAtt,mmTotal,tPct,tAtt,tTotal,qAvg,quizCount:pubQ.length,presCount};
 }
 // Compact quarterly breakdown card — reused in resident KPI page and admin profile.
 function renderQuarterlyKPICard(resId){
   const kpiColor=v=>kpiBandColor(v,"#dc2626");
-  const q=STATE.mentorQ||kpiQuarterDefault();
+  const q=STATE.mentorQ||currentQuarter();
   const qBlocks=QUARTER_BLOCKS[q];
   const kq=calcKPIQ(resId,qBlocks);
   const miniStat=(label,val,detail)=>el("div",{st:{flex:"1",minWidth:"0"}},
@@ -7641,7 +7585,7 @@ function renderMentorHome(){
     el("div",{cls:"card"},el("p",{cls:"sh"},"No residents are currently assigned to you. Ask the Program Director to assign residents."))
   );
   const kpiColor=v=>kpiBandColor(v,"#dc2626");
-  const q=STATE.mentorQ||kpiQuarterDefault();
+  const q=STATE.mentorQ||currentQuarter();
   const qBlocks=QUARTER_BLOCKS[q];
   return el("div",{cls:"content"},
     el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",marginBottom:"28px"}},
@@ -7727,7 +7671,7 @@ function exportKpiPDF(res,k){
   .footer{margin-top:32px;font-size:.75rem;color:#9ca3af}@media print{body{margin:16px}}</style></head>
   <body>
   <h1>KPI Report — ${res.name}</h1>
-  <div class="sub">${res.level} · Mentor: ${mentorName(res.id)} · AY ${kpiAY()}–${kpiAY()+1}</div>
+  <div class="sub">${res.level} · Mentor: ${mentorName(res.id)} · AY ${CURRENT_ACADEMIC_YEAR}–${CURRENT_ACADEMIC_YEAR+1}</div>
   <div class="score">${k.overall}%</div><div style="color:#6b7280;margin-bottom:8px">Overall KPI Score</div>
   <div style="background:#e5e7eb;border-radius:4px;height:10px"><div style="background:${kpiColor(k.overall)};width:${Math.min(k.overall,100)}%;height:10px;border-radius:4px"></div></div>
   <h2> Ongoing Performance (50%)</h2>
@@ -8195,12 +8139,12 @@ function renderCanmedsView(resId){
 // Block n is [n], quarter q is QUARTER_BLOCKS[q], annual is all 13 blocks. No new aggregation
 // is defined here on purpose, so these numbers cannot drift from the quarterly card.
 function renderPerformanceView(resId){
-  const allBlocks=rotaPeriods(kpiAY()).map((_,i)=>i+1);
+  const allBlocks=rotaPeriods(CURRENT_ACADEMIC_YEAR).map((_,i)=>i+1);
   const grain=STATE.perfGrain||"block";
   const periods=grain==="block"?allBlocks:grain==="quarter"?[1,2,3,4]:[0];
   let sel=STATE.perfPeriod;
   if(grain==="annual")sel=0;
-  else if(periods.indexOf(sel)<0)sel=kpiIsPast()?(grain==="block"?allBlocks[allBlocks.length-1]:4):(grain==="block"?CURRENT_PERIOD:currentQuarter());
+  else if(periods.indexOf(sel)<0)sel=grain==="block"?CURRENT_PERIOD:currentQuarter();
   const blocksFor=p=>grain==="block"?[p]:grain==="quarter"?(QUARTER_BLOCKS[p]||[]):allBlocks;
   const selBlocks=blocksFor(sel);
   const kq=calcKPIQ(resId,selBlocks);
@@ -8213,11 +8157,11 @@ function renderPerformanceView(resId){
     ...[["block","Block"],["quarter","Quarter"],["annual","Annual"]].map(gg=>
       el("button",{cls:grain===gg[0]?"on":"",onClick:()=>set({perfGrain:gg[0]})},gg[1])));
   const chipRow=grain==="annual"
-    ?el("div",{cls:"pcap"},"All "+allBlocks.length+" blocks \u00b7 AY "+kpiAY()+"\u2013"+(kpiAY()+1))
+    ?el("div",{cls:"pcap"},"All "+allBlocks.length+" blocks \u00b7 AY "+CURRENT_ACADEMIC_YEAR+"\u2013"+(CURRENT_ACADEMIC_YEAR+1))
     :el("div",{cls:"pchips"},...periods.map(p=>el("button",{cls:"pchip"+(p===sel?" on":""),
         onClick:()=>set({perfPeriod:p})},grain==="block"?("B"+p):("Q"+p))));
   const periodCap=grain==="block"
-    ?el("div",{cls:"pcap"},"Block "+sel+" \u00b7 "+rotaPeriods(kpiAY())[sel-1])
+    ?el("div",{cls:"pcap"},"Block "+sel+" \u00b7 "+rotaPeriods(CURRENT_ACADEMIC_YEAR)[sel-1])
     :grain==="quarter"?el("div",{cls:"pcap"},QUARTER_LABELS[sel]+" \u00b7 blocks "+selBlocks.join(", ")):null;
 
   function delta(cur,pv,noun){
@@ -8608,13 +8552,13 @@ function renderCanmedsRecords(resId){
 }
 
 function renderKPI(){
-  const vr=yearVisRes(kpiAY());
+  const vr=visRes();
   const u=STATE.user;
   // Mentors land on their own home, but must be able to open a mentee's KPI page --
   // renderMentorHome's own cards link into it, so an unconditional bounce made them dead.
   if(isConsultant()&&!STATE.kpiDrill)return renderMentorHome();
   let selId=isResident()?u.rid:(STATE.kpiSelRes||vr[0]?.id);
-  const res=vr.find(r=>r.id===selId)||resById(selId)||vr[0];
+  const res=resById(selId)||vr[0];
   if(!res)return el("div",null,"No residents");
   const k=calcKPI(res.id);
   const kpiColor=v=>kpiBandColor(v,"#dc2626");
@@ -8622,9 +8566,9 @@ function renderKPI(){
   canmedsInjectCss();
   const cvHead=CANMEDS_LOADED?canmedsVerdicts(res.id,{k:k}):null;
   const canEdit_=canEditKPI(res.id);
-  const isMyRes=isResident()&&u.rid===res.id&&!kpiIsPast();
+  const isMyRes=isResident()&&u.rid===res.id;
   const isMentor=isConsultant()&&MENTORS[res.id]===u.cid;
-  const canSetMilestone=(kpiPdEdit()||STATE.user?.role==="chief"||isMentor)&&!kpiIsPast();
+  const canSetMilestone=isPD()||STATE.user?.role==="chief"||isMentor;
 
   // ── Achievement card with proposal/approval flow ──────────────
   function renderProposalDetails(p){
@@ -8668,10 +8612,10 @@ function renderKPI(){
       // All approved proposals with individual undo buttons
       ...approvedProps.map(ap=>el("div",{st:{borderTop:"1px solid #dcfce7",paddingTop:"8px",marginTop:"4px"}},
         renderProposalDetails(ap),
-        kpiPdEdit()?el("button",{cls:"sbtn ghost",st:{fontSize:".7rem",padding:"2px 8px",color:"#dc2626",borderColor:"#fca5a5",marginTop:"4px"},onClick:()=>revokeKpiApproval(res.id,fieldKey,ap.id)},"Undo"):null
+        isPD()?el("button",{cls:"sbtn ghost",st:{fontSize:".7rem",padding:"2px 8px",color:"#dc2626",borderColor:"#fca5a5",marginTop:"4px"},onClick:()=>revokeKpiApproval(res.id,fieldKey,ap.id)},"Undo"):null
       )),
       // PD review panel for pending proposals
-      kpiPdEdit()&&pending.length?el("div",{st:{marginTop:"6px"}},
+      isPD()&&pending.length?el("div",{st:{marginTop:"6px"}},
         ...pending.map(p=>el("div",{st:{background:"#fff",border:"1px solid #fde68a",borderRadius:"8px",padding:"8px 10px",marginBottom:"4px"}},
           el("div",{st:{fontSize:".78rem",fontWeight:"600",marginBottom:"6px"}}, "Submitted by "+(p.proposed_by_role==="resident"?"the resident":p.proposed_by_role==="consultant"?"the mentor":p.proposed_by_role==="chief"?"Chief Resident":p.proposed_by_role)+ " · "+new Date(p.proposed_at).toLocaleDateString("en-GB",{day:"numeric",month:"short"})
           ),
@@ -8695,7 +8639,7 @@ function renderKPI(){
 
   // ── Quarterly milestone card ──────────────────────────────────
   function milestoneCard(type,iconPaths,textKey,achievedKey,placeholder){
-    const q=STATE.mentorQ||kpiQuarterDefault();
+    const q=STATE.mentorQ||currentQuarter();
     const qd=(KPI_QUARTERLY[res.id]||{})[q]||{};
     const text=qd[textKey]||"";
     const achieved=!!qd[achievedKey];
@@ -8731,9 +8675,9 @@ function renderKPI(){
         el("div",{st:{fontSize:".68rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.35)",marginBottom:"8px"}},"Achievement Status"),
         achieved?el("div",{st:{display:"flex",alignItems:"center",gap:"8px"}},
           el("span",{st:{fontSize:".82rem",fontWeight:"600",color:"#26523A"}},"Achieved this quarter"),
-          canSetMilestone||kpiPdEdit()?el("button",{cls:"sbtn ghost",st:{fontSize:".72rem",padding:"3px 10px"},onClick:()=>saveKpiQuarterly(res.id,q,{[achievedKey]:false})},"Undo"):null
+          canSetMilestone||isPD()?el("button",{cls:"sbtn ghost",st:{fontSize:".72rem",padding:"3px 10px"},onClick:()=>saveKpiQuarterly(res.id,q,{[achievedKey]:false})},"Undo"):null
         ):pendingProp.length?el("div",null,
-          kpiPdEdit()?el("div",null,...pendingProp.map(p=>el("div",{st:{background:"rgba(203,161,85,.08)",border:"1px solid rgba(203,161,85,.3)",borderRadius:"10px",padding:"10px 12px",marginBottom:"6px"}},
+          isPD()?el("div",null,...pendingProp.map(p=>el("div",{st:{background:"rgba(203,161,85,.08)",border:"1px solid rgba(203,161,85,.3)",borderRadius:"10px",padding:"10px 12px",marginBottom:"6px"}},
             el("div",{st:{fontSize:".74rem",fontWeight:"600",marginBottom:"6px",color:"rgba(31,26,18,.55)"}}, "Claimed by "+(p.proposed_by_role==="resident"?"the resident":p.proposed_by_role==="consultant"?"the mentor":"Chief Resident")+" · "+new Date(p.proposed_at).toLocaleDateString("en-GB",{day:"numeric",month:"short"})
             ),
             p.note?el("div",{st:{fontSize:".8rem",marginBottom:"8px",fontStyle:"italic",color:"rgba(31,26,18,.6)"}},"\""+p.note+"\""):null,
@@ -8743,10 +8687,10 @@ function renderKPI(){
             )
           ))):el("div",{st:{fontSize:".8rem",color:"#7a5a10"}},"Submitted — awaiting PD review")
         ):el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap"}},
-          kpiPdEdit()||canSetMilestone?el("button",{cls:"sbtn primary",st:{fontSize:".78rem"},onClick:async()=>{
-            if(kpiPdEdit()){await saveKpiQuarterly(res.id,q,{[achievedKey]:true});}
+          isPD()||canSetMilestone?el("button",{cls:"sbtn primary",st:{fontSize:".78rem"},onClick:async()=>{
+            if(isPD()){await saveKpiQuarterly(res.id,q,{[achievedKey]:true});}
             else{const note=window.prompt("Optional note:","");if(note===null)return;await submitKpiProposal(res.id,achievedKey,q,note||null);}
-          }},kpiPdEdit()?"Mark Achieved":"Submit as Achieved"):null,
+          }},isPD()?"Mark Achieved":"Submit as Achieved"):null,
           isMyRes&&!canSetMilestone?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem"},onClick:async()=>{
             const note=window.prompt("Optional supporting note:","");if(note===null)return;
             await submitKpiProposal(res.id,achievedKey,q,note||null);
@@ -8758,7 +8702,7 @@ function renderKPI(){
 
   // ── Quarterly tab ─────────────────────────────────────────────
   function renderQuarterlyTab(){
-    const q=STATE.mentorQ||kpiQuarterDefault();
+    const q=STATE.mentorQ||currentQuarter();
     const qBlocks=QUARTER_BLOCKS[q];
     const kq=calcKPIQ(res.id,qBlocks);
     const statBox=(label,iconPaths,mainVal,detail,subColor)=>el("div",{st:{flex:"1",minWidth:"0",padding:"16px 18px",background:"#F6EFE2",borderRadius:"12px"}},
@@ -8817,7 +8761,7 @@ function renderKPI(){
       // Expanded view for approved proposals
       ...approvedProps.map(ap=>el("div",{st:{padding:"6px 12px 6px 33px",background:"rgba(127,184,156,.07)",borderBottom:"1px solid rgba(31,26,18,.04)",fontSize:".74rem",color:"rgba(31,26,18,.5)"}},
         renderProposalDetails(ap),
-        kpiPdEdit()?el("button",{cls:"sbtn ghost",st:{fontSize:".68rem",padding:"2px 8px",color:"#dc2626",borderColor:"#fca5a5",marginTop:"4px"},onClick:()=>revokeKpiApproval(res.id,fieldKey,ap.id)},"Undo"):null
+        isPD()?el("button",{cls:"sbtn ghost",st:{fontSize:".68rem",padding:"2px 8px",color:"#dc2626",borderColor:"#fca5a5",marginTop:"4px"},onClick:()=>revokeKpiApproval(res.id,fieldKey,ap.id)},"Undo"):null
       )),
       // The research record, which carries through the whole training. A proposal is one year's
       // evidence; these rows are why the standard still reads as met in the years after it.
@@ -8827,7 +8771,7 @@ function renderKPI(){
         el("div",{st:{fontSize:".66rem",marginTop:"2px",color:"#5C5345",fontStyle:"italic"}},"On the research record \u2014 counts for the whole training, not only this year")
       )):[]),
       // PD review panel
-      kpiPdEdit()&&pending.length?el("div",{st:{padding:"8px 12px 8px 33px",background:"rgba(203,161,85,.06)",borderBottom:"1px solid rgba(31,26,18,.04)"}},
+      isPD()&&pending.length?el("div",{st:{padding:"8px 12px 8px 33px",background:"rgba(203,161,85,.06)",borderBottom:"1px solid rgba(31,26,18,.04)"}},
         ...pending.map(p=>el("div",{st:{marginBottom:"6px"}},
           el("div",{st:{fontSize:".72rem",fontWeight:"600",marginBottom:"4px",color:"rgba(31,26,18,.5)"}}, "Submitted by "+(p.proposed_by_role==="resident"?"the resident":p.proposed_by_role==="consultant"?"the mentor":"Chief Resident")+ " · "+new Date(p.proposed_at).toLocaleDateString("en-GB",{day:"numeric",month:"short"})
           ),
@@ -8863,7 +8807,7 @@ function renderKPI(){
       ),
       el("div",{st:{flex:"1"}},
         el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1.2rem",fontWeight:"600",color:"#FEFBF3",lineHeight:"1.2"}},res.name,chiefBadge(res.id)),
-        el("div",{st:{fontSize:".73rem",color:"rgba(254,251,243,.65)",marginTop:"3px"}},res.level+" · Mentor: "+mentorName(res.id)+" · AY "+kpiAY()+"–"+(kpiAY()+1))
+        el("div",{st:{fontSize:".73rem",color:"rgba(254,251,243,.65)",marginTop:"3px"}},res.level+" · Mentor: "+mentorName(res.id)+" · AY "+CURRENT_ACADEMIC_YEAR+"–"+(CURRENT_ACADEMIC_YEAR+1))
       ),
       el("div",{st:{textAlign:"center"}},
         el("div",{st:{position:"relative",width:"64px",height:"64px"}},
@@ -8887,7 +8831,7 @@ function renderKPI(){
         ),
         el("div",{st:{fontSize:".6rem",color:"rgba(254,251,243,.6)",fontWeight:"600",textTransform:"uppercase",letterSpacing:".06em",marginTop:"4px"}},"KPI met")
       ),
-      el("button",{st:{marginLeft:"8px",display:"flex",alignItems:"center",gap:"5px",padding:"7px 14px",borderRadius:"9999px",border:"1px solid rgba(255,255,255,.25)",background:"rgba(255,255,255,.1)",fontSize:".74rem",fontWeight:"600",color:"rgba(254,251,243,.8)",cursor:"pointer",transition:"all .15s"},onClick:()=>kpiScoped(kpiViewAY(),()=>exportKpiPDF(res,k))},
+      el("button",{st:{marginLeft:"8px",display:"flex",alignItems:"center",gap:"5px",padding:"7px 14px",borderRadius:"9999px",border:"1px solid rgba(255,255,255,.25)",background:"rgba(255,255,255,.1)",fontSize:".74rem",fontWeight:"600",color:"rgba(254,251,243,.8)",cursor:"pointer",transition:"all .15s"},onClick:()=>exportKpiPDF(res,k)},
         svgIcon('<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',13,13), "PDF" )
     )
   );
@@ -8910,7 +8854,7 @@ function renderKPI(){
           svgIcon('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',10,10),"Performance" )
       ),
       el("div",{st:{background:"#FEFBF3",borderRadius:"16px",padding:"16px 14px",textAlign:"center",cursor:"pointer",boxShadow:"0 4px 20px rgba(31,26,18,.10)",border:"2px solid "+(tab==="quarterly"?"#7c3aed":"transparent"),transition:"border-color .2s"},onClick:()=>set({kpiTab:"quarterly"})},
-        el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1.5rem",fontWeight:"700",lineHeight:"1",marginBottom:"4px",color:"#7c3aed"}}, "Q"+(STATE.mentorQ||kpiQuarterDefault())
+        el("div",{st:{fontFamily:"'Playfair Display',Georgia,serif",fontSize:"1.5rem",fontWeight:"700",lineHeight:"1",marginBottom:"4px",color:"#7c3aed"}}, "Q"+(STATE.mentorQ||currentQuarter())
         ),
         el("div",{st:{fontSize:".65rem",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"rgba(31,26,18,.35)",display:"flex",alignItems:"center",justifyContent:"center",gap:"4px"}},
           svgIcon('<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',10,10),"Quarterly" )
@@ -8944,7 +8888,7 @@ function renderKPI(){
       txt,el("div",{st:{flex:"1",height:"1px",background:"rgba(31,26,18,.08)"}})
     );
     return el("div",null,
-      kpiPdEdit()&&pendingCount>0?el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},pendingCount+" achievement submission"+(pendingCount>1?"s":"")+" pending your review."):null,
+      isPD()&&pendingCount>0?el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},pendingCount+" achievement submission"+(pendingCount>1?"s":"")+" pending your review."):null,
       sectionLbl("Committee Participation · "+KPI_W.comm+"% weight"),
       el("div",{st:{marginBottom:"28px",display:"flex",alignItems:"center",gap:"16px"}},
         canEdit_?el("div",{st:{display:"flex",alignItems:"center",gap:"10px"}},
@@ -9016,7 +8960,6 @@ function renderKPI(){
   ):null;
 
   return el("div",{st:{background:"#FEFBF3",minHeight:"100%"}},
-    kpiYearBar(),
     isConsultant()?el("div",{st:{padding:"14px 28px 0"}},
       el("span",{st:{fontSize:".78rem",fontWeight:"600",color:"#c96a4a",cursor:"pointer"},
         onClick:()=>set({kpiDrill:false})},"\u2190 Back to my mentees")):null,
@@ -10086,7 +10029,7 @@ function renderPDOverview(){
 function renderAdminDeadlines(){
   const editing=STATE.annEditId;
   const showForm=STATE.annShowForm||editing;
-  const CATS=[["task","Task"],["research"," Research"],["qi"," QI Project"],["presentation"," Presentation"],["deadline"," Deadline"],["other"," Other"]];
+  const CATS=ANN_CATS.filter(c=>c.active!==false).map(c=>[c.key,c.label]);
   const today=toLocalYMD(new Date());
 
   function targetLabel(a){
@@ -12312,9 +12255,9 @@ function renderLeavePlan(){
 }
 
 // ─── MASTER ROTA BUILDER ──────────────────────────────────────────────────────
-const RB_MANDATORY_TOTAL=MANDATORY.reduce((s,m)=>s+SCFHS_TOTAL[m],0);
+let RB_MANDATORY_TOTAL=MANDATORY.reduce((s,m)=>s+SCFHS_TOTAL[m],0);
 // Rotations that carry no SCFHS minimum: service time, clinic, elective and leave.
-const RB_EXTRA=["Night Duty","Medical Consult","Outpatient Clinic","Elective","Annual Leave","Maternity Leave"];
+let RB_EXTRA=["Night Duty","Medical Consult","Outpatient Clinic","Elective","Annual Leave","Maternity Leave"];
 // A resident's two leave picks can both land in the same block, which makes the whole
 // block leave. Only an approved pick prefills the builder — a merely suggested one is
 // left for the PD to approve first, and the rail already shows it as pending.
@@ -13963,6 +13906,165 @@ function ctlScoringView(){
       el("button",{cls:"sbtn ghost",onClick:()=>{if(dirty)set({ctlScoring:null});}},"Discard changes"),
       el("button",{cls:"sbtn ghost",onClick:()=>set({ctlScoring:JSON.parse(JSON.stringify(SCORING_DEFAULT))})},"Reset to the portal's standard scoring")));
 }
+// Lists: the rotation catalogue and the announcement categories. Rows are updated in place and the
+// catalogues reloaded, so every picker and the SCFHS tracker read the change at once.
+const ROT_PALETTE=[["#ede9fe","#5b21b6"],["#fef2f2","#991b1b"],["rgba(38,82,58,.12)","#26523A"],["rgba(201,106,74,.12)","#9d174d"],["#e0f2fe","#0c4a6e"],
+  ["rgba(127,184,156,.15)","#26523A"],["rgba(164,122,40,.12)","#6a4c10"],["#f0fdf4","#166534"],["#ffe4e6","#9f1239"],["#f5f3ff","#4c1d95"],["#fdf4ff","#7e22ce"],
+  ["#fff7ed","#c2410c"],["#fee2e2","#7f1d1d"],["#f0f9ff","#0369a1"],["#F6EFE2","#475569"],["#fefce8","#854d0e"],["#eff6ff","#26523A"],["#f1f5f9","#64748b"],["#ecfeff","#155e75"],["#fdf2f8","#9d174d"]];
+function ctlListErr(e){return e&&/relation .* does not exist/i.test(e.message)?"The lists tables are missing. Run supabase/add_lists.sql first.":"Could not save: "+(e&&e.message||"unknown error");}
+async function ctlListSave(table,keyCol,key,fields,okMsg){
+  const{error}=await sb.from(table).update(Object.assign({updated_at:new Date().toISOString(),updated_by:STATE.user.profileId},fields)).eq(keyCol,key);
+  if(error){showToast(ctlListErr(error));return false;}
+  await loadAcademicYears();render();
+  if(okMsg)showToast(okMsg,"success");
+  return true;
+}
+async function ctlListInsert(table,row,okMsg){
+  const{error}=await sb.from(table).insert(Object.assign({updated_at:new Date().toISOString(),updated_by:STATE.user.profileId},row));
+  if(error){showToast(ctlListErr(error));return false;}
+  await loadAcademicYears();render();
+  showToast(okMsg,"success");
+  return true;
+}
+// Moves one row up or down and renumbers the order from 1, as the committee manager does.
+async function ctlListMove(table,keyCol,list,key,dir){
+  const l=list.slice(),i=l.findIndex(r=>r[keyCol]===key),j=i+dir;
+  if(i<0||j<0||j>=l.length)return;
+  const t=l[i];l[i]=l[j];l[j]=t;
+  for(let k=0;k<l.length;k++){
+    if(Number(l[k].sort_order)!==k+1){
+      const{error}=await sb.from(table).update({sort_order:k+1}).eq(keyCol,l[k][keyCol]);
+      if(error){showToast(ctlListErr(error));break;}
+    }
+  }
+  await loadAcademicYears();render();
+}
+// How many residents hold a rotation in the live year's rota, so a retirement can say what it touches.
+function ctlRotInUse(name){return RESIDENTS.filter(r=>Object.values(FULL_ROTA[r.id]||{}).includes(name)).length;}
+function ctlRotSwatches(cur,onPick){
+  return el("div",{st:{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}},
+    ...ROT_PALETTE.map(([bg,tx])=>el("button",{type:"button",title:bg+" / "+tx,"aria-label":"Colour "+tx,
+      st:{width:"30px",height:"22px",borderRadius:"6px",background:bg,color:tx,fontSize:".62rem",fontWeight:"800",cursor:"pointer",padding:"0",
+        border:cur&&cur.bg===bg&&cur.tx===tx?"2px solid #1F1A12":"1px solid rgba(31,26,18,.15)"},onClick:()=>onPick(bg,tx)},"Ab")));
+}
+function ctlListsView(){
+  if(LISTS_ERR)return el("div",{cls:"card"},
+    el("div",{cls:"card-title"},"Lists"),
+    el("p",{cls:"alert-yellow",st:{maxWidth:"72ch"}},"The portal is using its built-in lists because the tables could not be read ("+LISTS_ERR+"). Run supabase/add_lists.sql in the Supabase SQL editor, then open this tab again."));
+  const smallLabel=t=>el("div",{st:{fontSize:".62rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:"#5C5345",marginBottom:"3px"}},t);
+  const numIn=(label,value,onSave)=>el("div",null,smallLabel(label),
+    el("input",{type:"number",min:"0",max:"52",value:String(value),"aria-label":label,st:{width:"64px"},
+      onChange:e=>{const v=Math.max(0,Math.min(52,parseInt(e.target.value)||0));if(v!==Number(value))onSave(v);else e.target.value=String(value);}}));
+  // ── Rotations ──
+  const rotAdd=STATE.ctlRotNew||{name:"",abbr:"",mandatory:false,junior:0,senior:0,bg:ROT_PALETTE[18][0],tx:ROT_PALETTE[18][1]};
+  const setAdd=f=>{STATE.ctlRotNew=Object.assign({},STATE.ctlRotNew||rotAdd);f(STATE.ctlRotNew);};
+  const mandatoryNames=ROT_CATALOGUE.filter(r=>r.active!==false&&r.mandatory).map(r=>r.name);
+  const rotRow=(r,i)=>{
+    const retired=r.active===false,fixed=ROT_FIXED.includes(r.name),inUse=ctlRotInUse(r.name);
+    const cur={bg:r.color_bg,tx:r.color_tx};
+    return el("div",{st:{display:"grid",gridTemplateColumns:"auto minmax(150px,1fr) auto minmax(150px,1.2fr) auto",gap:"14px",alignItems:"start",
+        padding:"12px 6px",borderBottom:"1px solid rgba(31,26,18,.08)",opacity:retired?".6":"1"}},
+      el("div",{st:{display:"flex",flexDirection:"column",gap:"6px",alignItems:"center",width:"62px"}},
+        el("button",{type:"button",title:"Change colour","aria-label":"Change colour of "+r.name,cls:"rot-badge",
+          st:Object.assign({cursor:"pointer",border:"1px solid rgba(31,26,18,.2)"},rotStyle(r.name)),
+          onClick:()=>set({ctlRotColorFor:STATE.ctlRotColorFor===r.name?null:r.name})},r.abbr||r.name),
+        el("span",{st:{display:"flex",gap:"4px"}},
+          el("button",{cls:"sbtn ghost",st:{padding:"0 7px",fontSize:".8rem",lineHeight:"22px",opacity:i===0?".35":"1"},title:"Move up","aria-label":"Move up",
+            onClick:()=>{if(i>0)ctlListMove("rotation_catalogue","name",ROT_CATALOGUE,r.name,-1);}},"\u2191"),
+          el("button",{cls:"sbtn ghost",st:{padding:"0 7px",fontSize:".8rem",lineHeight:"22px",opacity:i===ROT_CATALOGUE.length-1?".35":"1"},title:"Move down","aria-label":"Move down",
+            onClick:()=>{if(i<ROT_CATALOGUE.length-1)ctlListMove("rotation_catalogue","name",ROT_CATALOGUE,r.name,1);}},"\u2193"))),
+      el("div",null,
+        el("div",{st:{fontWeight:"700",fontSize:".9rem",color:"#1F1A12"}},r.name),
+        el("div",{cls:"sh",st:{fontSize:".7rem",margin:"2px 0 8px"}},retired?"Retired \u00b7 old rota cells keep this label":(fixed?"Built into the portal's rules":"")+(inUse?(fixed?" \u00b7 ":"")+inUse+" resident"+(inUse===1?"":"s")+" this year":"")),
+        smallLabel("Short label"),
+        el("input",{type:"text",value:r.abbr||"",maxlength:"10","aria-label":"Short label for "+r.name,st:{width:"110px"},
+          onChange:e=>{const v=e.target.value.trim();if(!v){showToast("A rotation needs a short label.","warning");e.target.value=r.abbr;return;}if(v!==r.abbr)ctlListSave("rotation_catalogue","name",r.name,{abbr:v},"Saved.");}}),
+        STATE.ctlRotColorFor===r.name?el("div",{st:{marginTop:"8px"}},ctlRotSwatches(cur,(bg,tx)=>{STATE.ctlRotColorFor=null;ctlListSave("rotation_catalogue","name",r.name,{color_bg:bg,color_tx:tx},"Colour saved.");})):null),
+      el("div",null,
+        smallLabel("SCFHS"),
+        el("label",{st:{display:"flex",alignItems:"center",gap:"6px",fontSize:".8rem",fontWeight:"500",margin:"0 0 8px",cursor:"pointer"}},
+          el("input",{type:"checkbox",...(r.mandatory?{checked:""}:{}),"aria-label":"Mandatory rotation",st:{width:"auto",margin:"0"},
+            onChange:e=>ctlListSave("rotation_catalogue","name",r.name,{mandatory:!!e.target.checked},e.target.checked?r.name+" is now a mandatory rotation.":r.name+" is no longer mandatory.")}),
+          "Mandatory"),
+        el("div",{st:{display:"flex",gap:"10px"}},
+          numIn("Junior wks",r.junior_weeks||0,v=>ctlListSave("rotation_catalogue","name",r.name,{junior_weeks:v},"Saved.")),
+          numIn("Senior wks",r.senior_weeks||0,v=>ctlListSave("rotation_catalogue","name",r.name,{senior_weeks:v},"Saved.")))),
+      el("div",null,
+        smallLabel("Weeks count towards"),
+        el("select",{"aria-label":"Weeks count towards",st:{width:"100%",maxWidth:"190px",marginBottom:"8px"},
+          onChange:e=>ctlListSave("rotation_catalogue","name",r.name,{credits_to:e.target.value||null},"Saved.")},
+          el("option",{value:"",...(r.credits_to?{}:{selected:""})},"Itself only"),
+          ...mandatoryNames.filter(n=>n!==r.name).map(n=>el("option",{value:n,...(r.credits_to===n?{selected:""}:{})},n))),
+        smallLabel("Other spellings in rota imports"),
+        el("input",{type:"text",value:(r.aliases||[]).join(", "),placeholder:"e.g. cardio, card","aria-label":"Import spellings",st:{width:"100%"},
+          onChange:e=>{const v=[...new Set(e.target.value.split(",").map(x=>x.trim().toLowerCase()).filter(Boolean))];if(v.join("|")!==(r.aliases||[]).join("|"))ctlListSave("rotation_catalogue","name",r.name,{aliases:v},"Saved.");}})),
+      el("div",{st:{paddingTop:"18px"}},retired
+        ?el("button",{cls:"sbtn ghost",onClick:()=>ctlListSave("rotation_catalogue","name",r.name,{active:true},r.name+" restored.")},"Restore")
+        :el("button",{cls:"sbtn ghost",st:fixed?{opacity:".4",cursor:"not-allowed"}:{},title:fixed?"The portal's leave, builder and import rules depend on this name":"",
+            onClick:()=>{
+              if(fixed){showToast(r.name+" cannot be retired: the portal's own rules depend on it.","warning");return;}
+              showConfirm("Retire "+r.name+"? It leaves the rota pickers, the builder and the SCFHS lists"+(inUse?"; the "+inUse+" resident"+(inUse===1?"":"s")+" holding it this year keep it on their rota":"")+". You can restore it later.",
+                ()=>ctlListSave("rotation_catalogue","name",r.name,{active:false},r.name+" retired."),"Retire","warn");
+            }},"Retire")));
+  };
+  // ── Announcement categories ──
+  const catAdd=STATE.ctlCatNew||"";
+  const catRow=(c,i)=>{
+    const retired=c.active===false;
+    return el("div",{st:{display:"grid",gridTemplateColumns:"auto minmax(200px,1fr) auto",gap:"14px",alignItems:"center",padding:"10px 6px",borderBottom:"1px solid rgba(31,26,18,.08)",opacity:retired?".6":"1"}},
+      el("span",{st:{display:"flex",gap:"4px"}},
+        el("button",{cls:"sbtn ghost",st:{padding:"0 7px",fontSize:".8rem",lineHeight:"22px",opacity:i===0?".35":"1"},title:"Move up","aria-label":"Move up",
+          onClick:()=>{if(i>0)ctlListMove("announcement_categories","key",ANN_CATS,c.key,-1);}},"\u2191"),
+        el("button",{cls:"sbtn ghost",st:{padding:"0 7px",fontSize:".8rem",lineHeight:"22px",opacity:i===ANN_CATS.length-1?".35":"1"},title:"Move down","aria-label":"Move down",
+          onClick:()=>{if(i<ANN_CATS.length-1)ctlListMove("announcement_categories","key",ANN_CATS,c.key,1);}},"\u2193")),
+      el("div",null,
+        el("input",{type:"text",value:c.label,maxlength:"40","aria-label":"Category name",st:{width:"100%",maxWidth:"320px",fontWeight:"600"},
+          onChange:e=>{const v=e.target.value.trim();if(!v){showToast("A category needs a name.","warning");e.target.value=c.label;return;}if(v!==c.label)ctlListSave("announcement_categories","key",c.key,{label:v},"Renamed.");}}),
+        el("div",{cls:"sh",st:{fontSize:".7rem",marginTop:"3px"}},retired?"Retired \u00b7 announcements already in it are kept":"Stored as \""+c.key+"\"")),
+      retired?el("button",{cls:"sbtn ghost",onClick:()=>ctlListSave("announcement_categories","key",c.key,{active:true},c.label+" restored.")},"Restore")
+        :el("button",{cls:"sbtn ghost",onClick:()=>showConfirm("Retire the category "+c.label+"? It leaves the announcement form; announcements already in it are kept. You can restore it later.",
+            ()=>ctlListSave("announcement_categories","key",c.key,{active:false},c.label+" retired."),"Retire","warn")},"Retire"));
+  };
+  return el("div",null,
+    el("div",{cls:"card",st:{marginBottom:"18px"}},
+      el("div",{cls:"card-title"},"Rotations"),
+      el("p",{cls:"sh",st:{fontSize:".78rem",maxWidth:"74ch",marginBottom:"14px"}},
+        "Every rota picker, the rota builder, the Rotation Tracker and the SCFHS progress read this list. A rotation's name is what the rota stores, so it cannot be renamed; change its short label, colour, SCFHS minimum weeks (junior R1-R2, senior R3-R4), what its weeks count towards, the spellings the Excel import should recognise, and its order. Retire a rotation rather than deleting it."),
+      el("div",{st:{background:"rgba(31,26,18,.03)",borderRadius:"12px",padding:"14px 16px",marginBottom:"8px"}},
+        el("div",{st:{fontSize:".66rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:"#5C5345",marginBottom:"10px"}},"Add a rotation"),
+        el("div",{st:{display:"flex",gap:"14px",flexWrap:"wrap",alignItems:"flex-end",marginBottom:"10px"}},
+          el("div",null,el("label",null,"Name"),el("input",{type:"text",value:rotAdd.name,maxlength:"40",placeholder:"e.g. Dermatology",st:{width:"200px"},onInput:e=>setAdd(x=>{x.name=e.target.value;})})),
+          el("div",null,el("label",null,"Short label"),el("input",{type:"text",value:rotAdd.abbr,maxlength:"10",placeholder:"e.g. Derma",st:{width:"110px"},onInput:e=>setAdd(x=>{x.abbr=e.target.value;})})),
+          el("div",null,el("label",null,"Junior weeks"),el("input",{type:"number",min:"0",max:"52",value:String(rotAdd.junior),st:{width:"80px"},onInput:e=>setAdd(x=>{x.junior=Math.max(0,Math.min(52,parseInt(e.target.value)||0));})})),
+          el("div",null,el("label",null,"Senior weeks"),el("input",{type:"number",min:"0",max:"52",value:String(rotAdd.senior),st:{width:"80px"},onInput:e=>setAdd(x=>{x.senior=Math.max(0,Math.min(52,parseInt(e.target.value)||0));})})),
+          el("label",{st:{display:"flex",alignItems:"center",gap:"6px",fontSize:".8rem",fontWeight:"500",margin:"0 0 10px",cursor:"pointer"}},
+            el("input",{type:"checkbox",...(rotAdd.mandatory?{checked:""}:{}),st:{width:"auto",margin:"0"},onChange:e=>setAdd(x=>{x.mandatory=!!e.target.checked;})}),"Mandatory")),
+        el("div",{st:{display:"flex",gap:"16px",alignItems:"center",flexWrap:"wrap"}},
+          ctlRotSwatches({bg:rotAdd.bg,tx:rotAdd.tx},(bg,tx)=>set({ctlRotNew:Object.assign({},STATE.ctlRotNew||rotAdd,{bg,tx})})),
+          el("button",{cls:"sbtn primary",onClick:async()=>{
+            const cur=STATE.ctlRotNew||rotAdd,name=(cur.name||"").trim(),abbr=(cur.abbr||"").trim()||name.slice(0,10);
+            if(!name){showToast("Give the rotation a name first.","warning");return;}
+            const same=ROT_CATALOGUE.find(r=>r.name.trim().toLowerCase()===name.toLowerCase());
+            if(same){showToast(same.active===false?name+" already exists but is retired. Restore it from the list below.":"A rotation with that name already exists.","warning");return;}
+            const order=ROT_CATALOGUE.reduce((m,r)=>Math.max(m,Number(r.sort_order)||0),0)+1;
+            if(await ctlListInsert("rotation_catalogue",{name,abbr,color_bg:cur.bg,color_tx:cur.tx,mandatory:!!cur.mandatory,junior_weeks:cur.junior||0,senior_weeks:cur.senior||0,aliases:[],sort_order:order,active:true},name+" added."))STATE.ctlRotNew=null;
+          }},"Add rotation"))),
+      el("div",null,...ROT_CATALOGUE.map(rotRow))),
+    el("div",{cls:"card",st:{marginBottom:"18px"}},
+      el("div",{cls:"card-title"},"Announcement categories"),
+      el("p",{cls:"sh",st:{fontSize:".78rem",maxWidth:"74ch",marginBottom:"14px"}},"The categories offered when an announcement is written. Rename or reorder them, add one, or retire one you no longer use."),
+      el("div",{st:{display:"flex",gap:"12px",alignItems:"flex-end",flexWrap:"wrap",marginBottom:"8px"}},
+        el("div",null,el("label",null,"New category"),el("input",{type:"text",value:catAdd,maxlength:"40",placeholder:"e.g. Exam",st:{width:"220px"},onInput:e=>{STATE.ctlCatNew=e.target.value;}})),
+        el("button",{cls:"sbtn primary",st:{marginBottom:"10px"},onClick:async()=>{
+          const label=(STATE.ctlCatNew||"").trim();if(!label){showToast("Give the category a name first.","warning");return;}
+          if(ANN_CATS.some(c=>c.label.trim().toLowerCase()===label.toLowerCase())){showToast("A category with that name already exists.","warning");return;}
+          const base=label.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")||"category";
+          let key=base,n=2;while(ANN_CATS.some(c=>c.key===key)){key=base+"_"+n;n++;}
+          const order=ANN_CATS.reduce((m,c)=>Math.max(m,Number(c.sort_order)||0),0)+1;
+          if(await ctlListInsert("announcement_categories",{key,label,sort_order:order,active:true},label+" added."))STATE.ctlCatNew="";
+        }},"Add category")),
+      el("div",null,...ANN_CATS.map(catRow))));
+}
 function renderControl(){
   if(!ctlCanUse())return el("div",{cls:"content"},el("p",{cls:"alert-yellow"},"Only the Program Director and the deputy PD can change these settings."));
   const tab=STATE.ctlTab||"year";
@@ -13971,11 +14073,12 @@ function renderControl(){
     el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Control Centre"),
     el("div",{st:{fontSize:".82rem",color:"#5C5345"}},"Change how the portal is set up, without asking a developer."));
   const tabs=el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
-    ...[["year","Year setup"],["rules","Leave and rules"],["scoring","Scoring"],["committees","Committees"]].map(t=>{const on=tab===t[0];
+    ...[["year","Year setup"],["rules","Leave and rules"],["scoring","Scoring"],["lists","Lists"],["committees","Committees"]].map(t=>{const on=tab===t[0];
       return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:on?"600":"500",color:on?"#a94e2c":"#5C5345",cursor:"pointer",
         borderBottom:"2px solid "+(on?"#c96a4a":"transparent"),marginBottom:"-1px"},onClick:()=>set({ctlTab:t[0]})},t[1]);}));
   if(tab==="rules")return el("div",{cls:"content"},head,tabs,ctlRulesView());
   if(tab==="scoring")return el("div",{cls:"content"},head,tabs,ctlScoringView());
+  if(tab==="lists")return el("div",{cls:"content"},head,tabs,ctlListsView());
   if(tab==="committees"){
     return el("div",{cls:"content"},head,tabs,el("div",{cls:"card"},
       el("div",{cls:"card-title"},"Committees"),
@@ -17334,7 +17437,7 @@ function render(){
         case"rottrack":content=renderRotTrack();break;
         case"morning":content=renderMorning();break;
         case"teaching":content=renderTeaching();break;
-        case"kpi":content=renderKPIYear();break;
+        case"kpi":content=renderKPI();break;
         case"quiz":content=renderQuiz();break;
         case"leave":content=renderLeave();break;
         case"counseling":content=renderCounseling();break;
