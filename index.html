@@ -8122,16 +8122,43 @@ function canmedsInjectCss(){
   "#cm-wrap .strip{margin-top:34px;}"+
   "#cm-wrap .striphd{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap;}"+
   "#cm-wrap .striphd .t{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.11em;color:rgba(31,26,18,.32);}"+
-  "#cm-wrap .striphd .k{display:flex;gap:14px;margin-left:auto;font-size:.66rem;color:rgba(31,26,18,.42);}"+
-  "#cm-wrap .striphd .k i{display:inline-block;width:9px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle;}"+
-  "#cm-wrap .chart{position:relative;height:170px;border-bottom:1px solid rgba(31,26,18,.12);}"+
-  "#cm-wrap .thrline{position:absolute;left:0;right:0;border-top:1px dashed rgba(31,26,18,.18);}"+
-  "#cm-wrap .thrline b{position:absolute;right:0;top:-8px;background:#FEFBF3;padding-left:7px;font-size:.6rem;font-weight:600;color:rgba(31,26,18,.35);}"+
+  "#cm-wrap .striphd .k{display:flex;gap:16px;margin-left:auto;font-size:.7rem;color:#5C5345;flex-wrap:wrap;}"+
+  "#cm-wrap .striphd .k i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px;}"+
   "#cm-wrap .xax{display:grid;margin-top:7px;}"+
   "#cm-wrap .xax div{font-size:.63rem;color:rgba(31,26,18,.35);text-align:center;font-weight:600;}"+
   "#cm-wrap .xax div.cur{color:#9d4a2a;}"+
-  "#cm-wrap .qsep{position:absolute;top:0;bottom:0;width:1px;background:rgba(31,26,18,.07);}"+
-  "#cm-wrap .qlab{position:absolute;top:-1px;font-size:.6rem;font-weight:700;letter-spacing:.08em;color:rgba(31,26,18,.22);text-transform:uppercase;}"+
+  "#cm-wrap .pcB-top{display:flex;align-items:center;gap:12px;margin-top:4px;}"+
+  "#cm-wrap .pcB-zoom button{padding:4px 12px;font-size:.68rem;}"+
+  "#cm-wrap .pcB-win{font-size:.7rem;color:#5C5345;}"+
+  "#cm-wrap .pcB{margin-left:74px;padding-top:30px;}"+
+  "#cm-wrap .pcB-in{position:relative;border-bottom:1.5px solid rgba(31,26,18,.22);}"+
+  "#cm-wrap .pcB-grid{position:absolute;left:0;right:0;border-top:1px solid rgba(31,26,18,.06);}"+
+  "#cm-wrap .pcB-yt{position:absolute;left:-74px;width:64px;text-align:right;font-size:.62rem;font-weight:600;color:#6E6455;transform:translateY(-50%);font-variant-numeric:tabular-nums;line-height:1.1;}"+
+  "#cm-wrap .pcB-yt.std b{display:block;font-size:.7rem;font-weight:800;color:#1F1A12;}"+
+  "#cm-wrap .pcB-yt.std small{display:block;font-size:.56rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5C5345;}"+
+  "#cm-wrap .pcB-qsep{position:absolute;top:0;bottom:0;width:1px;background:rgba(31,26,18,.13);}"+
+  "#cm-wrap .pcB-wk{position:absolute;top:0;bottom:0;width:1px;background:rgba(31,26,18,.035);}"+
+  "#cm-wrap .pcB-ql{position:absolute;top:-24px;margin-left:4px;font-size:.6rem;font-weight:700;letter-spacing:.09em;color:#6E6455;text-transform:uppercase;white-space:nowrap;}"+
+  "#cm-wrap .pcB-sel{position:absolute;top:0;bottom:0;background:rgba(201,106,74,.09);border-left:1px solid rgba(201,106,74,.35);border-right:1px solid rgba(201,106,74,.35);}"+
+  "#cm-wrap .pcB-up{position:absolute;top:0;bottom:0;right:0;background:repeating-linear-gradient(135deg,transparent 0 7px,rgba(31,26,18,.035) 7px 8px);}"+
+  "#cm-wrap .pcB-up span{position:absolute;right:0;bottom:8px;font-size:.62rem;font-weight:600;color:#6E6455;background:#FEFBF3;padding:2px 6px;border-radius:4px;}"+
+  "#cm-wrap .pcB-std{position:absolute;left:-8px;right:0;border-top:1.5px dashed rgba(31,26,18,.32);}"+
+  "#cm-wrap .pcB-dot{position:absolute;z-index:2;width:11px;height:11px;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 0 2.5px #FEFBF3,0 1px 4px rgba(31,26,18,.25);}"+
+  "#cm-wrap .pcB-dot.sm{width:8px;height:8px;box-shadow:0 0 0 2px #FEFBF3;}"+
+  "#cm-wrap .pcB-dot.late{background:#CBA155!important;box-shadow:0 0 0 2.5px #FEFBF3,0 0 0 4px currentColor;}"+
+  "#cm-wrap .pcB-dot.absent{background:#FEFBF3!important;box-shadow:0 0 0 2.5px #a94e2c,0 0 0 4.5px #FEFBF3;}"+
+  "#cm-wrap .pcB-tag{position:absolute;z-index:3;transform:translate(14px,-50%);font-size:.72rem;font-weight:800;color:#FEFBF3;padding:3px 8px;border-radius:9999px;letter-spacing:.01em;box-shadow:0 1px 4px rgba(31,26,18,.18);font-variant-numeric:tabular-nums;white-space:nowrap;}"+
+  "#cm-wrap .pcB-tag.l{transform:translate(calc(-100% - 14px),-50%);}"+
+  "#cm-wrap .pcB-now{position:absolute;top:-4px;bottom:-6px;width:0;border-left:1.5px solid #c96a4a;z-index:1;}"+
+  "#cm-wrap .pcB-now b{position:absolute;bottom:10px;left:5px;font-size:.56rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#FEFBF3;background:#c96a4a;padding:2px 6px;border-radius:9999px;}"+
+  "#cm-wrap .pcB-xax{display:grid;margin-left:74px;margin-top:8px;}"+
+  "#cm-wrap .pcB-xax div{font-size:.64rem;color:#5C5345;text-align:center;font-weight:600;padding:0 3px;}#cm-wrap .pcB-xax div.fut{color:rgba(31,26,18,.3);}#cm-wrap .pcB-xax div.cur{color:#9d4a2a;font-weight:800;}"+
+  "#cm-wrap .pcB-key{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;font-size:.66rem;color:#5C5345;}"+
+  "#cm-wrap .pcB-key i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px;}"+
+  "#cm-wrap .pcB-key i.p{background:#5C5345;}#cm-wrap .pcB-key i.l{background:#CBA155;box-shadow:0 0 0 1.5px #5C5345;}#cm-wrap .pcB-key i.a{background:#FEFBF3;box-shadow:0 0 0 2px #a94e2c;}"+
+  "#cm-wrap .pcB-key .n{color:#6E6455;font-style:italic;}"+
+  "#cm-wrap .striphd .k b{margin-left:5px;color:#1F1A12;font-weight:700;}"+
+  "@media(max-width:760px){#cm-wrap .pcB,#cm-wrap .pcB-xax{margin-left:34px;}#cm-wrap .pcB-yt{left:-34px;width:30px;font-size:.56rem;}#cm-wrap .pcB-yt.std small{display:none;}#cm-wrap .pcB-tag{font-size:.62rem;padding:2px 6px;}#cm-wrap .pcB-xax div{font-size:.52rem;}}"+
   "#cm-wrap .annualonly{margin-top:36px;padding-top:16px;border-top:1px solid rgba(31,26,18,.09);}"+
   "#cm-wrap .ao-grid{display:flex;gap:34px;flex-wrap:wrap;margin-top:12px;}"+
   "#cm-wrap .ao{min-width:112px;}"+
@@ -8492,49 +8519,117 @@ function renderPerformanceView(resId){
     tile("MM presenter",kq.presCount,"","session"+(kq.presCount!==1?"s":"")+" over "+nb+" block"+(nb!==1?"s":""),prev&&prev.presCount,"#7a5a10","session"));
 
   // Trend strip. All 13 blocks stay on screen at every grain, with the selected period banded,
-  // so reading one period never hides the shape of the year.
+  // so reading one period never hides the shape of the year. Each metric is judged against its
+  // own standard (attendance 75%, quiz 60%): the old single 75% line was wrong for the quiz.
   const hasSeries=series.some(s=>s.mmPct!=null||s.tPct!=null||s.qAvg!=null);
-  const n=allBlocks.length,H=170;
-  const chart=el("div",{cls:"chart"});
-  if(hasSeries){
-    chart.appendChild(el("div",{cls:"thrline",st:{top:(H-H*0.75)+"px"}},el("b",null,"75% threshold")));
-    [3,6,9].forEach(bi=>chart.appendChild(el("div",{cls:"qsep",st:{left:(bi/n*100)+"%"}})));
-    [[0,"Q1"],[3,"Q2"],[6,"Q3"],[9,"Q4"]].forEach(q=>
-      chart.appendChild(el("div",{cls:"qlab",st:{left:(q[0]/n*100+1)+"%"}},q[1])));
-    if(grain!=="annual"&&selBlocks.length)chart.appendChild(el("div",{st:{position:"absolute",top:"0",bottom:"0",
-      background:"rgba(201,106,74,.07)",left:((selBlocks[0]-1)/n*100)+"%",width:(selBlocks.length/n*100)+"%"}}));
-    const NS="http://www.w3.org/2000/svg";
+  const n=allBlocks.length;
+  const live=!kpiIsPast();
+  const nowB=live?Math.min(CURRENT_PERIOD,n):n;          // blocks after this have not happened yet
+  const isSel=b=>grain!=="annual"&&selBlocks.indexOf(b)>=0;
+  const SER=[["mmPct","Morning Meeting","#c96a4a",SCORING.standards.attendance],
+             ["tPct","Academic Day","#A47A28",SCORING.standards.attendance],
+             ["qAvg","Quiz","#26523A",SCORING.standards.quiz]];
+  // every attendance mark and every quiz of the year as dated events, oldest first, each
+  // carrying the running average up to itself -- the line, the beads and the legend all read these
+  function attEvents(map){const ev=[];allBlocks.forEach(b=>{const blk=map[b]||{};Object.keys(blk).forEach(ds=>{const s=blk[ds][resId];
+    if(!s||s==="O")return;ev.push({d:new Date(ds+"T12:00:00"),st:s,sc:(s==="P"||s==="E")?1:s==="L"?0.5:0});});});return ev;}
+  const EV={mmPct:attEvents(MM_ATT_LIVE),tPct:attEvents(TEACH_ATT_LIVE),
+    qAvg:QUIZZES.filter(q=>q.published&&q.sc[resId]!=null&&allBlocks.indexOf(q.block)>=0).map(q=>({d:new Date(q.date+"T12:00:00"),st:"Q",sc:Math.round(q.sc[resId]/q.max*100)/100,title:q.title}))};
+  Object.keys(EV).forEach(k=>{const ev=EV[k].sort((a,b)=>a.d-b.d);let sum=0;ev.forEach((e,i)=>{sum+=e.sc;e.run=Math.round(sum/(i+1)*100);});});
+  const runOf=k=>EV[k].length?EV[k][EV[k].length-1].run:null;
+  const stripTitle="Running average, session by session"+(grain==="annual"?"":" · "+(grain==="block"?("Block "+sel):QUARTER_LABELS[sel])+" highlighted");
+
+  function chartB(){
+    const H=230,NS="http://www.w3.org/2000/svg",DAY=86400000;
+    const ranges=ayBlockRanges(kpiAY());
+    const today=new Date();today.setHours(12,0,0,0);
+    const yStart=ranges[0].start,yEnd=ranges[n-1].end;
+    // Zoom. "So far" keeps the chart full at every point of the year: it runs from the start of
+    // the year to a little past today, so week two shows two weeks, not two weeks and fifty
+    // blank ones. Closed years have no "so far" and open on the whole year.
+    const zooms=live?[["sofar","So far"],["quarter","Quarter"],["year","Year"]]:[["quarter","Quarter"],["year","Year"]];
+    let zoom=STATE.perfZoom||(live?"sofar":"year");
+    if(!zooms.some(z=>z[0]===zoom))zoom=live?"sofar":"year";
+    const curQ=grain==="quarter"?sel:grain==="block"?(Object.keys(QUARTER_BLOCKS).find(q=>QUARTER_BLOCKS[q].indexOf(sel)>=0)||1):(live?currentQuarter():4);
+    let winBlocks=allBlocks,w0,w1;
+    if(zoom==="quarter"){winBlocks=QUARTER_BLOCKS[curQ];w0=ranges[winBlocks[0]-1].start;w1=ranges[winBlocks[winBlocks.length-1]-1].end;}
+    else if(zoom==="sofar"){w0=yStart;w1=new Date(Math.min(yEnd.getTime(),Math.max(today.getTime()+10*DAY,yStart.getTime()+21*DAY)));
+      winBlocks=allBlocks.filter(b=>ranges[b-1].start<=w1);}
+    else{w0=yStart;w1=yEnd;}
+    const span=w1.getTime()-w0.getTime();
+    // 1.5% of breathing room each side so a bead on the first or last day is never clipped
+    const X=d=>1.5+97*Math.max(0,Math.min(1,(d.getTime()-w0.getTime())/span));
+    const outer=el("div",{cls:"pcB"}),plot=el("div",{cls:"pcB-in",st:{height:H+"px"}});outer.appendChild(plot);
+    // y axis and the standards, named on the axis so a label can never sit under a point
+    const stds={};SER.forEach(m=>{(stds[m[3]]=stds[m[3]]||[]).push(m[1]);});
+    [0,25,50,75,100].forEach(v=>{if(stds[v])return;
+      plot.appendChild(el("div",{cls:"pcB-grid",st:{top:(100-v)+"%"}}));
+      plot.appendChild(el("div",{cls:"pcB-yt",st:{top:(100-v)+"%"}},v+"%"));});
+    Object.keys(stds).forEach(t=>{
+      plot.appendChild(el("div",{cls:"pcB-std",st:{top:(100-t)+"%"}}));
+      plot.appendChild(el("div",{cls:"pcB-yt std",st:{top:(100-t)+"%"}},el("b",null,t+"%"),el("small",null,stds[t].length>1?"attendance":stds[t][0])));});
+    // block columns: a separator at every block start inside the window, week ticks between
+    winBlocks.forEach((b,i)=>{const r=ranges[b-1];
+      if(i)plot.appendChild(el("div",{cls:"pcB-qsep",st:{left:X(r.start)+"%"}}));
+      for(let t=r.start.getTime()+7*DAY;t<Math.min(r.end.getTime(),w1.getTime());t+=7*DAY)plot.appendChild(el("div",{cls:"pcB-wk",st:{left:X(new Date(t))+"%"}}));
+      plot.appendChild(el("div",{cls:"pcB-ql",st:{left:X(r.start)+"%"}},zoom==="year"?("B"+b):("Block "+b)));});
+    if(grain!=="annual"&&selBlocks.length){const a=ranges[selBlocks[0]-1].start,z=ranges[selBlocks[selBlocks.length-1]-1].end;
+      if(z>w0&&a<w1)plot.appendChild(el("div",{cls:"pcB-sel",st:{left:X(a)+"%",width:(X(z)-X(a))+"%"}}));}
+    if(live&&today<w1){const left=X(today);
+      plot.appendChild(el("div",{cls:"pcB-up",st:{left:left+"%"}},el("span",null,zoom==="sofar"?"next "+Math.round((w1-today)/DAY)+" days":Math.round((w1-today)/DAY)+" days to come")));
+      plot.appendChild(el("div",{cls:"pcB-now",st:{left:left+"%"}},el("b",null,"today")));}
+    // running average, session by session: every attendance mark and every quiz is a bead on
+    // the line, so the chart grows with each session instead of waiting for a block to close
     const svg=document.createElementNS(NS,"svg");
-    svg.setAttribute("viewBox","0 0 "+(n*40)+" "+H);
-    svg.setAttribute("preserveAspectRatio","none");
+    svg.setAttribute("viewBox","0 0 1000 "+H);svg.setAttribute("preserveAspectRatio","none");
     svg.style.cssText="position:absolute;inset:0;width:100%;height:100%;overflow:visible";
-    [["mmPct","#c96a4a"],["tPct","#A47A28"],["qAvg","#26523A"]].forEach(m=>{
-      const pts=[];
-      series.forEach((s,ix)=>{if(s[m[0]]==null)return;pts.push([ix*40+20,H-H*(s[m[0]]/100)]);});
+    const defs=document.createElementNS(NS,"defs");svg.appendChild(defs);
+    const tags=[],beadCls={P:"",E:"",L:" late",A:" absent"};
+    SER.forEach((m,mi)=>{
+      const k=m[0],col=m[2],ev=EV[k];
+      if(!ev.length)return;
+      const inWin=ev.filter(e=>e.d>=w0&&e.d<=w1),before=ev.filter(e=>e.d<w0);
+      const pts=inWin.map(e=>[X(e.d)*10,H-H*(e.run/100),e]);
+      if(before.length)pts.unshift([0,H-H*(before[before.length-1].run/100),null]);
       if(!pts.length)return;
+      const gid="pcBg"+mi,lg=document.createElementNS(NS,"linearGradient");
+      lg.setAttribute("id",gid);lg.setAttribute("x1","0");lg.setAttribute("x2","0");lg.setAttribute("y1","0");lg.setAttribute("y2","1");
+      [["0",".11"],["1","0"]].forEach(st=>{const s=document.createElementNS(NS,"stop");s.setAttribute("offset",st[0]);s.setAttribute("stop-color",col);s.setAttribute("stop-opacity",st[1]);lg.appendChild(s);});
+      defs.appendChild(lg);
+      const d=pts.map((p,ix)=>(ix?"L":"M")+p[0]+" "+p[1]).join(" ");
+      if(pts.length>1){const area=document.createElementNS(NS,"path");
+        area.setAttribute("d",d+" L"+pts[pts.length-1][0]+" "+H+" L"+pts[0][0]+" "+H+" Z");area.setAttribute("fill","url(#"+gid+")");svg.appendChild(area);}
       const path=document.createElementNS(NS,"path");
-      path.setAttribute("d",pts.map((p,ix)=>(ix?"L":"M")+p[0]+" "+p[1]).join(" "));
-      path.setAttribute("fill","none");path.setAttribute("stroke",m[1]);
-      path.setAttribute("stroke-width","2");path.setAttribute("stroke-linejoin","round");
-      path.setAttribute("vector-effect","non-scaling-stroke");
-      svg.appendChild(path);
-      pts.forEach(p=>{const c=document.createElementNS(NS,"circle");
-        c.setAttribute("cx",p[0]);c.setAttribute("cy",p[1]);c.setAttribute("r","3");
-        c.setAttribute("fill",m[1]);c.setAttribute("vector-effect","non-scaling-stroke");svg.appendChild(c);});
+      path.setAttribute("d",d);path.setAttribute("fill","none");path.setAttribute("stroke",col);
+      path.setAttribute("stroke-width","2.5");path.setAttribute("stroke-linejoin","round");path.setAttribute("stroke-linecap","round");
+      path.setAttribute("vector-effect","non-scaling-stroke");svg.appendChild(path);
+      pts.forEach(p=>{if(!p[2])return;const e=p[2];
+        const tip=m[1]+" · "+e.d.toLocaleDateString("en-GB",{day:"numeric",month:"short"})+(e.st==="Q"?" · "+e.title+" "+Math.round(e.sc*100)+"%":" · "+({P:"present",E:"excused",L:"late",A:"absent"}[e.st]))+" → running "+e.run+"%";
+        plot.appendChild(el("div",{cls:"pcB-dot"+(beadCls[e.st]||"")+(zoom==="year"?" sm":""),st:{left:(p[0]/10)+"%",top:(p[1]/H*100)+"%",background:col,color:col},title:tip}));});
+      const lp=pts[pts.length-1];tags.push({x:lp[0]/10,y:lp[1]/H*100,v:Math.round((H-lp[1])/H*100),col:col});
     });
-    chart.appendChild(svg);
+    plot.appendChild(svg);
+    tags.sort((a,b)=>a.y-b.y);const minGap=22/H*100;
+    for(let i=1;i<tags.length;i++)if(tags[i].y-tags[i-1].y<minGap)tags[i].y=tags[i-1].y+minGap;
+    tags.forEach(t=>plot.appendChild(el("div",{cls:"pcB-tag"+(t.x>84?" l":""),st:{left:t.x+"%",top:t.y+"%",background:t.col}},t.v+"%")));
+    // x axis: one cell per block in the window, sized by the days it occupies
+    const cols=winBlocks.map(b=>{const r=ranges[b-1];return Math.max(0,Math.min(r.end,w1)-Math.max(r.start,w0));});
+    const xax=el("div",{cls:"pcB-xax",st:{gridTemplateColumns:cols.map(c=>c+"fr").join(" ")}},
+      ...winBlocks.map((b,i)=>{const r=ranges[b-1];const lab=zoom==="year"?String(b):(r.start.getDate()+"/"+(r.start.getMonth()+1)+" – "+r.end.getDate()+"/"+(r.end.getMonth()+1));
+        return el("div",{cls:(isSel(b)?"cur":"")+(live&&r.start>today?" fut":""),st:{overflow:"hidden",whiteSpace:"nowrap"}},lab);}));
+    const zoomSeg=el("div",{cls:"seg pcB-zoom"},...zooms.map(z=>el("button",{cls:zoom===z[0]?"on":"",onClick:()=>set({perfZoom:z[0]})},z[1])));
+    const key=el("div",{cls:"pcB-key"},
+      el("span",null,el("i",{cls:"p"}),"present"),el("span",null,el("i",{cls:"l"}),"late"),el("span",null,el("i",{cls:"a"}),"absent"),
+      el("span",{cls:"n"},"Each bead is one session or quiz; the line is the running average for the year."));
+    return el("div",null,el("div",{cls:"pcB-top"},zoomSeg,el("div",{cls:"pcB-win"},zoom==="quarter"?QUARTER_LABELS[curQ]:zoom==="sofar"?"From "+yStart.toLocaleDateString("en-GB",{day:"numeric",month:"short"})+" to today":"AY "+kpiAY()+"–"+(kpiAY()+1))),outer,xax,key);
   }
-  const xax=el("div",{cls:"xax",st:{gridTemplateColumns:"repeat("+n+",1fr)"}},
-    ...allBlocks.map(b=>el("div",{cls:(grain!=="annual"&&selBlocks.indexOf(b)>=0)?"cur":""},String(b))));
+  const chart=chartB();
   const strip=el("div",{cls:"strip"},
     el("div",{cls:"striphd"},
-      el("div",{cls:"t"},grain==="annual"?"Every block across the year":"Every block \u00b7 "+(grain==="block"?("Block "+sel):QUARTER_LABELS[sel])+" highlighted"),
-      el("div",{cls:"k"},
-        el("span",null,el("i",{st:{background:"#c96a4a"}}),"Morning Meeting"),
-        el("span",null,el("i",{st:{background:"#A47A28"}}),"Academic Day"),
-        el("span",null,el("i",{st:{background:"#26523A"}}),"Quiz"))),
-    hasSeries?chart:el("div",{cls:"pfnone",st:{padding:"28px 0"}},"No attendance or quiz data recorded for this academic year yet."),
-    hasSeries?xax:null);
+      el("div",{cls:"t"},stripTitle),
+      el("div",{cls:"k"},...SER.map(m=>{const r=runOf(m[0]);
+        return el("span",{title:"Running average for the year so far"},el("i",{st:{background:m[2]}}),m[1],r==null?null:el("b",null,r+"%"));}))),
+    hasSeries||!live?chart:el("div",null,chart,el("div",{cls:"pfnone",st:{padding:"14px 0 0"}},"Nothing recorded for this academic year yet.")));
 
   // Gradients with no block dimension. Shown live on the annual slice and dimmed with a reason
   // elsewhere -- rendering them as zero on a single block would be a lie.
