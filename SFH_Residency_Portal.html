@@ -1817,6 +1817,12 @@ let CUMULATIVE_KPI={}; // {resId: {year: {scores:{...}, quarterly:{q:{...}}}}}
 let CUMULATIVE_KPI_LOADING=false;
 // CanMEDS KPI v2 (supabase/add_canmeds_kpi_v2*.sql) — three tables plus two server-side views.
 let RESEARCH_PROJECTS={}; // {resident_id:[row]} — every year, see loadCanmeds
+// {resident_id:[{year,title}]} — every year's approved QI projects, oldest first. A QI project is a
+// training milestone like a publication (PD, 11 Oct 2026): once approved it keeps Manager met in
+// every later year, so the year it was approved is carried as the evidence. Loaded with the
+// CanMEDS reads and never swapped by kpiScoped; readers filter on the year they are showing.
+let QI_EVER={};
+function qiBefore(id,ay){return (QI_EVER[id]||[]).filter(function(x){return x.year<ay;});}
 let ADVOCACY={};          // {resident_id:[row]} — current academic year only
 let COMMITTEES={};        // {resident_id:[row]} — current academic year only
 let RESEARCH_RAMP={};     // {resident_id:row} — six-state ramp_state, computed in SQL
@@ -2500,18 +2506,28 @@ function canmedsByRes(rows){
 // On ANY error nothing is populated and CANMEDS_ERR is set: an empty table and a failed read
 // look identical on screen, and the difference between them is "could not load" and
 // "38 residents failed". The KPI tab renders a banner off CANMEDS_ERR rather than zeros.
+function buildQiEver(props,flags){
+  const out={},seen={};
+  props.forEach(p=>{const d=parseProposalNote(p.note);(out[p.resident_id]=out[p.resident_id]||[]).push({year:p.academic_year,title:d.title||d.raw||"QI project"});seen[p.resident_id+"|"+p.academic_year]=true;});
+  flags.forEach(f=>{if(seen[f.resident_id+"|"+f.academic_year])return;(out[f.resident_id]=out[f.resident_id]||[]).push({year:f.academic_year,title:"QI project"});});
+  Object.keys(out).forEach(k=>out[k].sort((a,b)=>a.year-b.year));
+  return out;
+}
 async function loadCanmeds(){
   const ay=CURRENT_ACADEMIC_YEAR;
-  const[rp,ad,cm,rr,cs]=await Promise.all([
+  const[rp,ad,cm,rr,cs,qp,qs]=await Promise.all([
     // research_projects carries started_year, not academic_year, and publication is once per
     // TRAINING rather than per year — so this read is deliberately not year-filtered.
     fetchAllRows(()=>sb.from("research_projects").select("*").order("id",{ascending:true})),
     fetchAllRows(()=>sb.from("advocacy_activities").select("*").eq("academic_year",ay).order("id",{ascending:true})),
     fetchAllRows(()=>sb.from("committee_memberships").select("*").eq("academic_year",ay).order("id",{ascending:true})),
     fetchAllRows(()=>sb.from("research_ramp").select("*").order("resident_id",{ascending:true})),
-    fetchAllRows(()=>sb.from("committee_summary").select("*").order("resident_id",{ascending:true}))
+    fetchAllRows(()=>sb.from("committee_summary").select("*").order("resident_id",{ascending:true})),
+    // QI across every year: approved submissions, and the older per-year flag where a year has no submission
+    fetchAllRows(()=>sb.from("kpi_proposals").select("id,resident_id,academic_year,note").eq("field_key","qi").eq("status","approved").is("quarter",null).order("id",{ascending:true})),
+    fetchAllRows(()=>sb.from("kpi_scores").select("resident_id,academic_year").eq("qi_participated",true).order("resident_id",{ascending:true}))
   ]);
-  const bad=[rp,ad,cm,rr,cs].find(r=>r.error);
+  const bad=[rp,ad,cm,rr,cs,qp,qs].find(r=>r.error);
   if(bad){
     CANMEDS_ERR=bad.error.message;CANMEDS_LOADED=false;
     console.warn("canmeds load error",bad.error.message);render();return;
@@ -2521,6 +2537,7 @@ async function loadCanmeds(){
   ADVOCACY=canmedsByRes(ad.data);
   COMMITTEES=canmedsByRes(cm.data);
   RESEARCH_RAMP={};(rr.data||[]).forEach(r=>{RESEARCH_RAMP[r.resident_id]=r;});
+  QI_EVER=buildQiEver(qp.data||[],qs.data||[]);
   // committee_summary aggregates every year, so committee_count / chair_count / committee_kpi_met
   // are all-time. Anything that must be scoped to this year reads COMMITTEES instead.
   COMMITTEE_SUM={};(cs.data||[]).forEach(r=>{COMMITTEE_SUM[r.resident_id]=r;});
@@ -4296,12 +4313,15 @@ function canmedsVerdicts(id,opts){
 
   // -- Manager ---------------------------------------------------------------
   var af=getApprovedFields(id);
-  var qi=!!(ks.qiDone||af.has("qi"));
+  var qiThisYear=!!(ks.qiDone||af.has("qi"));
+  var qiPrior=qiBefore(id,kpiAY());
+  var qi=qiThisYear||qiPrior.length>0;
   roles.push({key:"manager",role:"Manager",roleAlt:"CanMEDS 2015: Leader",
-    kpi:"At least one QI project",
+    kpi:"At least one QI project during training",
     state:qi?"met":empty,
-    value:qi?"On file":"None on file",
-    note:"Chair roles are scarce, so they count as Performance only and never gate this."});
+    value:qi?(qiThisYear?"On file":"On file since "+ayLabel(qiPrior[0].year)):"None on file",
+    note:(qi&&!qiThisYear?"Approved in "+ayLabel(qiPrior[qiPrior.length-1].year)+" \u2014 a QI project counts for the whole training. ":"")
+      +"Chair roles are scarce, so they count as Performance only and never gate this."});
 
   // -- Health Advocate -------------------------------------------------------
   var adv=ADVOCACY[id]||[];
@@ -8239,6 +8259,12 @@ function kpiSubmitLines(resId,roleKey,ctx){
         if(direct)openCanmedsModal(KPI_FIELD_RECORD[f],resId,null);
         else{_kpiPropLive={};set({kpiPropModal:{resId:resId,fieldKey:f},kpiPropUploading:false});}
       }},direct?"+ Add record":"+ Submit"):null));
+    // earlier years' QI, read-only: the evidence that keeps Manager met this year
+    if(f==="qi")qiBefore(resId,kpiAY()).forEach(x=>{
+      wrap.appendChild(el("div",{cls:"subrow"},
+        el("span",{cls:"mini",st:{background:"rgba(127,184,156,.22)",color:"#26523A"}},"Verified"),
+        el("span",{cls:"subt"},x.title,el("small",null," \u00b7 "+ayLabel(x.year)))));
+    });
     shown.forEach(p=>{
       const L=kpiProposalLine(p);const st=p.status;
       const tone=st==="approved"?{background:"rgba(127,184,156,.22)",color:"#26523A"}:st==="pending"?{background:"rgba(203,161,85,.18)",color:"#7a5a10"}:{background:"rgba(31,26,18,.06)",color:"#5C5345"};
@@ -8305,8 +8331,9 @@ function renderCanmedsView(resId,ctx){
     if(key==="manager"){
       const out=[];
       const af=getApprovedFields(resId);
-      const qi=!!((KPI_SCORES[resId]||{}).qiDone||af.has("qi"));
-      if(qi)out.push(pf(1,null,{color:"#26523A",text:"QI project on file"}));
+      const prior=qiBefore(resId,kpiAY());
+      const qiN=kpiApprovedCount(resId,"qi")+(((KPI_SCORES[resId]||{}).qiDone&&!kpiApprovedCount(resId,"qi"))?1:0)+prior.length;
+      if(qiN)out.push(pf(qiN,null,{color:"#26523A",text:"QI project"+(qiN!==1?"s":"")+" on file across training"}));
       else out.push(el("div",{cls:"pfnone"},"No QI project recorded."));
       if(g.chairCount>0)out.push(el("div",{cls:"chips"},el("span",{cls:"cchip gold"},g.chairCount+" chair role"+(g.chairCount!==1?"s":""))));
       return out;
@@ -15179,7 +15206,7 @@ function renderKPIExecutive(){
     return active.filter(r=>{
       const af=getApprovedFields(r.id);const ks=KPI_SCORES[r.id]||{};
       if(field==="publication")return af.has("publication")||ks.bonusPublished||hasPublishedResearch(r.id);
-      if(field==="qi")return af.has("qi")||ks.qiDone;
+      if(field==="qi")return af.has("qi")||ks.qiDone||qiBefore(r.id,kpiAY()).length>0;
       if(field==="oral")return af.has("oral")||ks.bonusOral;
       if(field==="poster")return af.has("poster")||ks.bonusPoster;
       if(field==="awards")return af.has("awards")||ks.awardsHonors;
