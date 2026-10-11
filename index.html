@@ -9937,16 +9937,22 @@ function renderPDOverview(){
     const k=calcKPI(r.id);
     const cRecs=COUNSEL_CACHE[r.id];
     const counselCount=Array.isArray(cRecs)?cRecs.length:null;
-    const atRisk=k.overall<SCORING.atRisk||(k.mmPct!=null&&k.mmPct<SCORING.atRisk)||(k.tPct!=null&&k.tPct<SCORING.atRisk);
-    return{...r,k,counselCount,atRisk};
+    // Share of this resident's applicable CanMEDS standards met: the same verdicts the KPI
+    // Dashboard and the Performance Report use. null until the CanMEDS tables have loaded, or
+    // when nothing applies yet; a null never flags anyone, only a known low share does.
+    const cv=CANMEDS_LOADED?canmedsVerdicts(r.id,{k:k}):null;
+    const share=cv&&cv.applicable?Math.round(cv.met/cv.applicable*100):null;
+    const atRisk=(share!=null&&share<SCORING.atRisk)||(k.mmPct!=null&&k.mmPct<SCORING.atRisk)||(k.tPct!=null&&k.tPct<SCORING.atRisk);
+    return{...r,k,cv,share,counselCount,atRisk};
   });
   if(filterLevel!=="all")rows=rows.filter(r=>r.level===filterLevel);
-  const sortRows={name:(a,b)=>a.name.localeCompare(b.name),level:(a,b)=>a.level.localeCompare(b.level)||a.name.localeCompare(b.name),kpi:(a,b)=>b.k.overall-a.k.overall,mm:(a,b)=>b.k.mmPct-a.k.mmPct,teach:(a,b)=>b.k.tPct-a.k.tPct,quiz:(a,b)=>b.k.qAvg-a.k.qAvg};
+  const sortRows={name:(a,b)=>a.name.localeCompare(b.name),level:(a,b)=>a.level.localeCompare(b.level)||a.name.localeCompare(b.name),kpi:(a,b)=>(b.share==null?-1:b.share)-(a.share==null?-1:a.share),mm:(a,b)=>b.k.mmPct-a.k.mmPct,teach:(a,b)=>b.k.tPct-a.k.tPct,quiz:(a,b)=>b.k.qAvg-a.k.qAvg};
   rows.sort(sortRows[sortBy]||sortRows.name);
 
   // ── Summary stats ─────────────────────────────────────────────────────────
   const total=rows.length;
-  const avgKPI=total?Math.round(rows.reduce((s,r)=>s+r.k.overall,0)/total):0;
+  const metAll=rows.reduce((s,r)=>s+(r.cv?r.cv.met:0),0),appAll=rows.reduce((s,r)=>s+(r.cv?r.cv.applicable:0),0);
+  const shareAll=appAll?Math.round(metAll/appAll*100):null;
   const atRiskCount=rows.filter(r=>r.atRisk).length;
   const withCounsel=rows.filter(r=>r.counselCount>0).length;
 
@@ -9961,8 +9967,8 @@ function renderPDOverview(){
 
   const summary=el("div",{st:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"12px",marginBottom:"24px"}},
     statCard("","Total Residents",total,"#c96a4a"),
-    statCard("","Average KPI",avgKPI+"%",kpiColor(avgKPI)),
-    statCard("","At Risk",atRiskCount,"#dc2626","KPI or attendance < "+SCORING.atRisk+"%"),
+    statCard("","Standards met",shareAll==null?"\u2014":shareAll+"%",shareAll==null?"#9ca3af":kpiColor(shareAll),shareAll==null?"CanMEDS record still loading":metAll+" of "+appAll+" applicable CanMEDS standards"),
+    statCard("","At Risk",atRiskCount,"#dc2626","Standards met or attendance < "+SCORING.atRisk+"%"),
     statCard("","With Counseling",withCounsel,"#A47A28","Active records")
   );
 
@@ -9974,7 +9980,7 @@ function renderPDOverview(){
     ),
     el("span",{st:{flex:"1"}}),
     el("span",{cls:"sh",st:{fontWeight:"700",marginRight:"2px"}},"Sort:"),
-    ...[["name","Name"],["level","Level"],["kpi","KPI ↓"],["mm","MM"],["teach","Teach"],["quiz","Quiz"]].map(([k,lbl])=>
+    ...[["name","Name"],["level","Level"],["kpi","Standards ↓"],["mm","MM"],["teach","Teach"],["quiz","Quiz"]].map(([k,lbl])=>
       el("span",{cls:"pill"+(sortBy===k?" on":""),onClick:()=>set({ovSort:k})},lbl)
     )
   );
@@ -10004,7 +10010,7 @@ function renderPDOverview(){
 
   const thead=el("thead",null,
     el("tr",{st:{borderBottom:"2px solid #e2e8f0"}},
-      colH("Resident","name"),colH("Level","level"),colH("KPI","kpi"),
+      colH("Resident","name"),colH("Level","level"),colH("Standards met","kpi"),
       colH("MM Att.","mm"),colH("Academic Day","teach"),colH("Quiz","quiz"),
       el("th",{st:{padding:"10px 12px",fontWeight:"700",fontSize:".74rem",textTransform:"uppercase",color:"rgba(31,26,18,.42)",background:"#F6EFE2"}},"Counsel"),
       el("th",{st:{padding:"10px 12px",background:"#F6EFE2"}})
@@ -10038,10 +10044,11 @@ function renderPDOverview(){
       ),
       el("td",{st:{padding:"8px 10px",textAlign:"center"}},
         el("div",{st:{display:"flex",flexDirection:"column",alignItems:"center",gap:"3px"}},
-          el("span",{st:{fontWeight:"900",fontSize:".95rem",color:kpiColor(row.k.overall)}},row.k.overall+"%"),
+          el("span",{st:{fontWeight:"900",fontSize:".95rem",color:row.share==null?"#9ca3af":kpiColor(row.share)}},row.share==null?"\u2014":row.share+"%"),
           el("div",{st:{width:"54px",height:"6px",background:"rgba(31,26,18,.1)",borderRadius:"3px"}},
-            el("div",{st:{width:Math.min(row.k.overall,100)+"%",height:"100%",background:kpiColor(row.k.overall),borderRadius:"3px"}})
-          )
+            el("div",{st:{width:(row.share==null?0:Math.min(row.share,100))+"%",height:"100%",background:row.share==null?"transparent":kpiColor(row.share),borderRadius:"3px"}})
+          ),
+          row.cv?el("span",{st:{fontSize:".66rem",color:"#5C5345"}},row.cv.met+" of "+row.cv.applicable):null
         )
       ),
       pctCell(row.k.mmPct),
@@ -10061,7 +10068,7 @@ function renderPDOverview(){
     el("div",{st:{fontWeight:"700",marginBottom:"4px"}},""+atRiskCount+" resident"+(atRiskCount>1?"s":"")+" at risk"),
     ...rows.filter(r=>r.atRisk).map(r=>{
       const flags=[];
-      if(r.k.overall<SCORING.atRisk)flags.push("KPI "+r.k.overall+"%");
+      if(r.share!=null&&r.share<SCORING.atRisk)flags.push("Standards met "+r.share+"%");
       if(r.k.mmPct!=null&&r.k.mmPct<SCORING.atRisk)flags.push("MM "+r.k.mmPct+"%");
       if(r.k.tPct!=null&&r.k.tPct<SCORING.atRisk)flags.push("Academic Day "+r.k.tPct+"%");
       return el("div",{st:{fontSize:".82rem",marginTop:"3px",cursor:"pointer"},onClick:()=>set({mod:"admin",adminProfile:r.id,adminResTab:"kpi"})}, "– "+r.name+" ("+r.level+") — "+flags.join(", ")+" → Click to view" );
