@@ -114,6 +114,7 @@ R4_PREFS_STATUS  // {academic_year, is_open, opened_at, deadline} | null
 | `mentor_notes` | Mentor observations |
 | `announcements` | PD-set deadlines/tasks with targeting |
 | `promotion_log` | Annual promotion history ⚠️ needs migration |
+| `feedback_rounds` / `feedback_round_responses` / `feedback_general` | Feedback module (28 Oct 2026). PD opens a round (AY + block range + due date); one named response per resident per round; general feedback inbox. **Role `pd` only** in UI and RLS; chief counts as a resident. `add_resident_feedback.sql` also opens round 1 (Blocks 11–13, AY 2025-26, due 15 Nov 2026) |
 
 **Attendance status values:** `P` (Present) · `L` (Late) · `A` (Absent) · `E` (Excused) · `O` (On Leave)
 

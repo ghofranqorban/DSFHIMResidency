@@ -3754,15 +3754,10 @@ async function saveOncallCell(blk,date,slotKey,residentId,residentName){
 }
 // ─── ON-CALL PREFERENCE SURVEY ───────────────────────────────────────────────
 // Per block, each resident names dates they would prefer NOT to be on call:
-// up to 4 days in all. Fri/Sat days are allowed — both days of one weekend, or single
-// days spread out — but they may touch at most TWO weekends of the block. Fewer is fine;
-// nobody is made to fill the quota. These are preferences, not blocks — the builder
-// flags a clash and still lets the scheduler assign over it.
-const OC_PREF_TOTAL_CAP=4;
-const OC_PREF_WEEKENDS_CAP=2;
-// The Friday that opens a Fri/Sat pair, so both days of one weekend share a key.
-function ocWeekendKey(ds){const d=oncallDateObj(ds);if(d.getDay()===6)d.setDate(d.getDate()-1);return toLocalYMD(d);}
-function ocWeekendCount(dates){return new Set(dates.filter(isWeekendDate).map(ocWeekendKey)).size;}
+// 2 of the block's Fri/Sat days + 4 weekdays. These are preferences, not blocks —
+// the builder flags a clash and still lets the scheduler assign over it.
+const OC_PREF_WE_CAP=2;
+const OC_PREF_WD_CAP=4;
 let ONCALL_PREFS=[];
 let ONCALL_PREFS_STATUS={};
 let ONCALL_PREFS_PLAN=null;
@@ -3896,9 +3891,9 @@ async function saveOncallPrefs(blk,sel,status){
   if(ocIsPast())return;
   const yr=ocAY();
   const dates=Object.keys(sel).filter(d=>sel[d]).sort();
-  if(status==="submitted"&&!dates.length){showToast("Pick at least one day before submitting","error");return;}
-  if(dates.length>OC_PREF_TOTAL_CAP||ocWeekendCount(dates)>OC_PREF_WEEKENDS_CAP){
-    showToast("Up to "+OC_PREF_TOTAL_CAP+" days, touching at most "+OC_PREF_WEEKENDS_CAP+" weekends","error");return;
+  const we=dates.filter(isWeekendDate).length,wd=dates.length-we;
+  if(status==="submitted"&&(we!==OC_PREF_WE_CAP||wd!==OC_PREF_WD_CAP)){
+    showToast("Choose exactly "+OC_PREF_WE_CAP+" weekend days and "+OC_PREF_WD_CAP+" weekdays before submitting","error");return;
   }
   const{error:de}=await sb.from("oncall_prefs").delete().eq("resident_id",u.rid).eq("academic_year",yr).eq("block_number",blk);
   if(de){showToast("Save failed: "+de.message,"error");return;}
@@ -4814,7 +4809,6 @@ function modIcon(id,sz){
     leave_plan:[["rect",{x:"3",y:"4",width:"18",height:"18",rx:"2"}],["line",{x1:"16",y1:"2",x2:"16",y2:"6"}],["line",{x1:"8",y1:"2",x2:"8",y2:"6"}],["line",{x1:"3",y1:"10",x2:"21",y2:"10"}],["path",{d:"M9 16l2 2 4-4"}]],
     control:[["line",{x1:"4",y1:"21",x2:"4",y2:"14"}],["line",{x1:"4",y1:"10",x2:"4",y2:"3"}],["line",{x1:"12",y1:"21",x2:"12",y2:"12"}],["line",{x1:"12",y1:"8",x2:"12",y2:"3"}],["line",{x1:"20",y1:"21",x2:"20",y2:"16"}],["line",{x1:"20",y1:"12",x2:"20",y2:"3"}],["line",{x1:"1",y1:"14",x2:"7",y2:"14"}],["line",{x1:"9",y1:"8",x2:"15",y2:"8"}],["line",{x1:"17",y1:"16",x2:"23",y2:"16"}]],
     committees:[["path",{d:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"}],["circle",{cx:"9",cy:"7",r:"4"}],["path",{d:"M23 21v-2a4 4 0 00-3-3.87"}],["path",{d:"M16 3.13a4 4 0 010 7.75"}]],
-    feedback:[["path",{d:"M21 11.5a8.4 8.4 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.4 8.4 0 01-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.4 8.4 0 013.8-.9h.5a8.5 8.5 0 018 8v.5z"}],["line",{x1:"8",y1:"10",x2:"15",y2:"10"}],["line",{x1:"8",y1:"13.5",x2:"12.5",y2:"13.5"}]],
     home:[["path",{d:"M12 2.5l9.5 8v11a1 1 0 01-1 1h-6v-8h-5v8h-6a1 1 0 01-1-1v-11z",fill:"currentColor",stroke:"none"}]],
     trophy:[["path",{d:"M8 21h8M12 17v4M17 3H7v5a5 5 0 0010 0V3z"}],["path",{d:"M7 5H3v2a4 4 0 004 4"}],["path",{d:"M17 5h4v2a4 4 0 01-4 4"}]],
     account:[["path",{d:"M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"}],["circle",{cx:"12",cy:"7",r:"4"}]],
@@ -4843,7 +4837,6 @@ let MODS=[
   {id:"leave_plan",label:"AY Plan 26-27",icon:"",desc:"Suggested leave & GIM rotation preferences for AY 2026-27",color:"#2a6a8a",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"control",label:"Control Centre",icon:"",desc:"Set up the academic year and manage portal settings",color:"#3a3225",roles:["pd","deputy_pd"]},
   {id:"mentorship",label:"Mentorship ILP",icon:"",desc:"Mentorship Individualized Learning Plan — quarterly CanMEDS review of every resident with their mentor",color:"#3a6a6a",roles:["pd","deputy_pd","chief","consultant","resident"]},
-  {id:"feedback",label:"Feedback",icon:"",desc:"Programme review rounds and general feedback, read by the Program Director only",color:"#7a4a2a",roles:["pd","chief","resident"]},
   {id:"committees",label:"Committees",icon:"",desc:"Standing committees — leaders, co-leaders, members, meetings & achievements",color:"#8a4a5a",roles:["pd","deputy_pd","chief","consultant","resident"]},
 ];
 // ─── MODULES AND ACCESS ──────────────────────────────────────────────────────────────────────────
@@ -5369,7 +5362,6 @@ function renderModGrid(){
       myDuties.length>3?el("div",{cls:"sh",st:{marginTop:"4px"}},"+"+(myDuties.length-3)+" more — click to view"):null
     )
   );
-  const fbAlert=fbHomeAlert();if(fbAlert)alerts.push(fbAlert);
   const alertsDiv=alerts.length?el("div",{cls:"home-alerts"},
     ...alerts
   ):null;
@@ -17199,23 +17191,19 @@ function renderOncall(){
     }
     const sel=u.rid?(STATE.ocPrefSel||{}):{};
     const selDates=Object.keys(sel).filter(d=>sel[d]);
-    const weDates=selDates.filter(isWeekendDate);
-    const weCount=weDates.length;
-    const totalCount=selDates.length;
-    // The weekends already touched; once the cap is reached, other weekends are off limits.
-    const weKeys=new Set(weDates.map(ocWeekendKey));
+    const weCount=selDates.filter(isWeekendDate).length;
+    const wdCount=selDates.length-weCount;
     const editable=isOpen&&!!u.rid;
     const isResidentView=!!u.rid;
-    // Any number from 1 to the cap can be submitted; the cap only stops a fifth pick.
-    const complete=totalCount>0&&totalCount<=OC_PREF_TOTAL_CAP&&weKeys.size<=OC_PREF_WEEKENDS_CAP;
-    const totalFull=totalCount>=OC_PREF_TOTAL_CAP;
-    function weBlocked(date){return isWeekendDate(date)&&weKeys.size>=OC_PREF_WEEKENDS_CAP&&!weKeys.has(ocWeekendKey(date));}
+    const complete=weCount===OC_PREF_WE_CAP&&wdCount===OC_PREF_WD_CAP;
     function toggleDay(date){
       const next=Object.assign({},sel);
       if(next[date]){
         delete next[date];
       }else{
-        if(totalFull||weBlocked(date))return;
+        const isWe=isWeekendDate(date);
+        if(isWe&&weCount>=OC_PREF_WE_CAP)return;
+        if(!isWe&&wdCount>=OC_PREF_WD_CAP)return;
         next[date]=true;
       }
       set({ocPrefSel:next});
@@ -17232,7 +17220,8 @@ function renderOncall(){
     function dayCell(d){
       if(!d)return el("td",{st:{padding:"4px"}},"");
       const picked=!!sel[d.date];
-      const dim=editable&&!picked&&(totalFull||weBlocked(d.date));
+      const kindFull=d.isWe?weCount>=OC_PREF_WE_CAP:wdCount>=OC_PREF_WD_CAP;
+      const dim=editable&&!picked&&kindFull;
       const parts=d.date.split("-");
       const met=picked&&hasSchedule&&u.rid?oncallPrefMet(blk,u.rid,d.date):null;
       const dem=demand[d.date]||0;
@@ -17260,7 +17249,7 @@ function renderOncall(){
       return td;
     }
     function quota(n,cap,label){
-      const done=n>=cap;
+      const done=n===cap;
       return el("div",{st:{display:"flex",alignItems:"baseline",gap:"8px"}},
         el("span",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.9rem",lineHeight:"1",color:done?"#26523A":"#1F1A12"}},String(n)),
         el("span",{st:{fontSize:".8rem",color:"rgba(31,26,18,.45)",fontWeight:"600"}},"/ "+cap),
@@ -17289,12 +17278,12 @@ function renderOncall(){
       :null;
     const calendar=el("div",null,
       isResidentView?el("div",{st:{display:"flex",gap:"38px",alignItems:"flex-end",flexWrap:"wrap",marginBottom:"18px"}},
-        quota(totalCount,OC_PREF_TOTAL_CAP,"Days chosen"),
-        quota(weKeys.size,OC_PREF_WEEKENDS_CAP,"Weekends touched")
+        quota(weCount,OC_PREF_WE_CAP,"Weekend days"),
+        quota(wdCount,OC_PREF_WD_CAP,"Weekdays")
       ):null,
       el("div",{st:{fontSize:".78rem",color:"rgba(31,26,18,.5)",marginBottom:"18px"}},
         isResidentView
-          ?(editable?"Tap the days you would prefer not to be on call \u2014 up to "+OC_PREF_TOTAL_CAP+" days. Fridays and Saturdays are fine, both days of one weekend or spread out, but across no more than "+OC_PREF_WEEKENDS_CAP+" weekends. You can pick fewer."
+          ?(editable?"Tap the days you would prefer not to be on call. Your two weekend days need not be in the same weekend."
                     :"These are the days you asked to avoid.")
           :"How many residents asked to avoid each day of Block "+blk+". Preferences are advisory \u2014 assign over them where the rota needs it."),
       el("table",{st:{width:"100%",borderCollapse:"collapse"}},
@@ -17306,9 +17295,9 @@ function renderOncall(){
         el("button",{cls:"sbtn primary",disabled:!complete,st:complete?{}:{opacity:".45",cursor:"not-allowed"},onClick:()=>{if(complete)saveOncallPrefs(blk,sel,"submitted");}},mySubmitted?"Update submission":"Submit preferences"),
         el("button",{cls:"sbtn",onClick:()=>saveOncallPrefs(blk,sel,"draft")},"Save draft"),
         el("span",{st:{fontSize:".78rem",color:"rgba(31,26,18,.45)"}},
-          complete?(mySubmitted?"Submitted \u2014 you can still change it while the survey is open"
-                               :(totalFull?"Ready to submit":"Ready to submit \u2014 you may add up to "+(OC_PREF_TOTAL_CAP-totalCount)+" more"))
-                  :"Pick at least one day to submit")
+          complete?(mySubmitted?"Submitted \u2014 you can still change it while the survey is open":"Ready to submit")
+                  :"Choose "+[OC_PREF_WE_CAP-weCount>0?(OC_PREF_WE_CAP-weCount)+" more weekend day"+(OC_PREF_WE_CAP-weCount===1?"":"s"):null,
+                              OC_PREF_WD_CAP-wdCount>0?(OC_PREF_WD_CAP-wdCount)+" more weekday"+(OC_PREF_WD_CAP-wdCount===1?"":"s"):null].filter(Boolean).join(" and "))
       ):null
     );
     // Outcome: did the published schedule honour each pick?
@@ -17983,493 +17972,6 @@ function meResidentView(){
   STATE.meQ=q;
   return meFormView(r);
 }
-// ─── RESIDENT FEEDBACK ───────────────────────────────────────────────────────────────────────────────────────────────
-// Two things live here, and both are read by the Program Director ALONE: no deputy, chief or consultant has the
-// module or the database rows. (1) A general feedback form a resident can send at any time. (2) A periodic
-// programme review the PD opens as a "round": an academic year, a block range (for example Blocks 11–13 of
-// 2025-26) and a due date; every resident answers once, by name, five sections (morning meeting, half academic
-// day, consultants, rotations, senior residents) plus an overall question. The PD reads the answers aggregated
-// per statement and can open any single resident's answers. The review is NOT anonymous, by the PD's decision
-// (28 Oct 2026); the form says so. A half-written review is kept in localStorage until submitted.
-const FB_SCALE=[[1,"Strongly disagree"],[2,"Disagree"],[3,"Neutral"],[4,"Agree"],[5,"Strongly agree"]];
-const FB_SECTIONS=[
-  {key:"mm",title:"Morning Meeting",intro:"The daily case discussion.",
-    items:[
-      {k:"mm_relevant",t:"The cases discussed are clinically relevant and I learn from them."},
-      {k:"mm_time",t:"Sessions start on time and are well moderated."},
-      {k:"mm_cons",t:"Consultants attend and contribute to the discussion."},
-      {k:"mm_safe",t:"I feel comfortable presenting and asking questions."}],
-    texts:[{k:"mm_better",t:"What would make the morning meeting better?"}]},
-  {key:"had",title:"Half Academic Day",intro:"The weekly protected teaching.",
-    items:[
-      {k:"had_topics",t:"The topics match the curriculum and my learning needs."},
-      {k:"had_protected",t:"I am released from clinical duties to attend."},
-      {k:"had_interactive",t:"The teaching is interactive, not only lectures."},
-      {k:"had_schedule",t:"The schedule is published in advance and followed."}],
-    texts:[{k:"had_add",t:"Topics or formats you would like added or dropped?"}]},
-  {key:"cons",title:"Consultants",intro:"Supervision and teaching by the consultants you worked with in these blocks.",
-    items:[
-      {k:"cons_supervision",t:"I am supervised appropriately for my level, neither too closely nor too little."},
-      {k:"cons_feedback",t:"I receive timely and specific feedback on my performance."},
-      {k:"cons_respect",t:"Consultants are approachable and treat residents with respect."},
-      {k:"cons_bedside",t:"Bedside teaching happens regularly on rounds."}],
-    texts:[
-      {k:"cons_commend",t:"A consultant you would like to commend, and why (optional)."},
-      {k:"cons_concern",t:"Any concern about supervision the Program Director should know (optional)."}]},
-  {key:"rot",title:"Rotations",intro:"Rate each rotation you did in these blocks, then the general points.",rotations:true,
-    items:[
-      {k:"rot_workload",t:"The workload left time for learning."},
-      {k:"rot_hours",t:"Duty hours were respected."}],
-    texts:[{k:"rot_change",t:"Which rotation needs the most improvement, and what would you change?"}]},
-  {key:"sr",title:"Senior Residents",intro:"The residents senior to you, including the chief residents. Seniors answer about the chiefs and their fellow seniors.",
-    items:[
-      {k:"sr_available",t:"Seniors are available and respond when I call for help."},
-      {k:"sr_teach",t:"Seniors teach and supervise juniors on the ward and on call."},
-      {k:"sr_handover",t:"Handover between teams is safe and structured."},
-      {k:"sr_fair",t:"Seniors treat juniors with respect and share the workload fairly."}],
-    texts:[
-      {k:"sr_commend",t:"A senior resident you would like to commend, and why (optional)."},
-      {k:"sr_concern",t:"Any concern about a senior the Program Director should know (optional)."}]},
-  {key:"all",title:"Overall",intro:"",
-    items:[{k:"all_satisfied",t:"Overall, I am satisfied with the programme over these blocks."},
-      {k:"all_recommend",t:"I would recommend this programme to a colleague."}],
-    texts:[{k:"all_keep",t:"One thing the programme should keep doing."},{k:"all_change",t:"One thing the programme should change."}]}
-];
-const FB_GEN_CATS=["Programme & curriculum","Rotations & workload","Teaching & academic activities","Wellbeing & work environment","Portal & administration","Other"];
-const FB_GEN_STATUS={new:["New","#a94e2c","rgba(201,106,74,.14)"],read:["Read","#5C5345","#F6EFE2"],addressed:["Addressed","#26523A","rgba(127,184,156,.2)"]};
-let FB_ROUNDS=[],FB_RESP=[],FB_GENERAL=[],FB_STATE="idle",FB_ERR="";
-let FB_ROTA={};   // {academic_year: {resident_id: {block: rotation}}} for rounds outside the live year
-let _fbDraft=null,_fbGen=null,_fbNote={};
-function fbIsAdmin(){return !!(STATE.user&&STATE.user.role==="pd");}
-function fbIsResident(){const u=STATE.user;return !!(u&&u.rid&&(u.role==="resident"||u.role==="chief"));}
-function fbRoundBlocks(r){const o=[];for(let b=r.block_from;b<=r.block_to;b++)o.push(b);return o;}
-function fbRoundLabel(r){return (r.label&&r.label.trim())||("Block"+(r.block_from===r.block_to?" "+r.block_from:"s "+r.block_from+"–"+r.block_to)+" · "+ayLabel(r.academic_year));}
-function fbRoundById(id){return FB_ROUNDS.find(r=>r.id===id)||null;}
-// The round a resident is asked to fill: the most recently opened open one.
-function fbOpenRound(){return FB_ROUNDS.filter(r=>r.is_open).sort((a,b)=>(b.opened_at||"").localeCompare(a.opened_at||"")||(b.id-a.id))[0]||null;}
-function fbResponse(rid,r){return r?FB_RESP.find(x=>x.resident_id===rid&&x.round_id===r.id)||null:null;}
-function fbDone(rid,r){return !!fbResponse(rid,r);}
-function fbDaysLeft(r){if(!r||!r.deadline)return null;const t=new Date();t.setHours(0,0,0,0);return Math.round((new Date(r.deadline+"T00:00:00")-t)/86400000);}
-function fbDueText(r){const d=fbDaysLeft(r);if(d==null)return "";return d<0?"overdue by "+(-d)+" day"+(d===-1?"":"s"):d===0?"due today":d===1?"due tomorrow":"due in "+d+" days";}
-async function loadFeedback(){
-  FB_STATE="loading";
-  const[a,c,d]=await Promise.all([
-    sb.from("feedback_rounds").select("*").order("id"),
-    fetchAllRows(()=>sb.from("feedback_round_responses").select("*").order("id")),
-    fetchAllRows(()=>sb.from("feedback_general").select("*").order("id"))]);
-  const err=a.error||c.error||d.error;
-  if(err){FB_STATE="error";FB_ERR=err.message||String(err);render();return;}
-  FB_ROUNDS=a.data||[];FB_RESP=c.data||[];FB_GENERAL=d.data||[];
-  // A round outside the live year needs that year's rota to list the resident's rotations.
-  const u=STATE.user,r=fbOpenRound();
-  if(r&&u&&u.rid&&r.academic_year!==CURRENT_ACADEMIC_YEAR&&!FB_ROTA[r.academic_year]){
-    const{data}=await sb.from("rotations").select("resident_id,block_number,rotation_name").eq("academic_year",r.academic_year).eq("resident_id",u.rid);
-    const m={};(data||[]).forEach(x=>{if(!x.rotation_name)return;(m[x.resident_id]=m[x.resident_id]||{})[String(x.block_number)]=m[x.resident_id][String(x.block_number)]||x.rotation_name;});
-    FB_ROTA[r.academic_year]=m;
-  }
-  FB_STATE="ready";FB_ERR="";render();
-}
-function fbInjectCss(){
-  if(document.getElementById("fb-css"))return;
-  const s=document.createElement("style");s.id="fb-css";
-  s.textContent=
-    ".fb-lbl{font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#a94e2c;margin-bottom:8px}"+
-    ".fb-sec{padding:30px 0 10px;border-top:1px solid rgba(31,26,18,.08)}"+
-    ".fb-sec .n{font-family:'Playfair Display',Georgia,serif;font-size:1.5rem;color:rgba(31,26,18,.18);line-height:1}"+
-    ".fb-sec h2{margin:4px 0 2px;font-family:'Playfair Display',Georgia,serif;font-weight:400;font-size:1.45rem;color:#1F1A12}"+
-    ".fb-sec .intro{margin:0 0 8px;font-size:.8rem;color:#5C5345;line-height:1.5}"+
-    ".fb-item{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:10px 28px;align-items:center;padding:14px 0;border-bottom:1px solid rgba(31,26,18,.06)}"+
-    ".fb-item .q{font-size:.9rem;color:#1F1A12;line-height:1.45}"+
-    ".fb-item .q small{display:block;font-size:.72rem;color:#5C5345;margin-top:2px}"+
-    ".fb-item.miss .q{color:#9d2f17}"+
-    ".fb-dots{display:flex;align-items:center;gap:8px}"+
-    ".fb-dots .e{font-size:.62rem;color:#5C5345;width:58px;line-height:1.2}.fb-dots .e.r{text-align:right}"+
-    ".fb-dots button{width:36px;height:36px;border-radius:50%;border:1.5px solid rgba(31,26,18,.18);background:transparent;font:inherit;font-size:.8rem;font-weight:700;color:#5C5345;cursor:pointer;transition:all .14s;flex:none}"+
-    ".fb-dots button:hover{border-color:#c96a4a;color:#a94e2c}.fb-dots button.on{background:#a94e2c;border-color:#a94e2c;color:#FEFBF3}"+
-    ".fb-dots button:disabled{cursor:default}.fb-dots button:disabled:hover{border-color:rgba(31,26,18,.18);color:#5C5345}.fb-dots button.on:disabled:hover{border-color:#a94e2c;color:#FEFBF3}"+
-    ".fb-text{padding:14px 0 6px}.fb-text label{display:block;font-size:.86rem;color:#1F1A12;margin-bottom:8px;line-height:1.45}"+
-    ".fb-text textarea{min-height:64px;resize:vertical;font-size:.86rem;line-height:1.5}"+
-    ".fb-rot{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:8px 28px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(31,26,18,.06)}"+
-    ".fb-rot .nm{font-size:.9rem;font-weight:600;color:#1F1A12}.fb-rot .nm small{display:block;font-weight:400;font-size:.72rem;color:#5C5345}"+
-    ".fb-rot input{grid-column:1/-1;font-size:.84rem}"+
-    ".fb-btn{background:#c96a4a;color:#FEFBF3;border:none;border-radius:999px;padding:10px 22px;font:inherit;font-size:.84rem;font-weight:600;cursor:pointer}"+
-    ".fb-btn.ghost{background:transparent;color:#1F1A12;border:1px solid rgba(31,26,18,.18)}.fb-btn:disabled{opacity:.5;cursor:default}"+
-    ".fb-status{display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding:18px 22px;border-radius:14px;background:#F6EFE2;margin:18px 0 6px}"+
-    ".fb-status .big{font-family:'Playfair Display',Georgia,serif;font-size:1.5rem;color:#1F1A12;line-height:1.1}"+
-    ".fb-status .sub{font-size:.8rem;color:#5C5345;margin-top:3px}"+
-    ".fb-status.done{background:rgba(127,184,156,.18)}.fb-status.late{background:rgba(201,106,74,.12)}"+
-    ".fb-tbl{width:100%;border-collapse:collapse}.fb-tbl th{text-align:left;font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5C5345;padding:10px 10px;border-bottom:1px solid rgba(31,26,18,.12)}"+
-    ".fb-tbl td{padding:12px 10px;border-bottom:1px solid rgba(31,26,18,.07);font-size:.86rem;vertical-align:middle}"+
-    ".fb-tbl tr.rowlink{cursor:pointer}.fb-tbl tr.rowlink:hover td{background:#F6EFE2}"+
-    ".fb-chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:.7rem;font-weight:700;white-space:nowrap}"+
-    ".fb-res{display:grid;grid-template-columns:minmax(0,1.3fr) 66px minmax(0,1fr);gap:10px 18px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(31,26,18,.06)}"+
-    ".fb-res .q{font-size:.86rem;color:#1F1A12;line-height:1.4}"+
-    ".fb-res .m{font-family:'Playfair Display',Georgia,serif;font-size:1.35rem;text-align:right;line-height:1}"+
-    ".fb-res .m small{display:block;font-family:Inter,sans-serif;font-size:.6rem;color:#5C5345;letter-spacing:.06em;text-transform:uppercase}"+
-    ".fb-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:#F6EFE2}.fb-bar i{display:block;height:100%}"+
-    ".fb-key{display:flex;gap:12px;flex-wrap:wrap;font-size:.68rem;color:#5C5345;margin:6px 0 2px}.fb-key i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}"+
-    ".fb-quote{padding:10px 14px;margin:6px 0;border-left:3px solid rgba(201,106,74,.45);background:#FEFBF3;font-size:.86rem;line-height:1.55;color:#1F1A12;white-space:pre-wrap}"+
-    ".fb-quote small{display:block;font-size:.68rem;color:#5C5345;margin-top:4px}"+
-    ".fb-new{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;align-items:end;padding:14px 16px;border-radius:12px;background:#F6EFE2;margin-bottom:16px}"+
-    ".fb-new label{display:block;font-size:.64rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5C5345;margin-bottom:4px}.fb-new input,.fb-new select{font-size:.82rem}"+
-    ".fb-split{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:36px;align-items:start}"+
-    ".fb-side{background:#F6EFE2;border-radius:14px;padding:18px 20px}"+
-    ".fb-side h4{margin:0 0 10px;font-size:.78rem;font-weight:700;color:#1F1A12}"+
-    ".fb-side .who{font-size:.82rem;padding:5px 0;border-bottom:1px solid rgba(31,26,18,.06);display:flex;justify-content:space-between;gap:8px}"+
-    ".fb-side .who span{color:#5C5345;font-size:.72rem}"+
-    ".fb-gen{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px 20px}.fb-gen .full{grid-column:1/-1}"+
-    ".fb-gen label{display:block;font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5C5345;margin-bottom:6px}"+
-    ".fb-msg{padding:16px 0;border-bottom:1px solid rgba(31,26,18,.07)}.fb-msg .hd{display:flex;gap:10px;align-items:center;flex-wrap:wrap;cursor:pointer}"+
-    ".fb-msg .hd b{font-size:.92rem;color:#1F1A12}.fb-msg .hd .meta{font-size:.74rem;color:#5C5345}.fb-msg .hd .sp{flex:1}"+
-    ".fb-msg .body{margin-top:10px;font-size:.88rem;line-height:1.6;color:#1F1A12;white-space:pre-wrap}"+
-    ".fb-msg .act{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}.fb-msg textarea{min-height:56px;font-size:.84rem;margin-top:10px}"+
-    "@media (max-width:760px){.fb-item,.fb-rot,.fb-res{grid-template-columns:1fr;gap:8px}.fb-res .m{text-align:left}.fb-split{grid-template-columns:1fr}.fb-gen{grid-template-columns:1fr}.fb-dots .e{width:auto}}";
-  document.head.appendChild(s);
-}
-function fbHeader(title,sub){
-  return el("div",{st:{marginBottom:"20px"}},
-    el("div",{cls:"fb-lbl"},"Feedback"),
-    el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},title),
-    sub?el("div",{st:{fontSize:".82rem",color:"#5C5345",maxWidth:"640px",lineHeight:"1.55"}},sub):null);
-}
-function fbTabs(tabs,cur,onPick){
-  return el("div",{st:{display:"flex",gap:"2px",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"22px",flexWrap:"wrap"}},
-    ...tabs.map(([k,l])=>el("span",{cls:"tab"+(cur===k?" on":""),onClick:()=>onPick(k)},l)));
-}
-// The five-point control: a row of five circles with the two end labels (option A, chosen 28 Oct 2026).
-function fbRate(value,onPick,disabled){
-  return el("div",{cls:"fb-dots"},el("span",{cls:"e"},"Strongly disagree"),
-    ...FB_SCALE.map(([n])=>el("button",{cls:value===n?"on":"",disabled:!!disabled,title:FB_SCALE[n-1][1],onClick:()=>{if(!disabled)onPick(n);}},String(n))),
-    el("span",{cls:"e r"},"Strongly agree"));
-}
-function renderFeedback(){
-  fbInjectCss();
-  const u=STATE.user;
-  if(FB_STATE==="idle")loadFeedback();
-  if(FB_STATE==="idle"||FB_STATE==="loading")return el("div",{cls:"content"},fbHeader("Feedback",""),el("div",{cls:"sh",st:{padding:"40px 0"}},"Loading…"));
-  if(FB_STATE==="error")return el("div",{cls:"content"},fbHeader("Feedback",""),
-    el("p",{cls:"alert-yellow"},"The feedback tables are not there yet. Run supabase/add_resident_feedback.sql in the Supabase SQL Editor, then reload."),
-    el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.35)"}},FB_ERR));
-  if(fbIsResident())return fbResidentPage();
-  if(fbIsAdmin())return fbAdminPage();
-  return el("div",{cls:"content"},fbHeader("Feedback","Resident feedback is read by the Program Director and the Deputy."));
-}
-// ═══ RESIDENT ═══════════════════════════════════════════════════════════════════════════════════
-function fbResidentPage(){
-  const tab=STATE.fbTab||"review";
-  return el("div",{cls:"content"},
-    fbHeader("Feedback","Tell the programme what works and what does not. Everything here is read by the Program Director only."),
-    fbTabs([["review","Programme review"],["general","General feedback"]],tab,k=>set({fbTab:k})),
-    tab==="general"?fbGeneralResident():fbReviewResident());
-}
-function fbDraftKey(r){return "fb_draft_"+STATE.user.profileId+"_"+r.id;}
-function fbLoadDraft(r){
-  if(_fbDraft&&_fbDraft.round===r.id)return _fbDraft;
-  let d=null;try{d=JSON.parse(localStorage.getItem(fbDraftKey(r))||"null");}catch(e){}
-  _fbDraft=d&&d.items?d:{round:r.id,items:{},texts:{},rot:{}};
-  return _fbDraft;
-}
-function fbSaveDraft(){try{localStorage.setItem(fbDraftKey({id:_fbDraft.round}),JSON.stringify(_fbDraft));}catch(e){}}
-// The rotations this resident has started in the round's blocks, one line per rotation.
-function fbMyRotations(r){
-  const rid=STATE.user.rid,ranges=ayBlockRanges(r.academic_year),now=new Date(),out=[];
-  const rota=r.academic_year===CURRENT_ACADEMIC_YEAR?(FULL_ROTA[rid]||{}):((FB_ROTA[r.academic_year]||{})[rid]||{});
-  fbRoundBlocks(r).forEach(b=>{
-    const name=rota[String(b)]||rota[b];if(!name)return;
-    if(ranges[b-1]&&ranges[b-1].start>now)return;
-    const ex=out.find(x=>x.name===name);if(ex)ex.blocks.push(b);else out.push({name,blocks:[b]});
-  });
-  return out;
-}
-function fbReviewResident(){
-  const u=STATE.user,r=fbOpenRound();
-  if(!r)return el("div",{st:{padding:"24px 0",color:"#5C5345",fontSize:".9rem",lineHeight:"1.6",maxWidth:"560px"}},
-    "No review is open at the moment. The Program Director opens one about twice a year; it will appear here with its due date, and on your home page.");
-  if(fbDone(u.rid,r))return el("div",null,
-    el("div",{cls:"fb-status done"},el("div",null,el("div",{cls:"big"},"Submitted, thank you"),el("div",{cls:"sub"},fbRoundLabel(r)+" · submitted "+fmtDate((fbResponse(u.rid,r).submitted_at||"").slice(0,10))))),
-    el("div",{st:{fontSize:".84rem",color:"#5C5345",lineHeight:"1.6",maxWidth:"560px",padding:"12px 0"}},"Anything you want to add before the next review goes through the general feedback form."));
-  const d=fbLoadDraft(r);
-  const rots=fbMyRotations(r);
-  const late=(fbDaysLeft(r)||0)<0;
-  const missing=STATE.fbShowMissing?new Set(FB_SECTIONS.flatMap(s=>s.items).filter(i=>!(d.items[i.k]>=1)).map(i=>i.k)):new Set();
-  const missRot=STATE.fbShowMissing?new Set(rots.filter(x=>!((d.rot[x.name]||{}).rating>=1)).map(x=>x.name)):new Set();
-  const answered=FB_SECTIONS.flatMap(s=>s.items).filter(i=>d.items[i.k]>=1).length+rots.filter(x=>(d.rot[x.name]||{}).rating>=1).length;
-  const total=FB_SECTIONS.flatMap(s=>s.items).length+rots.length;
-  return el("div",null,
-    el("div",{cls:"fb-status"+(late?" late":"")},
-      el("div",{st:{flex:"1"}},el("div",{cls:"big"},fbRoundLabel(r)),el("div",{cls:"sub"},(r.deadline?"Due "+fmtDate(r.deadline)+" ("+fbDueText(r)+")":"No due date set")+" · "+answered+" of "+total+" ratings answered")),
-      el("div",{st:{fontSize:".78rem",color:"#5C5345",maxWidth:"300px",lineHeight:"1.5"}},"Your answers are submitted under your name and read by the Program Director only. Nobody else in the programme sees them.")),
-    ...FB_SECTIONS.map((s,si)=>el("div",{cls:"fb-sec"},
-      el("div",{cls:"n"},String(si+1).padStart(2,"0")),el("h2",null,s.title),s.intro?el("p",{cls:"intro"},s.intro):null,
-      s.rotations?(rots.length?el("div",{st:{marginBottom:"8px"}},
-        el("div",{cls:"fb-lbl",st:{marginTop:"10px"}},"Your rotations in these blocks"),
-        ...rots.map(x=>{const v=d.rot[x.name]||(d.rot[x.name]={rating:null,comment:""});
-          return el("div",{cls:"fb-rot"+(missRot.has(x.name)?" miss":"")},
-            el("div",{cls:"nm",st:missRot.has(x.name)?{color:"#9d2f17"}:null},x.name,el("small",null,"Block"+(x.blocks.length>1?"s ":" ")+x.blocks.join(", ")+" · educational value")),
-            fbRate(v.rating,n=>{v.rating=n;fbSaveDraft();render();}),
-            el("input",{placeholder:"What was good, what was missing (optional)",value:v.comment||"",onInput:e=>{v.comment=e.target.value;fbSaveDraft();}}));})):
-        el("div",{st:{fontSize:".8rem",color:"#5C5345",padding:"8px 0"}},"No rotation of yours is recorded for these blocks.")):null,
-      ...s.items.map(i=>el("div",{cls:"fb-item"+(missing.has(i.k)?" miss":"")},el("div",{cls:"q"},i.t),fbRate(d.items[i.k]||null,n=>{d.items[i.k]=n;fbSaveDraft();render();}))),
-      ...s.texts.map(t=>el("div",{cls:"fb-text"},el("label",null,t.t),el("textarea",{placeholder:"Optional",onInput:e=>{d.texts[t.k]=e.target.value;fbSaveDraft();}},d.texts[t.k]||""))))),
-    el("div",{st:{display:"flex",gap:"12px",justifyContent:"space-between",alignItems:"center",padding:"26px 0",flexWrap:"wrap"}},
-      el("div",{st:{fontSize:".76rem",color:"#5C5345"}},"Your answers are kept on this device until you submit."),
-      el("button",{cls:"fb-btn",disabled:!!STATE.fbSaving,onClick:()=>fbSubmitReview(r,d,rots)},STATE.fbSaving?"Submitting…":"Submit review")));
-}
-async function fbSubmitReview(r,d,rots){
-  const u=STATE.user;
-  const miss=FB_SECTIONS.flatMap(s=>s.items).filter(i=>!(d.items[i.k]>=1)).length+rots.filter(x=>!((d.rot[x.name]||{}).rating>=1)).length;
-  if(miss){STATE.fbShowMissing=true;render();showToast(miss+" rating"+(miss===1?" is":"s are")+" still unanswered; they are marked in red.","error");return;}
-  const res=resById(u.rid);
-  const go=async()=>{
-    STATE.fbSaving=true;render();
-    const answers={items:d.items,texts:Object.fromEntries(Object.entries(d.texts).filter(([k,v])=>v&&v.trim()).map(([k,v])=>[k,v.trim()])),
-      rotations:rots.map(x=>({name:x.name,blocks:x.blocks,rating:d.rot[x.name].rating,comment:(d.rot[x.name].comment||"").trim()||null}))};
-    const{data,error}=await sb.from("feedback_round_responses").insert({round_id:r.id,resident_id:u.rid,level:res?res.level:null,answers}).select().single();
-    STATE.fbSaving=false;
-    if(error){render();showToast("Could not submit: "+error.message,"error");return;}
-    FB_RESP.push(data);try{localStorage.removeItem(fbDraftKey(r));}catch(e){}_fbDraft=null;STATE.fbShowMissing=false;
-    showToast("Review submitted. Thank you.","success");render();
-  };
-  showConfirm("Submit your review? It goes to the Program Director under your name and cannot be edited afterwards.",go,"Submit","primary");
-}
-function fbGeneralResident(){
-  const u=STATE.user;
-  const g=_fbGen||(_fbGen={category:FB_GEN_CATS[0],subject:"",message:""});
-  const mine=FB_GENERAL.filter(x=>x.resident_id===u.rid).sort((a,b)=>b.id-a.id);
-  return el("div",null,
-    el("div",{cls:"fb-gen"},
-      el("div",null,el("label",null,"About"),el("select",{onChange:e=>{g.category=e.target.value;}},...FB_GEN_CATS.map(c=>el("option",{value:c,selected:g.category===c},c)))),
-      el("div",null,el("label",null,"Subject"),el("input",{placeholder:"One line",value:g.subject,onInput:e=>{g.subject=e.target.value;}})),
-      el("div",{cls:"full"},el("label",null,"Message"),el("textarea",{st:{minHeight:"130px",fontSize:".9rem",lineHeight:"1.55"},placeholder:"What happened, what you suggest, what you need.",onInput:e=>{g.message=e.target.value;}},g.message)),
-      el("div",{cls:"full",st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"14px",flexWrap:"wrap"}},
-        el("div",{st:{fontSize:".8rem",color:"#5C5345"}},"Sent under your name, to the Program Director only."),
-        el("button",{cls:"fb-btn",disabled:!!STATE.fbSaving,onClick:()=>fbSendGeneral(g)},"Send to the Program Director"))),
-    el("div",{st:{marginTop:"40px"}},
-      el("div",{cls:"fb-lbl"},"Your previous messages"),
-      mine.length?el("table",{cls:"fb-tbl"},el("thead",null,el("tr",null,el("th",null,"Sent"),el("th",null,"About"),el("th",null,"Subject"),el("th",null,"Status"))),
-        el("tbody",null,...mine.map(x=>{const st=FB_GEN_STATUS[x.status]||FB_GEN_STATUS.new;
-          return el("tr",null,el("td",{st:{whiteSpace:"nowrap",color:"#5C5345"}},fmtDate((x.created_at||"").slice(0,10))),el("td",{st:{color:"#5C5345"}},x.category),el("td",{st:{fontWeight:"600"}},x.subject),
-            el("td",null,el("span",{cls:"fb-chip",st:{color:st[1],background:st[2]}},st[0])));}))):
-      el("div",{st:{fontSize:".84rem",color:"#5C5345"}},"Nothing sent yet.")));
-}
-async function fbSendGeneral(g){
-  const u=STATE.user;
-  if(!g.subject.trim()||!g.message.trim()){showToast("Write a subject and a message first.","error");return;}
-  const res=resById(u.rid);
-  STATE.fbSaving=true;render();
-  const{data,error}=await sb.from("feedback_general").insert({resident_id:u.rid,level:res?res.level:null,category:g.category,subject:g.subject.trim(),message:g.message.trim(),status:"new"}).select().single();
-  STATE.fbSaving=false;
-  if(error){render();showToast("Could not send: "+error.message,"error");return;}
-  FB_GENERAL.push(data);
-  _fbGen=null;showToast("Sent to the Program Director.","success");render();
-}
-// ═══ PD / DEPUTY ════════════════════════════════════════════════════════════════════════════════
-function fbAdminPage(){
-  const tab=STATE.fbTab||"review";
-  const newCount=FB_GENERAL.filter(x=>x.status==="new").length;
-  return el("div",{cls:"content"},
-    fbHeader("Resident Feedback","The programme review rounds and the general feedback inbox. Visible to you alone."),
-    fbTabs([["review","Programme review"],["general","General feedback"+(newCount?" ("+newCount+" new)":"")]],tab,k=>set({fbTab:k})),
-    tab==="general"?fbInbox():fbReviewAdmin());
-}
-function fbReviewAdmin(){
-  const rounds=FB_ROUNDS.slice().sort((a,b)=>b.id-a.id);
-  const op=fbOpenRound();
-  const r=fbRoundById(STATE.fbRound)||op||rounds[0]||null;
-  if(STATE.fbViewRes&&r){const x=fbResponse(STATE.fbViewRes,r);if(x)return fbOneResponse(r,x);}
-  const roster=RESIDENTS.slice().sort((a,b)=>a.level.localeCompare(b.level)||a.name.localeCompare(b.name));
-  const done=r?roster.filter(x=>fbDone(x.id,r)):[];
-  const owe=r?roster.filter(x=>!fbDone(x.id,r)):[];
-  const resp=r?FB_RESP.filter(x=>x.round_id===r.id):[];
-  return el("div",null,
-    el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"14px",flexWrap:"wrap",marginBottom:"16px"}},
-      el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap"}},...rounds.map(x=>el("span",{cls:"pill"+(r&&r.id===x.id?" on":""),onClick:()=>set({fbRound:x.id,fbDeadline:undefined,fbLevel:"all",fbViewRes:null})},fbRoundLabel(x)+(x.is_open?"":" · closed"))),
-        el("span",{cls:"pill"+(STATE.fbNewRound?" on":""),onClick:()=>set({fbNewRound:!STATE.fbNewRound})},"+ New round")),
-      r?fbRoundControls(r):null),
-    STATE.fbNewRound?fbNewRoundForm():null,
-    !r?el("div",{st:{padding:"20px 0",fontSize:".88rem",color:"#5C5345",lineHeight:"1.6",maxWidth:"560px"}},"No round yet. Open one with the academic year, the blocks it covers and a due date; every resident is then asked to fill it."):
-    el("div",{cls:"fb-split"},
-      el("div",null,
-        el("div",{cls:"fb-status"+(r.is_open?"":" done")},
-          el("div",{st:{flex:"1"}},el("div",{cls:"big"},done.length+" of "+roster.length+" residents submitted"),
-            el("div",{cls:"sub"},r.is_open?"Open"+(r.deadline?", due "+fmtDate(r.deadline)+" ("+fbDueText(r)+")":", no due date"):"Closed"+(r.deadline?" · was due "+fmtDate(r.deadline):"")))),
-        resp.length?fbResults(resp):el("div",{st:{padding:"20px 0",fontSize:".88rem",color:"#5C5345",lineHeight:"1.6",maxWidth:"560px"}},"No responses yet. Results appear here as residents submit.")),
-      el("div",{cls:"fb-side"},
-        el("h4",null,owe.length?owe.length+" still to submit":"Everyone has submitted"),
-        ...owe.map(x=>el("div",{cls:"who"},x.name,el("span",null,x.level))),
-        owe.length&&r.is_open?el("button",{cls:"fb-btn ghost",st:{marginTop:"14px",width:"100%"},onClick:()=>fbRemind(owe,r)},"Send a reminder ("+owe.length+")"):null,
-        done.length?el("div",{st:{marginTop:"18px"}},el("h4",null,"Submitted · click a name to read"),...done.map(x=>{const c=fbResponse(x.id,r);
-          return el("div",{cls:"who",st:{cursor:"pointer"},onClick:()=>set({fbViewRes:x.id})},el("span",{cls:"lnk",st:{color:"#a94e2c",fontWeight:"600",fontSize:".82rem"}},x.name),el("span",null,fmtDate((c.submitted_at||"").slice(0,10))));})):null)));
-}
-function fbNewRoundForm(){
-  const n=STATE.fbNew||(STATE.fbNew={ay:CURRENT_ACADEMIC_YEAR,from:1,to:CURRENT_PERIOD,deadline:"",label:""});
-  const years=[CURRENT_ACADEMIC_YEAR-1,CURRENT_ACADEMIC_YEAR];
-  const blocks=rotaPeriods(n.ay).map((_,i)=>i+1);
-  return el("div",{cls:"fb-new"},
-    el("div",null,el("label",null,"Academic year"),el("select",{onChange:e=>{n.ay=Number(e.target.value);render();}},...years.map(y=>el("option",{value:String(y),selected:n.ay===y},ayLabel(y))))),
-    el("div",null,el("label",null,"From block"),el("select",{onChange:e=>{n.from=Number(e.target.value);}},...blocks.map(b=>el("option",{value:String(b),selected:n.from===b},"Block "+b)))),
-    el("div",null,el("label",null,"To block"),el("select",{onChange:e=>{n.to=Number(e.target.value);}},...blocks.map(b=>el("option",{value:String(b),selected:n.to===b},"Block "+b)))),
-    el("div",null,el("label",null,"Due date"),el("input",{type:"date",value:n.deadline,onChange:e=>{n.deadline=e.target.value;}})),
-    el("div",{st:{gridColumn:"span 2"}},el("label",null,"Label (optional)"),el("input",{placeholder:"e.g. Blocks 11–13 · AY 2025-26",value:n.label,onInput:e=>{n.label=e.target.value;}})),
-    el("div",null,el("button",{cls:"fb-btn",st:{width:"100%"},onClick:()=>fbCreateRound(n)},"Open round")));
-}
-async function fbCreateRound(n){
-  if(!(n.from>=1&&n.to>=n.from)){showToast("The block range is not right.","error");return;}
-  if(!n.deadline){showToast("Set a due date first.","error");return;}
-  const now=new Date().toISOString();
-  const{data,error}=await sb.from("feedback_rounds").insert({academic_year:n.ay,block_from:n.from,block_to:n.to,label:n.label.trim()||null,deadline:n.deadline,is_open:true,opened_at:now,updated_at:now,updated_by:STATE.user.profileId}).select().single();
-  if(error){showToast("Could not open the round: "+error.message,"error");return;}
-  FB_ROUNDS.push(data);STATE.fbNew=null;STATE.fbNewRound=false;STATE.fbRound=data.id;
-  showToast("Round is open. Residents see it on their home page.","success");render();
-}
-function fbRoundControls(r){
-  const dl=STATE.fbDeadline!==undefined?STATE.fbDeadline:(r.deadline||"");
-  return el("div",{st:{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}},
-    el("input",{type:"date",value:dl,st:{width:"auto",fontSize:".82rem"},onChange:e=>{STATE.fbDeadline=e.target.value;}}),
-    !r.is_open?el("button",{cls:"fb-btn",onClick:()=>fbSaveRound(r,true)},"Reopen round"):
-      el("button",{cls:"fb-btn ghost",onClick:()=>fbSaveRound(r,true)},"Save due date"),
-    r.is_open?el("button",{cls:"fb-btn ghost",onClick:()=>showConfirm("Close this round? Residents can no longer submit until it is reopened.",()=>fbSaveRound(r,false),"Close round","warn")},"Close round"):null);
-}
-async function fbSaveRound(r,open){
-  const dl=STATE.fbDeadline!==undefined?STATE.fbDeadline:(r.deadline||null);
-  if(open&&!dl){showToast("Set a due date first.","error");return;}
-  const now=new Date().toISOString();
-  const payload={deadline:dl||null,is_open:!!open,updated_at:now,updated_by:STATE.user.profileId};
-  if(open&&!r.opened_at)payload.opened_at=now;
-  const{data,error}=await sb.from("feedback_rounds").update(payload).eq("id",r.id).select().single();
-  if(error){showToast("Could not save the round: "+error.message,"error");return;}
-  Object.assign(r,data);STATE.fbDeadline=undefined;
-  showToast(open?"Round is open.":"Round closed.","success");render();
-}
-async function fbRemind(owe,r){
-  const usernames=owe.map(x=>x.user).filter(Boolean);
-  if(!usernames.length){showToast("No residents to notify","info");return;}
-  const{data:profs}=await sb.from("profiles").select("id,username").in("username",usernames);
-  if(!profs||!profs.length){showToast("Could not find resident profiles","error");return;}
-  const msg="Reminder: your programme review ("+fbRoundLabel(r)+") is "+(r.deadline?"due "+fmtDate(r.deadline):"waiting")+". It takes about ten minutes.";
-  const results=await Promise.all(profs.map(async p=>{const{error}=await sb.from("notifications").insert({profile_id:p.id,type:"info",message:msg,link_mod:"feedback",link_param:null,read:false});return !error;}));
-  const sent=results.filter(Boolean).length;
-  showToast(sent?"Reminder sent to "+sent+" resident"+(sent===1?"":"s"):"Could not send the reminders",sent?"success":"error");
-}
-// One resident's answers, read only.
-function fbOneResponse(r,x){
-  const res=resById(x.resident_id)||{name:"Resident",level:x.level||""};
-  const a=x.answers||{},items=a.items||{},texts=a.texts||{},rots=a.rotations||[];
-  const vals=Object.values(items).map(Number).filter(v=>v>=1);
-  const mean=vals.length?(vals.reduce((p,q)=>p+q,0)/vals.length):null;
-  return el("div",null,
-    el("button",{cls:"back-btn",onClick:()=>set({fbViewRes:null})},"← All responses"),
-    el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:"16px",flexWrap:"wrap",marginBottom:"8px"}},
-      el("div",null,el("h2",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.7rem",fontWeight:"400",color:"#1F1A12",margin:"0 0 4px"}},res.name),
-        el("div",{st:{fontSize:".84rem",color:"#5C5345"}},(x.level||res.level)+" · "+fbRoundLabel(r)+" · submitted "+fmtDate((x.submitted_at||"").slice(0,10)))),
-      el("div",{st:{textAlign:"right"}},el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2.2rem",lineHeight:"1",color:fbMeanTone(mean)}},mean!=null?mean.toFixed(1):"—"),el("div",{st:{fontSize:".7rem",color:"#5C5345"}},"average of 5"))),
-    ...FB_SECTIONS.map((s,si)=>el("div",{cls:"fb-sec"},
-      el("div",{cls:"n"},String(si+1).padStart(2,"0")),el("h2",null,s.title),
-      s.rotations?(rots.length?el("div",null,...rots.map(y=>el("div",{cls:"fb-rot"},
-        el("div",{cls:"nm"},y.name,el("small",null,"Block"+((y.blocks||[]).length>1?"s ":" ")+(y.blocks||[]).join(", "))),
-        fbRate(y.rating,()=>{},true),
-        y.comment?el("div",{cls:"fb-quote",st:{gridColumn:"1/-1",margin:"4px 0 0"}},y.comment):null))):
-        el("div",{st:{fontSize:".8rem",color:"#5C5345",padding:"6px 0"}},"No rotations were listed.")):null,
-      ...s.items.map(i=>el("div",{cls:"fb-item"},el("div",{cls:"q"},i.t),fbRate(Number(items[i.k])||null,()=>{},true))),
-      ...s.texts.map(t=>el("div",{cls:"fb-text"},el("label",{st:{color:"#5C5345",fontSize:".8rem"}},t.t),
-        texts[t.k]?el("div",{cls:"fb-quote"},texts[t.k]):el("div",{st:{fontSize:".8rem",color:"rgba(31,26,18,.4)",fontStyle:"italic"}},"No answer"))))));
-}
-const FB_BAR_COL={1:"#9d2f17",2:"#d98b6a",3:"#CBA155",4:"#7FB89C",5:"#26523A"};
-function fbMeanTone(m){return m==null?"rgba(31,26,18,.35)":m>=4?"#26523A":m>=3?"#8a5a12":"#9d2f17";}
-function fbDist(vals){const c={1:0,2:0,3:0,4:0,5:0};vals.forEach(v=>{if(c[v]!=null)c[v]++;});const n=vals.length;const mean=n?Math.round(vals.reduce((a,b)=>a+b,0)/n*10)/10:null;return{c,n,mean};}
-function fbBar(dist){
-  return el("div",{cls:"fb-bar",title:[1,2,3,4,5].map(k=>dist.c[k]+" × "+FB_SCALE[k-1][1]).join(" · ")},
-    ...[1,2,3,4,5].filter(k=>dist.c[k]).map(k=>el("i",{st:{width:(dist.c[k]/dist.n*100)+"%",background:FB_BAR_COL[k]}})));
-}
-function fbResults(resp){
-  const lvFilter=STATE.fbLevel||"all";
-  const levels=[...new Set(resp.map(x=>x.level).filter(Boolean))].sort();
-  const rows=lvFilter==="all"?resp:resp.filter(x=>x.level===lvFilter);
-  // Rotations across every response: one line per rotation name.
-  const who=x=>(resById(x.resident_id)||{}).name||"Resident";
-  const rot={};rows.forEach(x=>((x.answers||{}).rotations||[]).forEach(y=>{if(!(y.rating>=1))return;const o=rot[y.name]||(rot[y.name]={vals:[],comments:[]});o.vals.push(y.rating);if(y.comment)o.comments.push([y.comment,who(x)]);}));
-  const rotNames=Object.keys(rot).sort((a,b)=>fbDist(rot[a].vals).mean-fbDist(rot[b].vals).mean);
-  return el("div",null,
-    el("div",{st:{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap",margin:"16px 0 4px"}},
-      el("span",{st:{fontSize:".74rem",color:"#5C5345"}},"Show"),
-      ...[["all","All levels"],...levels.map(l=>[l,l])].map(([k,l])=>el("span",{cls:"pill"+(lvFilter===k?" on":""),onClick:()=>set({fbLevel:k})},l+(k==="all"?" ("+resp.length+")":" ("+resp.filter(x=>x.level===k).length+")"))),
-      el("span",{st:{marginLeft:"auto",fontSize:".72rem",color:"#5C5345"}},"Click a name on the right to read one resident's answers.")),
-    el("div",{cls:"fb-key"},...[1,2,3,4,5].map(k=>el("span",null,el("i",{st:{background:FB_BAR_COL[k]}}),FB_SCALE[k-1][1]))),
-    ...FB_SECTIONS.map((s,si)=>el("div",{cls:"fb-sec"},
-      el("div",{cls:"n"},String(si+1).padStart(2,"0")),el("h2",null,s.title),
-      s.rotations?(rotNames.length?el("div",{st:{margin:"6px 0 14px"}},
-        el("div",{cls:"fb-lbl",st:{marginTop:"8px"}},"By rotation · educational value"),
-        ...rotNames.map(nm=>{const d=fbDist(rot[nm].vals);
-          return el("div",null,el("div",{cls:"fb-res"},el("div",{cls:"q"},el("b",null,nm),el("span",{st:{color:"#5C5345",fontSize:".76rem"}}," · "+d.n+" rating"+(d.n===1?"":"s"))),
-              el("div",{cls:"m",st:{color:fbMeanTone(d.mean)}},d.mean.toFixed(1),el("small",null,"mean")),fbBar(d)),
-            ...rot[nm].comments.map(c=>el("div",{cls:"fb-quote"},c[0],el("small",null,c[1]))));})):
-        el("div",{st:{fontSize:".8rem",color:"#5C5345",padding:"6px 0"}},"No rotation ratings in this round.")):null,
-      ...s.items.map(i=>{const d=fbDist(rows.map(x=>Number((x.answers||{}).items?.[i.k])).filter(v=>v>=1));
-        return el("div",{cls:"fb-res"},el("div",{cls:"q"},i.t),
-          el("div",{cls:"m",st:{color:fbMeanTone(d.mean)}},d.mean!=null?d.mean.toFixed(1):"—",el("small",null,d.n+" answers")),
-          d.n?fbBar(d):el("div",{cls:"fb-bar"}));}),
-      ...s.texts.map(t=>{const qs=rows.filter(x=>((x.answers||{}).texts||{})[t.k]).map(x=>[((x.answers||{}).texts||{})[t.k],who(x)]);
-        return el("div",{cls:"fb-text"},el("label",{st:{color:"#5C5345",fontSize:".8rem"}},t.t+(qs.length?"":" · no written answers")),
-          ...qs.map(q=>el("div",{cls:"fb-quote"},q[0],el("small",null,q[1]))));}))));
-}
-// ── General feedback inbox ──
-function fbInbox(){
-  const filt=STATE.fbInboxFilter||"open";
-  const all=FB_GENERAL.slice().sort((a,b)=>b.id-a.id);
-  const rows=filt==="all"?all:filt==="open"?all.filter(x=>x.status!=="addressed"):all.filter(x=>x.status===filt);
-  return el("div",null,
-    el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"10px"}},
-      ...[["open","Open"],["new","New"],["addressed","Addressed"],["all","All"]].map(([k,l])=>el("span",{cls:"pill"+(filt===k?" on":""),onClick:()=>set({fbInboxFilter:k})},l))),
-    rows.length?el("div",null,...rows.map(x=>fbMsg(x))):el("div",{st:{padding:"24px 0",fontSize:".88rem",color:"#5C5345"}},"Nothing here."));
-}
-function fbMsg(x){
-  const open=STATE.fbOpenMsg===x.id;
-  const st=FB_GEN_STATUS[x.status]||FB_GEN_STATUS.new;
-  const who=((resById(x.resident_id)||{}).name||"Resident")+(x.level?" · "+x.level:"");
-  return el("div",{cls:"fb-msg"},
-    el("div",{cls:"hd",onClick:()=>{set({fbOpenMsg:open?null:x.id});if(!open&&x.status==="new")fbSetStatus(x,"read",true);}},
-      el("span",{cls:"fb-chip",st:{color:st[1],background:st[2]}},st[0]),
-      el("b",null,x.subject),
-      el("span",{cls:"meta"},who+" · "+x.category+" · "+fmtDate((x.created_at||"").slice(0,10))),
-      el("span",{cls:"sp"}),
-      el("span",{cls:"lnk",st:{fontSize:".78rem",fontWeight:"600",color:"#a94e2c"}},open?"Close":"Read")),
-    open?el("div",null,
-      el("div",{cls:"body"},x.message),
-      el("div",{cls:"fb-lbl",st:{marginTop:"16px"}},"Your note (residents never see this)"),
-      el("textarea",{placeholder:"What was done, or who is following it up.",onInput:e=>{_fbNote[x.id]=e.target.value;}},_fbNote[x.id]!==undefined?_fbNote[x.id]:(x.pd_note||"")),
-      el("div",{cls:"act"},
-        el("button",{cls:"fb-btn ghost",onClick:()=>fbSaveNote(x)},"Save note"),
-        x.status!=="addressed"?el("button",{cls:"fb-btn",onClick:()=>fbSetStatus(x,"addressed")},"Mark addressed"):el("button",{cls:"fb-btn ghost",onClick:()=>fbSetStatus(x,"read")},"Reopen"))):null);
-}
-async function fbSetStatus(x,status,quiet){
-  const{data,error}=await sb.from("feedback_general").update({status,reviewed_at:new Date().toISOString(),reviewed_by:STATE.user.profileId}).eq("id",x.id).select().single();
-  if(error){if(!quiet)showToast("Could not update: "+error.message,"error");return;}
-  Object.assign(x,data);render();
-}
-async function fbSaveNote(x){
-  const note=(_fbNote[x.id]!==undefined?_fbNote[x.id]:(x.pd_note||"")).trim()||null;
-  const{data,error}=await sb.from("feedback_general").update({pd_note:note}).eq("id",x.id).select().single();
-  if(error){showToast("Could not save the note: "+error.message,"error");return;}
-  Object.assign(x,data);delete _fbNote[x.id];showToast("Note saved.","success");
-}
-// Home-page alert: a resident with an open round not yet submitted, and the PD while a round is open.
-function fbHomeAlert(){
-  const u=STATE.user;if(!u)return null;
-  if(FB_STATE==="idle"&&(fbIsResident()||fbIsAdmin()))loadFeedback();
-  if(FB_STATE!=="ready")return null;
-  const r=fbOpenRound();if(!r)return null;
-  if(fbIsResident()&&!fbDone(u.rid,r)){
-    const d=fbDaysLeft(r);
-    return el("div",{cls:(d!=null&&d<=3)?"alert-red":"alert-yellow",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({mod:"feedback",fbTab:"review"})},
-      "Programme review ("+fbRoundLabel(r)+") is "+(r.deadline?fbDueText(r)+", "+fmtDate(r.deadline):"open")+". About ten minutes. Click to fill it in.");
-  }
-  if(fbIsAdmin()){
-    const n=RESIDENTS.length,done=RESIDENTS.filter(x=>fbDone(x.id,r)).length;
-    return el("div",{cls:"alert-yellow",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({mod:"feedback",fbTab:"review",fbRound:r.id})},
-      "Programme review "+fbRoundLabel(r)+": "+done+" of "+n+" residents have submitted"+(r.deadline?", "+fbDueText(r):"")+". Click to read the results.");
-  }
-  return null;
-}
 let _lastMod=null;
 function render(){
   const app=document.getElementById("app");
@@ -18524,7 +18026,6 @@ function render(){
         case"leave_plan":content=renderLeavePlan();break;
         case"committees":content=renderCommittees();break;
         case"mentorship":content=renderMentorship();break;
-        case"feedback":content=renderFeedback();break;
         case"control":content=renderControl();break;
         default:content=renderModGrid();
       }
