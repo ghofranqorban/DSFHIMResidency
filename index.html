@@ -3754,10 +3754,15 @@ async function saveOncallCell(blk,date,slotKey,residentId,residentName){
 }
 // ─── ON-CALL PREFERENCE SURVEY ───────────────────────────────────────────────
 // Per block, each resident names dates they would prefer NOT to be on call:
-// 2 of the block's Fri/Sat days + 4 weekdays. These are preferences, not blocks —
-// the builder flags a clash and still lets the scheduler assign over it.
-const OC_PREF_WE_CAP=2;
-const OC_PREF_WD_CAP=4;
+// up to 4 days in all. Fri/Sat days are allowed — both days of one weekend, or single
+// days spread out — but they may touch at most TWO weekends of the block. Fewer is fine;
+// nobody is made to fill the quota. These are preferences, not blocks — the builder
+// flags a clash and still lets the scheduler assign over it.
+const OC_PREF_TOTAL_CAP=4;
+const OC_PREF_WEEKENDS_CAP=2;
+// The Friday that opens a Fri/Sat pair, so both days of one weekend share a key.
+function ocWeekendKey(ds){const d=oncallDateObj(ds);if(d.getDay()===6)d.setDate(d.getDate()-1);return toLocalYMD(d);}
+function ocWeekendCount(dates){return new Set(dates.filter(isWeekendDate).map(ocWeekendKey)).size;}
 let ONCALL_PREFS=[];
 let ONCALL_PREFS_STATUS={};
 let ONCALL_PREFS_PLAN=null;
@@ -3891,9 +3896,9 @@ async function saveOncallPrefs(blk,sel,status){
   if(ocIsPast())return;
   const yr=ocAY();
   const dates=Object.keys(sel).filter(d=>sel[d]).sort();
-  const we=dates.filter(isWeekendDate).length,wd=dates.length-we;
-  if(status==="submitted"&&(we!==OC_PREF_WE_CAP||wd!==OC_PREF_WD_CAP)){
-    showToast("Choose exactly "+OC_PREF_WE_CAP+" weekend days and "+OC_PREF_WD_CAP+" weekdays before submitting","error");return;
+  if(status==="submitted"&&!dates.length){showToast("Pick at least one day before submitting","error");return;}
+  if(dates.length>OC_PREF_TOTAL_CAP||ocWeekendCount(dates)>OC_PREF_WEEKENDS_CAP){
+    showToast("Up to "+OC_PREF_TOTAL_CAP+" days, touching at most "+OC_PREF_WEEKENDS_CAP+" weekends","error");return;
   }
   const{error:de}=await sb.from("oncall_prefs").delete().eq("resident_id",u.rid).eq("academic_year",yr).eq("block_number",blk);
   if(de){showToast("Save failed: "+de.message,"error");return;}
@@ -17191,19 +17196,23 @@ function renderOncall(){
     }
     const sel=u.rid?(STATE.ocPrefSel||{}):{};
     const selDates=Object.keys(sel).filter(d=>sel[d]);
-    const weCount=selDates.filter(isWeekendDate).length;
-    const wdCount=selDates.length-weCount;
+    const weDates=selDates.filter(isWeekendDate);
+    const weCount=weDates.length;
+    const totalCount=selDates.length;
+    // The weekends already touched; once the cap is reached, other weekends are off limits.
+    const weKeys=new Set(weDates.map(ocWeekendKey));
     const editable=isOpen&&!!u.rid;
     const isResidentView=!!u.rid;
-    const complete=weCount===OC_PREF_WE_CAP&&wdCount===OC_PREF_WD_CAP;
+    // Any number from 1 to the cap can be submitted; the cap only stops a fifth pick.
+    const complete=totalCount>0&&totalCount<=OC_PREF_TOTAL_CAP&&weKeys.size<=OC_PREF_WEEKENDS_CAP;
+    const totalFull=totalCount>=OC_PREF_TOTAL_CAP;
+    function weBlocked(date){return isWeekendDate(date)&&weKeys.size>=OC_PREF_WEEKENDS_CAP&&!weKeys.has(ocWeekendKey(date));}
     function toggleDay(date){
       const next=Object.assign({},sel);
       if(next[date]){
         delete next[date];
       }else{
-        const isWe=isWeekendDate(date);
-        if(isWe&&weCount>=OC_PREF_WE_CAP)return;
-        if(!isWe&&wdCount>=OC_PREF_WD_CAP)return;
+        if(totalFull||weBlocked(date))return;
         next[date]=true;
       }
       set({ocPrefSel:next});
@@ -17220,8 +17229,7 @@ function renderOncall(){
     function dayCell(d){
       if(!d)return el("td",{st:{padding:"4px"}},"");
       const picked=!!sel[d.date];
-      const kindFull=d.isWe?weCount>=OC_PREF_WE_CAP:wdCount>=OC_PREF_WD_CAP;
-      const dim=editable&&!picked&&kindFull;
+      const dim=editable&&!picked&&(totalFull||weBlocked(d.date));
       const parts=d.date.split("-");
       const met=picked&&hasSchedule&&u.rid?oncallPrefMet(blk,u.rid,d.date):null;
       const dem=demand[d.date]||0;
@@ -17249,7 +17257,7 @@ function renderOncall(){
       return td;
     }
     function quota(n,cap,label){
-      const done=n===cap;
+      const done=n>=cap;
       return el("div",{st:{display:"flex",alignItems:"baseline",gap:"8px"}},
         el("span",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.9rem",lineHeight:"1",color:done?"#26523A":"#1F1A12"}},String(n)),
         el("span",{st:{fontSize:".8rem",color:"rgba(31,26,18,.45)",fontWeight:"600"}},"/ "+cap),
@@ -17278,12 +17286,12 @@ function renderOncall(){
       :null;
     const calendar=el("div",null,
       isResidentView?el("div",{st:{display:"flex",gap:"38px",alignItems:"flex-end",flexWrap:"wrap",marginBottom:"18px"}},
-        quota(weCount,OC_PREF_WE_CAP,"Weekend days"),
-        quota(wdCount,OC_PREF_WD_CAP,"Weekdays")
+        quota(totalCount,OC_PREF_TOTAL_CAP,"Days chosen"),
+        quota(weKeys.size,OC_PREF_WEEKENDS_CAP,"Weekends touched")
       ):null,
       el("div",{st:{fontSize:".78rem",color:"rgba(31,26,18,.5)",marginBottom:"18px"}},
         isResidentView
-          ?(editable?"Tap the days you would prefer not to be on call. Your two weekend days need not be in the same weekend."
+          ?(editable?"Tap the days you would prefer not to be on call \u2014 up to "+OC_PREF_TOTAL_CAP+" days. Fridays and Saturdays are fine, both days of one weekend or spread out, but across no more than "+OC_PREF_WEEKENDS_CAP+" weekends. You can pick fewer."
                     :"These are the days you asked to avoid.")
           :"How many residents asked to avoid each day of Block "+blk+". Preferences are advisory \u2014 assign over them where the rota needs it."),
       el("table",{st:{width:"100%",borderCollapse:"collapse"}},
@@ -17295,9 +17303,9 @@ function renderOncall(){
         el("button",{cls:"sbtn primary",disabled:!complete,st:complete?{}:{opacity:".45",cursor:"not-allowed"},onClick:()=>{if(complete)saveOncallPrefs(blk,sel,"submitted");}},mySubmitted?"Update submission":"Submit preferences"),
         el("button",{cls:"sbtn",onClick:()=>saveOncallPrefs(blk,sel,"draft")},"Save draft"),
         el("span",{st:{fontSize:".78rem",color:"rgba(31,26,18,.45)"}},
-          complete?(mySubmitted?"Submitted \u2014 you can still change it while the survey is open":"Ready to submit")
-                  :"Choose "+[OC_PREF_WE_CAP-weCount>0?(OC_PREF_WE_CAP-weCount)+" more weekend day"+(OC_PREF_WE_CAP-weCount===1?"":"s"):null,
-                              OC_PREF_WD_CAP-wdCount>0?(OC_PREF_WD_CAP-wdCount)+" more weekday"+(OC_PREF_WD_CAP-wdCount===1?"":"s"):null].filter(Boolean).join(" and "))
+          complete?(mySubmitted?"Submitted \u2014 you can still change it while the survey is open"
+                               :(totalFull?"Ready to submit":"Ready to submit \u2014 you may add up to "+(OC_PREF_TOTAL_CAP-totalCount)+" more"))
+                  :"Pick at least one day to submit")
       ):null
     );
     // Outcome: did the published schedule honour each pick?
