@@ -18049,6 +18049,9 @@ function fbRoundById(id){return FB_ROUNDS.find(r=>r.id===id)||null;}
 function fbOpenRound(){return FB_ROUNDS.filter(r=>r.is_open).sort((a,b)=>(b.opened_at||"").localeCompare(a.opened_at||"")||(b.id-a.id))[0]||null;}
 function fbResponse(rid,r){return r?FB_RESP.find(x=>x.resident_id===rid&&x.round_id===r.id)||null:null;}
 function fbDone(rid,r){return !!fbResponse(rid,r);}
+// A resident who joined after the round's academic year never saw those blocks and is not asked.
+function fbEligible(res,r){return !!(res&&r&&!(Number(res.yearStarted)>r.academic_year));}
+function fbRoster(r){return RESIDENTS.filter(x=>fbEligible(x,r)).sort((a,b)=>a.level.localeCompare(b.level)||a.name.localeCompare(b.name));}
 function fbDaysLeft(r){if(!r||!r.deadline)return null;const t=new Date();t.setHours(0,0,0,0);return Math.round((new Date(r.deadline+"T00:00:00")-t)/86400000);}
 function fbDueText(r){const d=fbDaysLeft(r);if(d==null)return "";return d<0?"overdue by "+(-d)+" day"+(d===-1?"":"s"):d===0?"due today":d===1?"due tomorrow":"due in "+d+" days";}
 async function loadFeedback(){
@@ -18185,6 +18188,8 @@ function fbReviewResident(){
   const u=STATE.user,r=fbOpenRound();
   if(!r)return el("div",{st:{padding:"24px 0",color:"#5C5345",fontSize:".9rem",lineHeight:"1.6",maxWidth:"560px"}},
     "No review is open at the moment. The Program Director opens one about twice a year; it will appear here with its due date, and on your home page.");
+  if(!fbEligible(resById(u.rid),r))return el("div",{st:{padding:"24px 0",color:"#5C5345",fontSize:".9rem",lineHeight:"1.6",maxWidth:"560px"}},
+    "The current review ("+fbRoundLabel(r)+") covers blocks before you joined the programme, so there is nothing for you to fill in. Your first review comes with the next round.");
   if(fbDone(u.rid,r))return el("div",null,
     el("div",{cls:"fb-status done"},el("div",null,el("div",{cls:"big"},"Submitted, thank you"),el("div",{cls:"sub"},fbRoundLabel(r)+" · submitted "+fmtDate((fbResponse(u.rid,r).submitted_at||"").slice(0,10))))),
     el("div",{st:{fontSize:".84rem",color:"#5C5345",lineHeight:"1.6",maxWidth:"560px",padding:"12px 0"}},"Anything you want to add before the next review goes through the general feedback form."));
@@ -18277,7 +18282,7 @@ function fbReviewAdmin(){
   const op=fbOpenRound();
   const r=fbRoundById(STATE.fbRound)||op||rounds[0]||null;
   if(STATE.fbViewRes&&r){const x=fbResponse(STATE.fbViewRes,r);if(x)return fbOneResponse(r,x);}
-  const roster=RESIDENTS.slice().sort((a,b)=>a.level.localeCompare(b.level)||a.name.localeCompare(b.name));
+  const roster=r?fbRoster(r):[];
   const done=r?roster.filter(x=>fbDone(x.id,r)):[];
   const owe=r?roster.filter(x=>!fbDone(x.id,r)):[];
   const resp=r?FB_RESP.filter(x=>x.round_id===r.id):[];
@@ -18296,6 +18301,7 @@ function fbReviewAdmin(){
         resp.length?fbResults(resp):el("div",{st:{padding:"20px 0",fontSize:".88rem",color:"#5C5345",lineHeight:"1.6",maxWidth:"560px"}},"No responses yet. Results appear here as residents submit.")),
       el("div",{cls:"fb-side"},
         el("h4",null,owe.length?owe.length+" still to submit":"Everyone has submitted"),
+        RESIDENTS.length>roster.length?el("div",{st:{fontSize:".72rem",color:"#5C5345",margin:"-4px 0 8px"}},(RESIDENTS.length-roster.length)+" resident"+(RESIDENTS.length-roster.length===1?" who":"s who")+" joined after "+ayLabel(r.academic_year)+" are not asked."):null,
         ...owe.map(x=>el("div",{cls:"who"},x.name,el("span",null,x.level))),
         owe.length&&r.is_open?el("button",{cls:"fb-btn ghost",st:{marginTop:"14px",width:"100%"},onClick:()=>fbRemind(owe,r)},"Send a reminder ("+owe.length+")"):null,
         done.length?el("div",{st:{marginTop:"18px"}},el("h4",null,"Submitted · click a name to read"),...done.map(x=>{const c=fbResponse(x.id,r);
@@ -18458,13 +18464,13 @@ function fbHomeAlert(){
   if(FB_STATE==="idle"&&(fbIsResident()||fbIsAdmin()))loadFeedback();
   if(FB_STATE!=="ready")return null;
   const r=fbOpenRound();if(!r)return null;
-  if(fbIsResident()&&!fbDone(u.rid,r)){
+  if(fbIsResident()&&fbEligible(resById(u.rid),r)&&!fbDone(u.rid,r)){
     const d=fbDaysLeft(r);
     return el("div",{cls:(d!=null&&d<=3)?"alert-red":"alert-yellow",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({mod:"feedback",fbTab:"review"})},
       "Programme review ("+fbRoundLabel(r)+") is "+(r.deadline?fbDueText(r)+", "+fmtDate(r.deadline):"open")+". About ten minutes. Click to fill it in.");
   }
   if(fbIsAdmin()){
-    const n=RESIDENTS.length,done=RESIDENTS.filter(x=>fbDone(x.id,r)).length;
+    const ro=fbRoster(r),n=ro.length,done=ro.filter(x=>fbDone(x.id,r)).length;
     return el("div",{cls:"alert-yellow",st:{cursor:"pointer",marginTop:"16px"},onClick:()=>set({mod:"feedback",fbTab:"review",fbRound:r.id})},
       "Programme review "+fbRoundLabel(r)+": "+done+" of "+n+" residents have submitted"+(r.deadline?", "+fbDueText(r):"")+". Click to read the results.");
   }
