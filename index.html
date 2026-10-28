@@ -4836,6 +4836,7 @@ let MODS=[
   {id:"best_resident",label:"Best Resident",icon:"",desc:"Quarterly voting, live KPI rankings & Hall of Fame",color:"#B8860B",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"leave_plan",label:"AY Plan 26-27",icon:"",desc:"Suggested leave & GIM rotation preferences for AY 2026-27",color:"#2a6a8a",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"control",label:"Control Centre",icon:"",desc:"Set up the academic year and manage portal settings",color:"#3a3225",roles:["pd","deputy_pd"]},
+  {id:"mentorship",label:"Mentorship ILP",icon:"",desc:"Mentorship Individualized Learning Plan — quarterly CanMEDS review of every resident with their mentor",color:"#3a6a6a",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"committees",label:"Committees",icon:"",desc:"Standing committees — leaders, co-leaders, members, meetings & achievements",color:"#8a4a5a",roles:["pd","deputy_pd","chief","consultant","resident"]},
 ];
 // ─── MODULES AND ACCESS ──────────────────────────────────────────────────────────────────────────
@@ -17741,6 +17742,236 @@ function renderAttendanceAudit(){
       }))
     )));
 }
+// ─── MENTORSHIP INDIVIDUALIZED LEARNING PLAN ───────────────────────────────────────────────────────────────────────
+// Each mentor rates every mentee once a quarter against the seven CanMEDS roles, on a five-point
+// scale with a comment per role, then strengths, areas to develop, an action plan and an overall
+// rating. One row per resident per academic year per quarter (mentorship_evaluations). A draft is
+// the mentor's own working copy; submitting it locks it for the mentor and shows it to the resident.
+// pd, deputy_pd and chief read and write every evaluation; a consultant only their own mentees'.
+// The rating scale lives here and not in the KPI model on purpose: this is the mentor's judgement,
+// not a KPI, so nothing in calcKPI or the CanMEDS verdicts reads it.
+const ME_ROLES=[
+  {key:"expert",role:"Medical Expert",desc:"Clinical knowledge, assessment and management; procedural skill; decisions that are timely, safe and evidence-based."},
+  {key:"comm",role:"Communicator",desc:"Rapport with patients and families; clear and empathic conversations; accurate, timely notes and handover."},
+  {key:"collab",role:"Collaborator",desc:"Works with nursing, allied health and other specialties; handles disagreement constructively; safe transitions of care."},
+  {key:"manager",role:"Leader",desc:"Organises the ward and the on-call day; sensible use of resources; contributes to quality improvement and patient safety."},
+  {key:"advocate",role:"Health Advocate",desc:"Attends to prevention, the determinants of health and the needs of individual patients and the community."},
+  {key:"scholar",role:"Scholar",desc:"Self-directed learning; critical appraisal; teaching juniors and students; research and scholarly activity."},
+  {key:"prof",role:"Professional",desc:"Integrity, reliability and accountability; respect for patients and colleagues; punctuality, attendance and self-care."}
+];
+const ME_SCALE=[[1,"Needs significant improvement"],[2,"Below expectations"],[3,"Meets expectations"],[4,"Above expectations"],[5,"Exceptional"]];
+const ME_Q_LABEL={1:"Oct – Dec",2:"Jan – Mar",3:"Apr – Jun",4:"Jul – Sep"};
+let ME_ROWS=[],ME_STATE="idle",ME_ERR="";
+let _meDraft=null;   // the form being edited; written by the inputs without a render
+function meAY(){return CURRENT_ACADEMIC_YEAR;}
+function meQ(){return STATE.meQ||kpiQuarterDefault();}
+function meFind(rid,q){return ME_ROWS.find(r=>r.resident_id===rid&&r.academic_year===meAY()&&r.quarter===q)||null;}
+function meIsPdSide(){const r=STATE.user&&STATE.user.role;return r==="pd"||r==="deputy_pd"||r==="chief";}
+// Mirrors the RLS write rule: is_pd_or_chief() or the resident's own mentor.
+function meCanWrite(rid){
+  const u=STATE.user;if(!u)return false;
+  if(meIsPdSide())return true;
+  return u.role==="consultant"&&MENTORS[rid]===u.cid;
+}
+function meAvg(row){
+  if(!row)return null;const v=ME_ROLES.map(r=>Number((row.ratings||{})[r.key])).filter(x=>x>=1&&x<=5);
+  return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*10)/10:null;
+}
+function meTone(avg){return avg==null?"rgba(31,26,18,.35)":avg>=4?"#26523A":avg>=3?"#8a5a12":"#9d2f17";}
+async function loadMentorship(){
+  ME_STATE="loading";
+  const{data,error}=await fetchAllRows(()=>sb.from("mentorship_evaluations").select("*").order("id"));
+  if(error){ME_STATE="error";ME_ERR=error.message||String(error);}
+  else{ME_ROWS=data||[];ME_STATE="ready";ME_ERR="";}
+  render();
+}
+function meInjectCss(){
+  if(document.getElementById("me-css"))return;
+  const s=document.createElement("style");s.id="me-css";
+  s.textContent=
+    ".me-seg{display:flex;gap:6px;flex-wrap:wrap}"+
+    ".me-seg button{flex:1 1 0;min-width:0;background:transparent;border:1px solid rgba(31,26,18,.14);border-radius:10px;padding:9px 8px;font:inherit;font-size:.72rem;font-weight:600;color:#5C5345;cursor:pointer;text-align:center;line-height:1.25;transition:all .14s}"+
+    ".me-seg button b{display:block;font-size:1rem;color:#1F1A12;margin-bottom:2px}"+
+    ".me-seg button:hover{border-color:#c96a4a;color:#a94e2c}"+
+    ".me-seg button.on{background:#a94e2c;border-color:#a94e2c;color:#FEFBF3}.me-seg button.on b{color:#FEFBF3}"+
+    ".me-seg button:disabled{cursor:default}.me-seg button:disabled:hover{border-color:rgba(31,26,18,.14);color:#5C5345}"+
+    ".me-role{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:18px 32px;padding:22px 0;border-bottom:1px solid rgba(31,26,18,.07)}"+
+    ".me-role .n{font-family:'Playfair Display',Georgia,serif;font-size:1.6rem;color:rgba(31,26,18,.18);line-height:1;margin-bottom:6px}"+
+    ".me-role h3{margin:0 0 6px;font-size:1.02rem;font-weight:700;color:#1F1A12}"+
+    ".me-role p{margin:0;font-size:.8rem;line-height:1.55;color:#5C5345}"+
+    ".me-role textarea{margin-top:10px;min-height:64px;resize:vertical;font-size:.84rem;line-height:1.5}"+
+    ".me-role .ro{margin-top:10px;font-size:.86rem;line-height:1.55;color:#1F1A12;white-space:pre-wrap}"+
+    ".me-role .ro.empty{color:rgba(31,26,18,.35);font-style:italic}"+
+    ".me-lbl{font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#a94e2c;margin-bottom:8px}"+
+    ".me-tbl{width:100%;border-collapse:collapse}.me-tbl th{text-align:left;font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5C5345;padding:10px 10px;border-bottom:1px solid rgba(31,26,18,.12)}"+
+    ".me-tbl td{padding:12px 10px;border-bottom:1px solid rgba(31,26,18,.07);font-size:.86rem;vertical-align:middle}"+
+    ".me-tbl tr.rowlink{cursor:pointer}.me-tbl tr.rowlink:hover td{background:#F6EFE2}"+
+    ".me-chip{display:inline-flex;align-items:center;justify-content:center;min-width:44px;padding:3px 9px;border-radius:999px;font-size:.74rem;font-weight:700;background:#F6EFE2}"+
+    ".me-btn{background:#c96a4a;color:#FEFBF3;border:none;border-radius:999px;padding:10px 22px;font:inherit;font-size:.84rem;font-weight:600;cursor:pointer}"+
+    ".me-btn.ghost{background:transparent;color:#1F1A12;border:1px solid rgba(31,26,18,.18)}"+
+    ".me-btn:disabled{opacity:.5;cursor:default}"+
+    "@media (max-width:760px){.me-role{grid-template-columns:1fr;gap:10px}.me-seg{flex-wrap:nowrap}.me-seg button{padding:8px 4px;font-size:.62rem}}"+
+    "@media print{body.me-printing .sidebar,body.me-printing .mob-topbar,body.me-printing .me-noprint{display:none!important}body.me-printing .app-layout{display:block}body.me-printing .main-area{overflow:visible;height:auto}body.me-printing .content{max-width:none;padding:0}body.me-printing .me-role{break-inside:avoid}body.me-printing textarea{border:none;padding:0;min-height:0}}";
+  document.head.appendChild(s);
+}
+function mePrint(){
+  document.body.classList.add("me-printing");
+  const done=()=>{document.body.classList.remove("me-printing");window.removeEventListener("afterprint",done);};
+  window.addEventListener("afterprint",done);
+  setTimeout(()=>window.print(),30);
+}
+function meHeader(sub){
+  return el("div",{st:{marginBottom:"24px"}},
+    el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#a94e2c",marginBottom:"8px"}},"Mentorship"),
+    el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Mentorship Individualized Learning Plan"),
+    el("div",{st:{fontSize:".82rem",color:"#5C5345"}},sub));
+}
+function meQuarterPills(q,onPick,only){
+  return el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}},
+    ...[1,2,3,4].filter(n=>!only||only.includes(n)).map(n=>el("span",{cls:"pill"+(q===n?" on":""),onClick:()=>onPick(n)},"Q"+n+" · "+ME_Q_LABEL[n])));
+}
+function renderMentorship(){
+  meInjectCss();
+  const u=STATE.user;
+  if(ME_STATE==="idle"){loadMentorship();}
+  if(ME_STATE==="idle"||ME_STATE==="loading")return el("div",{cls:"content"},meHeader(""),el("div",{cls:"sh",st:{padding:"40px 0"}},"Loading learning plans…"));
+  if(ME_STATE==="error")return el("div",{cls:"content"},meHeader(""),
+    el("p",{cls:"alert-yellow"},"The learning-plan table is not there yet. Run supabase/add_mentorship_evaluations.sql in the Supabase SQL Editor, then reload."),
+    el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.35)"}},ME_ERR));
+  if(u.role==="resident")return meResidentView();
+  if(STATE.meSel){const r=resById(STATE.meSel);if(r)return meFormView(r);}
+  return meListView();
+}
+// ── List: every resident the viewer may see, one chip per quarter ──
+function meListView(){
+  const u=STATE.user,q=meQ();
+  const vr=visRes();
+  const mine=u.role==="consultant";
+  const sub=mine?"Your mentees, one learning plan per quarter. A resident sees the plan once you submit it.":"Every resident's quarterly learning plan with their mentor. Click a row to read or complete it.";
+  if(mine&&!vr.length)return el("div",{cls:"content"},meHeader(sub),
+    el("div",{st:{padding:"32px 0",color:"#5C5345",fontSize:".9rem",lineHeight:"1.6",maxWidth:"520px"}},"No resident is assigned to you as mentor yet. The Program Director assigns mentors in the PD Admin Panel; your mentees will appear here as soon as that is done."));
+  const done=vr.filter(r=>{const e=meFind(r.id,q);return e&&e.status==="submitted";}).length;
+  const drafts=vr.filter(r=>{const e=meFind(r.id,q);return e&&e.status!=="submitted";}).length;
+  const noMentor=vr.filter(r=>!MENTORS[r.id]).length;
+  return el("div",{cls:"content"},meHeader(sub),
+    el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"16px",flexWrap:"wrap",marginBottom:"18px"}},
+      meQuarterPills(q,n=>set({meQ:n})),
+      el("div",{st:{fontSize:".8rem",color:"#5C5345"}},ayLabel(meAY())+" · Q"+q+": ",el("b",{st:{color:"#1F1A12"}},done+" of "+vr.length+" submitted"),drafts?" · "+drafts+" in draft":"")),
+    !mine&&noMentor?el("div",{st:{fontSize:".78rem",color:"#5C5345",marginBottom:"10px"}},noMentor+" resident"+(noMentor===1?" has":"s have")+" no official mentor; the Program Director completes their learning plan."):null,
+    el("div",{st:{overflowX:"auto"}},el("table",{cls:"me-tbl"},
+      el("thead",null,el("tr",null,el("th",null,"Resident"),el("th",null,"Level"),mine?null:el("th",null,"Mentor"),...[1,2,3,4].map(n=>el("th",{st:{textAlign:"center"}},"Q"+n)),el("th",null,""))),
+      el("tbody",null,...vr.map(r=>{
+        const ev=meFind(r.id,q);const canW=meCanWrite(r.id);
+        return el("tr",{cls:"rowlink",onClick:()=>{_meDraft=null;set({meSel:r.id});}},
+          el("td",{st:{fontWeight:"600"}},r.name),
+          el("td",{st:{color:"#5C5345"}},r.level),
+          mine?null:el("td",{st:{color:MENTORS[r.id]?"#1F1A12":"#8a7f6c",fontSize:".8rem",fontStyle:MENTORS[r.id]?"normal":"italic"}},MENTORS[r.id]?mentorName(r.id):"No official mentor"),
+          ...[1,2,3,4].map(n=>{const e=meFind(r.id,n);const a=meAvg(e);
+            return el("td",{st:{textAlign:"center"}},e?el("span",{cls:"me-chip",st:{color:e.status==="submitted"?"#FEFBF3":meTone(a),background:e.status==="submitted"?meTone(a):"#F6EFE2"}},e.status==="submitted"?(a!=null?a.toFixed(1):"✓"):"Draft"):el("span",{st:{color:"rgba(31,26,18,.25)"}},"—"));}),
+          el("td",{st:{textAlign:"right",whiteSpace:"nowrap"}},el("span",{cls:"lnk",st:{fontSize:".8rem",fontWeight:"600",color:"#a94e2c"}},ev&&ev.status==="submitted"?"Read":canW?(ev?"Continue":"Start plan"):"")));
+      })))));
+}
+// ── Form: one resident, one quarter ──
+function meBlankDraft(r,q){
+  return{resident_id:r.id,academic_year:meAY(),quarter:q,mentor_id:MENTORS[r.id]||(STATE.user.role==="consultant"?STATE.user.cid:null),
+    ratings:{},comments:{},strengths:"",improvements:"",action_plan:"",overall:null,status:"draft"};
+}
+function meDraftFor(r,q){
+  const ex=meFind(r.id,q);
+  if(_meDraft&&_meDraft.resident_id===r.id&&_meDraft.quarter===q&&_meDraft.academic_year===meAY())return _meDraft;
+  _meDraft=ex?JSON.parse(JSON.stringify({...ex,ratings:ex.ratings||{},comments:ex.comments||{},strengths:ex.strengths||"",improvements:ex.improvements||"",action_plan:ex.action_plan||""})):meBlankDraft(r,q);
+  return _meDraft;
+}
+async function meSave(d,submit){
+  if(submit){const missing=ME_ROLES.filter(x=>!(d.ratings[x.key]>=1));
+    if(missing.length){showToast("Rate every role before submitting — "+missing.map(x=>x.role).join(", ")+" still unrated.","error");return;}}
+  const u=STATE.user;const now=new Date().toISOString();
+  const payload={resident_id:d.resident_id,academic_year:d.academic_year,quarter:d.quarter,mentor_id:d.mentor_id||null,
+    ratings:d.ratings,comments:d.comments,strengths:d.strengths||null,improvements:d.improvements||null,action_plan:d.action_plan||null,
+    overall:d.overall||null,status:submit?"submitted":"draft",submitted_at:submit?now:(d.status==="submitted"?d.submitted_at:null),
+    updated_at:now,updated_by:u.profileId};
+  if(!d.id)payload.created_by=u.profileId;
+  STATE.meSaving=true;render();
+  const{data,error}=await sb.from("mentorship_evaluations").upsert(payload,{onConflict:"resident_id,academic_year,quarter"}).select().single();
+  STATE.meSaving=false;
+  if(error){showToast("Could not save: "+error.message,"error");render();return;}
+  const i=ME_ROWS.findIndex(x=>x.id===data.id);if(i>=0)ME_ROWS[i]=data;else ME_ROWS.push(data);
+  _meDraft=null;
+  showToast(submit?"Learning plan submitted.":"Draft saved.");
+  if(submit)set({meSel:null});else render();
+}
+async function meReopen(ev){
+  const{data,error}=await sb.from("mentorship_evaluations").update({status:"draft",submitted_at:null,updated_at:new Date().toISOString(),updated_by:STATE.user.profileId}).eq("id",ev.id).select().single();
+  if(error){showToast("Could not reopen: "+error.message,"error");return;}
+  const i=ME_ROWS.findIndex(x=>x.id===data.id);if(i>=0)ME_ROWS[i]=data;_meDraft=null;render();
+}
+function meSeg(value,onPick,disabled){
+  return el("div",{cls:"me-seg"},...ME_SCALE.map(([n,lbl])=>el("button",{cls:value===n?"on":"",disabled:!!disabled,onClick:()=>{if(!disabled)onPick(n);}},el("b",null,String(n)),lbl)));
+}
+function meTextBlock(label,value,onInput,editable,placeholder){
+  return el("div",{st:{padding:"18px 0",borderBottom:"1px solid rgba(31,26,18,.07)"}},
+    el("div",{cls:"me-lbl"},label),
+    editable?el("textarea",{placeholder:placeholder||"",st:{minHeight:"80px",resize:"vertical",fontSize:".86rem",lineHeight:"1.5"},onInput:e=>onInput(e.target.value)},value||"")
+      :el("div",{cls:"ro"+(value?"":" empty"),st:{fontSize:".88rem",lineHeight:"1.6",whiteSpace:"pre-wrap",color:value?"#1F1A12":"rgba(31,26,18,.35)",fontStyle:value?"normal":"italic"}},value||"Nothing written"));
+}
+function meFormView(r){
+  const u=STATE.user,q=meQ();
+  const ex=meFind(r.id,q);
+  const canW=meCanWrite(r.id);
+  const locked=!!(ex&&ex.status==="submitted");
+  const editable=canW&&!locked;
+  const d=editable?meDraftFor(r,q):(ex||meBlankDraft(r,q));
+  const avg=meAvg(d);
+  const mentor=d.mentor_id?consultById(d.mentor_id):null;
+  const who=mentor?mentor.name:(MENTORS[r.id]?mentorName(r.id):"No official mentor (completed by the PD)");
+  return el("div",{cls:"content"},
+    el("button",{cls:"back-btn me-noprint",onClick:()=>{_meDraft=null;set({meSel:null});}},"← All residents"),
+    el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:"16px",flexWrap:"wrap",marginBottom:"8px"}},
+      el("div",null,
+        el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#a94e2c",marginBottom:"8px"}},"Individualized Learning Plan · CanMEDS"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",margin:"0 0 4px"}},r.name),
+        el("div",{st:{fontSize:".84rem",color:"#5C5345"}},r.level+" · "+ayLabel(meAY())+" · Quarter "+q+" ("+ME_Q_LABEL[q]+") · Mentor: ",el("span",{st:{color:"#1F1A12"}},who))),
+      el("div",{st:{textAlign:"right"}},
+        el("div",{cls:"me-lbl",st:{marginBottom:"2px"}},locked?"Submitted":ex?"Draft":"Not started"),
+        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2.4rem",lineHeight:"1",color:meTone(avg)}},avg!=null?avg.toFixed(1):"—"),
+        el("div",{st:{fontSize:".7rem",color:"#5C5345"}},"average of 5"))),
+    el("div",{cls:"me-noprint",st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px",flexWrap:"wrap",padding:"14px 0 6px",borderBottom:"1px solid rgba(31,26,18,.12)"}},
+      meQuarterPills(q,n=>{_meDraft=null;set({meQ:n});}),
+      locked?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"Submitted "+fmtDate((ex.submitted_at||"").slice(0,10))+(meIsPdSide()?" · ":""),meIsPdSide()?el("span",{cls:"lnk",st:{color:"#a94e2c",fontWeight:"600",cursor:"pointer"},onClick:()=>showConfirm("Reopen this learning plan? The mentor can edit it again and the resident stops seeing it until it is submitted once more.",()=>meReopen(ex),"Reopen")},"Reopen"):null):
+      !canW?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"Read only — only the resident's mentor or the PD can write this."):null),
+    el("div",{st:{display:"flex",justifyContent:"space-between",gap:"16px",padding:"18px 0 4px",fontSize:".76rem",color:"#5C5345",flexWrap:"wrap"}},
+      el("span",null,"Rate each role on the five-point scale and add what you observed. Examples carry more weight than adjectives."),
+      el("span",null,ME_SCALE.map(x=>x[0]+" "+x[1]).join(" · "))),
+    ...ME_ROLES.map((role,i)=>el("div",{cls:"me-role"},
+      el("div",null,el("div",{cls:"n"},String(i+1).padStart(2,"0")),el("h3",null,role.role),el("p",null,role.desc)),
+      el("div",null,
+        meSeg(Number(d.ratings[role.key])||null,n=>{d.ratings[role.key]=n;render();},!editable),
+        editable?el("textarea",{placeholder:"What did you observe? Give an example and, if needed, advice.",onInput:e=>{d.comments[role.key]=e.target.value;}},d.comments[role.key]||"")
+          :el("div",{cls:"ro"+(d.comments[role.key]?"":" empty")},d.comments[role.key]||"No comment")))),
+    el("div",{st:{marginTop:"28px"}},
+      el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.4rem",color:"#1F1A12",marginBottom:"4px"}},"Overall"),
+      meTextBlock("Strengths",d.strengths,v=>{d.strengths=v;},editable,"What this resident does well and should keep doing."),
+      meTextBlock("Areas to develop",d.improvements,v=>{d.improvements=v;},editable,"Specific gaps, with the behaviour you would like to see instead."),
+      meTextBlock("Action plan until the next review",d.action_plan,v=>{d.action_plan=v;},editable,"Agreed steps, who does what, and when you will look at it again."),
+      el("div",{st:{padding:"18px 0 6px"}},el("div",{cls:"me-lbl"},"Overall rating"),meSeg(d.overall||null,n=>{d.overall=n;render();},!editable))),
+    el("div",{cls:"me-noprint",st:{display:"flex",gap:"10px",justifyContent:"flex-end",alignItems:"center",padding:"24px 0",flexWrap:"wrap"}},
+      el("button",{cls:"me-btn ghost",onClick:mePrint},"Print"),
+      editable?el("button",{cls:"me-btn ghost",disabled:!!STATE.meSaving,onClick:()=>meSave(d,false)},"Save draft"):null,
+      editable?el("button",{cls:"me-btn",disabled:!!STATE.meSaving,onClick:()=>showConfirm("Submit this learning plan? "+r.name+" will be able to read it and you will not be able to change it unless the PD reopens it.",()=>meSave(d,true),"Submit")},"Submit plan"):null),
+    el("div",{st:{display:"none"},cls:"me-printonly"}));
+}
+// ── Resident: their own submitted evaluations, read only ──
+function meResidentView(){
+  const u=STATE.user;const r=resById(u.rid);
+  const mine=ME_ROWS.filter(x=>x.resident_id===u.rid&&x.academic_year===meAY()&&x.status==="submitted").sort((a,b)=>a.quarter-b.quarter);
+  const sub="Your individualized learning plan with your mentor across the seven CanMEDS roles, once a quarter.";
+  if(!r||!mine.length)return el("div",{cls:"content"},meHeader(sub),
+    el("div",{st:{padding:"32px 0",color:"#5C5345",fontSize:".9rem",lineHeight:"1.6",maxWidth:"520px"}},"No learning plan has been submitted for you yet this year. Your mentor"+(MENTORS[u.rid]?" ("+mentorName(u.rid)+")":"")+" completes one each quarter; it will appear here once submitted."));
+  const qs=mine.map(x=>x.quarter);
+  const q=qs.includes(STATE.meQ)?STATE.meQ:qs[qs.length-1];
+  STATE.meQ=q;
+  return meFormView(r);
+}
 let _lastMod=null;
 function render(){
   const app=document.getElementById("app");
@@ -17794,6 +18025,7 @@ function render(){
         case"best_resident":content=renderBestResident();break;
         case"leave_plan":content=renderLeavePlan();break;
         case"committees":content=renderCommittees();break;
+        case"mentorship":content=renderMentorship();break;
         case"control":content=renderControl();break;
         default:content=renderModGrid();
       }
