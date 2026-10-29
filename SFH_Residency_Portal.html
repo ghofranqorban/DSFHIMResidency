@@ -3231,6 +3231,11 @@ let BEST_TALLY=null; // {ay,q,total,senior:{residentId:n},junior:{residentId:n}}
 // the observers. The database enforces the same rule, so for anyone else this stays empty
 // whatever the page asks for. The voting form tells voters exactly this.
 let BEST_BALLOTS=[];
+// Free-text feedback that came in with nurse / consultant votes (best_resident_feedback): the PD only.
+let BEST_FEEDBACK=[];
+// Ballots, external votes and feedback of earlier quarters, fetched once per quarter for the
+// Votes cast tab and kept for the session: "ay-q" -> {votes,external,feedback,state}.
+let BR_BALLOT_PAST={};
 let BEST_EXTERNAL=[]; // nurse / consultant votes read from their Google Forms: the PD only
 function brSeesBallots(){return !!(STATE.user&&STATE.user.role==="pd");}
 function brTallyFromRows(rows,p){
@@ -3244,6 +3249,18 @@ function brTallyFromRows(rows,p){
   return t;
 }
 function brRow(p){return BEST_ROWS.find(r=>r.academic_year===p.ay&&r.quarter===p.q)||null;}
+// The Votes cast tab on a quarter other than the live one: the three tables for that quarter,
+// read once. The database refuses all three to anyone but the PD, so an error leaves them empty.
+async function brLoadPastBallots(p){
+  const key=p.ay+"-"+p.q;
+  const[v,ex,fb]=await Promise.all([
+    sb.from("best_resident_votes").select("*").eq("academic_year",p.ay).eq("quarter",p.q),
+    sb.from("best_resident_external_votes").select("*").eq("academic_year",p.ay).eq("quarter",p.q),
+    sb.from("best_resident_feedback").select("*").eq("academic_year",p.ay).eq("quarter",p.q)
+  ]);
+  BR_BALLOT_PAST[key]={votes:(!v.error&&v.data)||[],external:(!ex.error&&ex.data)||[],feedback:(!fb.error&&fb.data)||[],state:"ready"};
+  render();
+}
 // announced_at is the moment the winners become visible. With `announced` set and that moment
 // still ahead, the winners are chosen but sealed.
 function brRevealed(row){return !!(row&&row.announced&&(!row.announced_at||new Date(row.announced_at)<=brNow()));}
@@ -3405,10 +3422,14 @@ async function loadBestResident(){
   // Keep the signed-in person's own vote and nothing else, whatever came back.
   BEST_VOTES=seen.filter(v=>v.profile_id===mine);
   BEST_BALLOTS=brSeesBallots()?seen:[];
-  BEST_EXTERNAL=[];
+  BEST_EXTERNAL=[];BEST_FEEDBACK=[];
   if(brSeesBallots()){
-    const ex=await sb.from("best_resident_external_votes").select("*").eq("academic_year",p.ay).eq("quarter",p.q);
+    const[ex,fb]=await Promise.all([
+      sb.from("best_resident_external_votes").select("*").eq("academic_year",p.ay).eq("quarter",p.q),
+      sb.from("best_resident_feedback").select("*").eq("academic_year",p.ay).eq("quarter",p.q)
+    ]);
     if(!ex.error&&ex.data)BEST_EXTERNAL=ex.data;
+    if(!fb.error&&fb.data)BEST_FEEDBACK=fb.data;   // table may not exist yet: then simply none
   }
   const td=tRes&&!tRes.error?tRes.data:null;
   // Where the counting function is not installed, count what the table returned.
@@ -14780,20 +14801,42 @@ function renderBestResident(){
   }
 
   // ── Votes cast: the Program Director only ──
+  // Any quarter that has been voted on can be opened, not only the live one. The live quarter's
+  // ballots are already in BEST_BALLOTS / BEST_EXTERNAL / BEST_FEEDBACK; an earlier quarter is
+  // fetched once by brLoadPastBallots into BR_BALLOT_PAST and kept for the session. Under the
+  // ballots: how each resident's votes split by group, and what the nurses and consultants wrote.
   function renderBallotsTab(){
     const G={
       resident:{t:"Resident",bg:"rgba(31,26,18,.07)",fg:"#3a3225"},
       consultant:{t:"Consultant",bg:"rgba(38,82,58,.12)",fg:"#26523A"},
       nurse:{t:"Nurse",bg:"rgba(122,90,16,.13)",fg:"#6b4d0e"}};
     const ORDER={resident:0,consultant:1,nurse:2};
-    const pick=id=>{const r=brPerson(id,ay);return r?dname(r.name)+" ("+r.level+")":"—";};
+    const cur={ay:ay,q:q};
+    const periods=BEST_ROWS.map(r=>({ay:r.academic_year,q:r.quarter}))
+      .filter(p=>p.ay<cur.ay||(p.ay===cur.ay&&p.q<=cur.q));
+    if(!periods.some(p=>p.ay===cur.ay&&p.q===cur.q))periods.push(cur);
+    periods.sort((a,b)=>b.ay-a.ay||b.q-a.q);
+    const sp=(STATE.brBallotsP&&periods.some(p=>p.ay===STATE.brBallotsP.ay&&p.q===STATE.brBallotsP.q))?STATE.brBallotsP:cur;
+    const live=sp.ay===cur.ay&&sp.q===cur.q;
+    let ds;
+    if(live)ds={votes:BEST_BALLOTS,external:BEST_EXTERNAL,feedback:BEST_FEEDBACK,state:"ready"};
+    else{
+      const key=sp.ay+"-"+sp.q;
+      ds=BR_BALLOT_PAST[key];
+      if(!ds){ds=BR_BALLOT_PAST[key]={votes:[],external:[],feedback:[],state:"loading"};brLoadPastBallots(sp);}
+    }
+    const pLabel=p=>"Q"+p.q+" · AY "+p.ay+"–"+String(p.ay+1).slice(2);
+    const picker=el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center",marginBottom:"18px"}},
+      ...periods.map(p=>{const on=p.ay===sp.ay&&p.q===sp.q;
+        return el("span",{cls:"pill"+(on?" on":""),onClick:()=>set({brBallotsP:p})},pLabel(p)+(p.ay===cur.ay&&p.q===cur.q?" · live":""));}));
+    const pick=id=>{const r=brPerson(id,sp.ay);return r?dname(r.name)+" ("+r.level+")":"—";};
     const roleOf=p=>p?({pd:"Program Director",deputy_pd:"Deputy PD",consultant:"Consultant",resident:"Resident",chief:"Chief Resident",dio:"DIO",ceo:"CEO"})[p.role]||p.role:"";
-    const rows=BEST_BALLOTS.filter(v=>v.academic_year===ay&&v.quarter===q).map(v=>{
+    const rows=ds.votes.filter(v=>v.academic_year===sp.ay&&v.quarter===sp.q).map(v=>{
       const p=PROFILE_BY_ID[v.profile_id]||null;
       return{group:"resident",name:dname(p?(p.display_name||p.username||"Unknown account"):"Unknown account"),
-        note:p&&p.role!=="resident"?roleOf(p):"",senior:pick(v.voted_senior_id),junior:pick(v.voted_junior_id),at:v.created_at};
-    }).concat(BEST_EXTERNAL.filter(v=>v.academic_year===ay&&v.quarter===q).map(v=>({
-      group:v.source,name:v.voter_name,note:"",senior:pick(v.voted_senior_id),junior:pick(v.voted_junior_id),at:v.submitted_at
+        note:p&&p.role!=="resident"?roleOf(p):"",sid:v.voted_senior_id,jid:v.voted_junior_id,senior:pick(v.voted_senior_id),junior:pick(v.voted_junior_id),at:v.created_at};
+    }).concat(ds.external.filter(v=>v.academic_year===sp.ay&&v.quarter===sp.q).map(v=>({
+      group:v.source,name:v.voter_name,note:"",sid:v.voted_senior_id,jid:v.voted_junior_id,senior:pick(v.voted_senior_id),junior:pick(v.voted_junior_id),at:v.submitted_at
     }))).sort((a,b)=>(ORDER[a.group]-ORDER[b.group])||a.name.localeCompare(b.name));
     const n=g=>rows.filter(r=>r.group===g).length;
     const tile=g=>el("div",{cls:"bc-tile",st:{padding:"12px 18px",borderRadius:"10px",background:G[g].bg,minWidth:"112px"}},
@@ -14801,15 +14844,48 @@ function renderBestResident(){
       el("div",{st:{fontSize:".72rem",fontWeight:"700",letterSpacing:".06em",textTransform:"uppercase",color:G[g].fg,marginTop:"5px"}},G[g].t+(n(g)===1?"":"s")));
     const head=el("div",{st:{marginBottom:"18px",maxWidth:"640px"}},
       el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",fontWeight:"700",color:"#1F1A12",marginBottom:"4px"}},
-        rows.length+" vote"+(rows.length===1?"":"s")+" cast — "+quarterLabel(q)),
+        (ds.state==="loading"?"Loading":rows.length+" vote"+(rows.length===1?"":"s")+" cast")+" — "+quarterLabel(sp.q)+", AY "+sp.ay+"–"+String(sp.ay+1).slice(2)),
       el("div",{st:{fontSize:".87rem",color:"#5C5345",lineHeight:"1.5"}},
-        "Only you can open this page. Residents, consultants, the deputy and the observers cannot, and the database refuses them the same information. Consultant and nurse votes come in from their Google Forms, under the name they typed."));
+        "Only you can open this page. Residents, consultants, the deputy and the observers cannot, and the database refuses them the same information. Consultant and nurse votes and comments come in from their Google Forms, under the name they typed."));
     const strip=el("div",{cls:"bc-tiles",st:{marginBottom:"20px"}},tile("resident"),tile("consultant"),tile("nurse"));
-    if(!rows.length)return el("div",null,head,strip,
-      el("div",{st:{padding:"24px 0",fontSize:".87rem",color:"#5C5345"}},"No votes have been cast yet."));
-    const th=t=>el("th",null,t);
+    const sub=t=>el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.05rem",fontWeight:"700",color:"#1F1A12",margin:"28px 0 10px"}},t);
+    const th=(t,right)=>el("th",{st:right?{textAlign:"right"}:null},t);
     const badge=g=>el("span",{st:{display:"inline-block",padding:"2px 10px",borderRadius:"999px",fontSize:".74rem",fontWeight:"700",background:G[g].bg,color:G[g].fg}},G[g].t);
-    return el("div",null,head,strip,
+    // How each resident's votes add up, by the group that cast them.
+    const sums=kind=>{
+      const by={};
+      rows.forEach(r=>{const id=kind==="senior"?r.sid:r.jid;if(id==null)return;
+        const o=by[id]||(by[id]={id:id,resident:0,consultant:0,nurse:0,total:0});o[r.group]++;o.total++;});
+      const list=Object.values(by).sort((a,b)=>b.total-a.total||b.resident-a.resident);
+      if(!list.length)return el("div",{st:{fontSize:".84rem",color:"#5C5345",padding:"6px 0 12px"}},"No "+kind+" votes.");
+      return el("div",{cls:"tbl-wrap bc-table",st:{display:"block"}},el("table",null,
+        el("thead",null,el("tr",null,th(kind==="senior"?"Best Senior":"Best Junior"),th("Residents",1),th("Consultants",1),th("Nurses",1),th("Total",1))),
+        el("tbody",null,...list.map((o,i)=>el("tr",null,
+          el("td",null,el("span",{st:{fontWeight:i===0?"700":"600"}},pick(o.id))),
+          el("td",{st:{textAlign:"right",color:o.resident?"#1F1A12":"rgba(31,26,18,.3)"}},String(o.resident)),
+          el("td",{st:{textAlign:"right",color:o.consultant?"#1F1A12":"rgba(31,26,18,.3)"}},String(o.consultant)),
+          el("td",{st:{textAlign:"right",color:o.nurse?"#1F1A12":"rgba(31,26,18,.3)"}},String(o.nurse)),
+          el("td",{st:{textAlign:"right",fontWeight:"700"}},String(o.total)))))));
+    };
+    // What the forms' free-text question collected, newest first, grouped by who wrote it.
+    const fb=ds.feedback.filter(f=>f.academic_year===sp.ay&&f.quarter===sp.q).slice().sort((a,b)=>String(b.submitted_at).localeCompare(String(a.submitted_at)));
+    const fbBlock=g=>{const list=fb.filter(f=>f.source===g);if(!list.length)return null;
+      return el("div",{st:{marginBottom:"18px"}},
+        el("div",{st:{fontSize:".7rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:G[g].fg,marginBottom:"8px"}},"From the "+G[g].t.toLowerCase()+"s · "+list.length),
+        ...list.map(f=>el("div",{st:{padding:"12px 16px",marginBottom:"8px",background:G[g].bg,borderRadius:"10px"}},
+          el("div",{st:{fontSize:".9rem",lineHeight:"1.55",color:"#1F1A12",whiteSpace:"pre-wrap"}},f.body),
+          el("div",{st:{fontSize:".72rem",color:"#5C5345",marginTop:"6px"}},(f.voter_name||"(anonymous)")+(f.submitted_at?" · "+brWhen(f.submitted_at):"")))));};
+    const comments=el("div",null,sub("Comments"),
+      fb.length?el("div",null,fbBlock("nurse"),fbBlock("consultant")):
+      el("div",{st:{fontSize:".84rem",color:"#5C5345"}},ds.state==="loading"?"":"No comments came in with the votes for this quarter."));
+    if(ds.state==="loading")return el("div",null,picker,head,strip,
+      el("div",{st:{padding:"24px 0",fontSize:".87rem",color:"#5C5345"}},"Loading the ballots…"));
+    if(!rows.length)return el("div",null,picker,head,strip,
+      el("div",{st:{padding:"24px 0",fontSize:".87rem",color:"#5C5345"}},"No votes were cast for this quarter."),comments);
+    return el("div",null,picker,head,strip,
+      sub("How the votes add up"),
+      el("div",{st:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:"18px"}},sums("senior"),sums("junior")),
+      sub("Every ballot"),
       el("div",{cls:"tbl-wrap bc-table"},
         el("table",null,
           el("thead",null,el("tr",null,th("Voter"),th("Group"),th("Best Senior"),th("Best Junior"),th("Voted on"))),
@@ -14826,7 +14902,8 @@ function renderBestResident(){
         r.note?el("div",{cls:"bc-note"},r.note):null,
         el("div",{cls:"bc-picks"},el("span",{cls:"bc-k"},"Senior"),r.senior),
         el("div",{cls:"bc-picks"},el("span",{cls:"bc-k"},"Junior"),r.junior),
-        el("div",{cls:"bc-at"},r.at?brWhen(r.at):"")))));
+        el("div",{cls:"bc-at"},r.at?brWhen(r.at):"")))),
+      comments);
   }
 
   // ── Hall of Fame tab ──

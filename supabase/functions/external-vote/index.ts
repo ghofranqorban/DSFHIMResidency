@@ -20,7 +20,12 @@
 // usable name is kept as "(anonymous)", one per submission.
 //
 // Body:    { "name": "Dr. Someone", "senior": "Dr. Omar H", "junior": "Dr. Ibtihal",
-//            "submittedAt": "2026-10-03T18:20:00Z" }       (submittedAt optional)
+//            "submittedAt": "2026-10-03T18:20:00Z", "comment": "…" }   (both optional)
+//
+// COMMENT: the forms' free-text feedback travels with the vote and is kept in
+// best_resident_feedback under the same (source, voter_key, year, quarter) key, so it is never
+// counted as a vote and a resend replaces rather than doubles it. An empty comment on a resend
+// removes the earlier one. The PD alone can read it (add_best_resident_feedback.sql).
 // Header:  x-vote-secret: <secret>
 //
 // Deploy:  supabase functions deploy external-vote --no-verify-jwt
@@ -137,6 +142,19 @@ Deno.serve(async (req: Request) => {
     submitted_at: isNaN(at.getTime()) ? new Date().toISOString() : at.toISOString(),
   }, { onConflict: "source,voter_key,academic_year,quarter" });
   if (upErr) return json({ error: "Could not save the vote" }, 500);
+
+  const comment = String(body.comment ?? "").trim().slice(0, 4000);
+  const fbKey = { source, voter_key: voterKey, academic_year: period.academic_year, quarter: period.quarter };
+  const { error: fbErr } = comment
+    ? await sb.from("best_resident_feedback").upsert({
+        ...fbKey,
+        voter_name: voterName,
+        body: comment,
+        submitted_at: isNaN(at.getTime()) ? new Date().toISOString() : at.toISOString(),
+      }, { onConflict: "source,voter_key,academic_year,quarter" })
+    : await sb.from("best_resident_feedback").delete().match(fbKey);
+  // The vote is already saved; a feedback problem is reported but does not undo it.
+  if (fbErr) return json({ ok: true, source, academic_year: period.academic_year, quarter: period.quarter, warning: "Vote saved; the comment was not: " + fbErr.message });
 
   return json({ ok: true, source, academic_year: period.academic_year, quarter: period.quarter });
 });
