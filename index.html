@@ -4863,7 +4863,7 @@ let MODS=[
   {id:"best_resident",label:"Best Resident",icon:"",desc:"Quarterly voting, live KPI rankings & Hall of Fame",color:"#B8860B",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"leave_plan",label:"AY Plan 26-27",icon:"",desc:"Suggested leave & GIM rotation preferences for AY 2026-27",color:"#2a6a8a",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"control",label:"Control Centre",icon:"",desc:"Set up the academic year and manage portal settings",color:"#3a3225",roles:["pd","deputy_pd"]},
-  {id:"mentorship",label:"Mentorship ILP",icon:"",desc:"Mentorship Individualized Learning Plan — quarterly CanMEDS review of every resident with their mentor",color:"#3a6a6a",roles:["pd","deputy_pd","chief","consultant","resident"]},
+  {id:"mentorship",label:"Mentorship ILP",icon:"",desc:"Mentorship Individualized Learning Plan — quarterly CanMEDS review of every resident with their mentor, and the resident's Milestone self-assessment before each CCC review",color:"#3a6a6a",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"feedback",label:"Feedback",icon:"",desc:"Programme review rounds and general feedback, read by the Program Director only",color:"#7a4a2a",roles:["pd","chief","resident"]},
   {id:"committees",label:"Committees",icon:"",desc:"Standing committees — leaders, co-leaders, members, meetings & achievements",color:"#8a4a5a",roles:["pd","deputy_pd","chief","consultant","resident"]},
 ];
@@ -17926,6 +17926,7 @@ function renderMentorship(){
   if(ME_STATE==="error")return el("div",{cls:"content"},meHeader(""),
     el("p",{cls:"alert-yellow"},"The learning-plan table is not there yet. Run supabase/add_mentorship_evaluations.sql in the Supabase SQL Editor, then reload."),
     el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.35)"}},ME_ERR));
+  if(STATE.meTab==="self"||STATE.meTab==="ccc")return renderSelfAssess();
   if(u.role==="resident")return meResidentView();
   if(STATE.meSel){const r=resById(STATE.meSel);if(r)return meFormView(r);}
   return meListView();
@@ -17936,12 +17937,12 @@ function meListView(){
   const vr=visRes();
   const mine=u.role==="consultant";
   const sub=mine?"Your mentees, one learning plan per quarter. A resident sees the plan once you submit it.":"Every resident's quarterly learning plan with their mentor. Click a row to read or complete it.";
-  if(mine&&!vr.length)return el("div",{cls:"content"},meHeader(sub),
+  if(mine&&!vr.length)return el("div",{cls:"content"},meHeader(sub),meTabs("plans"),
     el("div",{st:{padding:"32px 0",color:"#5C5345",fontSize:".9rem",lineHeight:"1.6",maxWidth:"520px"}},"No resident is assigned to you as mentor yet. The Program Director assigns mentors in the PD Admin Panel; your mentees will appear here as soon as that is done."));
   const done=vr.filter(r=>{const e=meFind(r.id,q);return e&&e.status==="submitted";}).length;
   const drafts=vr.filter(r=>{const e=meFind(r.id,q);return e&&e.status!=="submitted";}).length;
   const noMentor=vr.filter(r=>!MENTORS[r.id]).length;
-  return el("div",{cls:"content"},meHeader(sub),
+  return el("div",{cls:"content"},meHeader(sub),meTabs("plans"),
     el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"16px",flexWrap:"wrap",marginBottom:"18px"}},
       meQuarterPills(q,n=>set({meQ:n})),
       el("div",{st:{fontSize:".8rem",color:"#5C5345"}},ayLabel(meAY())+" · Q"+q+": ",el("b",{st:{color:"#1F1A12"}},done+" of "+vr.length+" submitted"),drafts?" · "+drafts+" in draft":"")),
@@ -18013,6 +18014,7 @@ function meFormView(r){
   const mentor=d.mentor_id?consultById(d.mentor_id):null;
   const who=mentor?mentor.name:(MENTORS[r.id]?mentorName(r.id):"No official mentor (completed by the PD)");
   return el("div",{cls:"content"},
+    meTabs("plans"),
     el("button",{cls:"back-btn me-noprint",onClick:()=>{_meDraft=null;set({meSel:null});}},"← All residents"),
     el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:"16px",flexWrap:"wrap",marginBottom:"8px"}},
       el("div",null,
@@ -18053,7 +18055,7 @@ function meResidentView(){
   const u=STATE.user;const r=resById(u.rid);
   const mine=ME_ROWS.filter(x=>x.resident_id===u.rid&&x.academic_year===meAY()&&x.status==="submitted").sort((a,b)=>a.quarter-b.quarter);
   const sub="Your individualized learning plan with your mentor across the seven CanMEDS roles, once a quarter.";
-  if(!r||!mine.length)return el("div",{cls:"content"},meHeader(sub),
+  if(!r||!mine.length)return el("div",{cls:"content"},meHeader(sub),meTabs("plans"),
     el("div",{st:{padding:"32px 0",color:"#5C5345",fontSize:".9rem",lineHeight:"1.6",maxWidth:"520px"}},"No learning plan has been submitted for you yet this year. Your mentor"+(MENTORS[u.rid]?" ("+mentorName(u.rid)+")":"")+" completes one each quarter; it will appear here once submitted."));
   const qs=mine.map(x=>x.quarter);
   const q=qs.includes(STATE.meQ)?STATE.meQ:qs[qs.length-1];
@@ -18552,6 +18554,352 @@ function fbHomeAlert(){
       "Programme review "+fbRoundLabel(r)+": "+done+" of "+n+" residents have submitted"+(r.deadline?", "+fbDueText(r):"")+". Click to read the results.");
   }
   return null;
+}
+// ─── RESIDENT SELF-ASSESSMENT (ACGME-I Milestones) ─────────────────────────────────────────────────────────────────
+// Second tab of the Mentorship module. Before each six-monthly Clinical Competency Committee review a resident
+// rates their OWN progress on the 19 ACGME-I Internal Medicine Milestone sub-competencies (Milestones 2.0,
+// March 2023: PC1–5, MK1–3, SBP1–3, PBLI1–2, PROF1–3, ICS1–3), level 1–5 each, plus two short texts. One row per
+// resident per academic year per review period (self_assessments; period 1 = Oct–Mar, 2 = Apr–Sep). The
+// resident edits until the PD locks the period (self_assessment_periods, one row per year and period: due date +
+// lock). The mentor and the PD read the self-rating beside the mentor's ILP rating for the same half-year,
+// grouped by CanMEDS role, so a gap between how the resident and the mentor see things is visible. The two
+// scales differ (Milestone level vs. the ILP's "meets expectations" rating), so the comparison is a prompt for
+// the conversation, never a score, and nothing in calcKPI reads either table.
+const SA_DOMAINS=[["PC","Patient Care"],["MK","Medical Knowledge"],["SBP","Systems-Based Practice"],["PBLI","Practice-Based Learning and Improvement"],["PROF","Professionalism"],["ICS","Interpersonal and Communication Skills"]];
+// role: the CanMEDS role of the mentor's ILP that this sub-competency is read against.
+const SA_ITEMS=[
+  {code:"PC1",dom:"PC",name:"History",role:"expert",levels:["Elicits and reports a comprehensive history for common presentations, with guidance","Elicits and concisely reports a hypothesis-driven history for common presentations","Elicits and concisely reports a hypothesis-driven history for complex presentations","Efficiently elicits a history that incorporates psychosocial and other determinants of health","Tailors the history to patient, family and system needs, including historical subtleties"]},
+  {code:"PC2",dom:"PC",name:"Physical Examination",role:"expert",levels:["Performs a general examination attending to comfort and safety; identifies common abnormal findings","Performs a hypothesis-driven examination for a common presentation; interprets common abnormal findings","Performs a hypothesis-driven examination for a complex presentation; interprets uncommon and complex findings","Uses advanced manoeuvres to elicit subtle findings and integrates them into diagnosis and management","Models evidence-based examination technique; teaches the predictive value of findings"]},
+  {code:"PC3",dom:"PC",name:"Clinical Reasoning",role:"expert",levels:["Organises and accurately summarises the patient evaluation into a clinical impression","Integrates all sources into a basic differential for common presentations; identifies reasoning errors with guidance","Develops a thorough, prioritised differential for common presentations; identifies own errors retrospectively","Develops prioritised differentials in complex presentations with subtle or conflicting findings; re-appraises reasoning in real time","Coaches others to develop prioritised differentials and to recognise and reflect on reasoning errors"]},
+  {code:"PC4",dom:"PC",name:"Patient Management – Inpatient",role:"expert",levels:["Formulates management plans for common conditions, with guidance","Develops and implements plans for common conditions, recognising acuity and modifying with the course","Develops value-based plans for multisystem disease and comorbidity, including patients needing critical care","Uses shared decision making to develop comprehensive value-based plans, incorporating determinants of health","Develops comprehensive plans for rare or ambiguous presentations or unusual comorbidity"]},
+  {code:"PC5",dom:"PC",name:"Patient Management – Outpatient",role:"expert",levels:["Identifies opportunities to promote health; formulates plans for a common chronic or acute condition, with guidance","Develops and implements plans for common chronic and acute conditions","Develops plans for multiple chronic conditions and initial plans for urgent presentations with chronic comorbidity","Develops value-based comprehensive plans incorporating psychosocial and other determinants of health","Creates and leads a patient-centred plan for highly complex chronic disease, integrating multiple disciplines"]},
+  {code:"MK1",dom:"MK",name:"Applied Foundational Sciences",role:"expert",levels:["Explains the scientific knowledge for normal function and common conditions","Explains the scientific knowledge for complex conditions within multisystem disease","Integrates scientific knowledge to address comorbid conditions","Integrates scientific knowledge to address uncommon, atypical or complex comorbid conditions","Demonstrates a nuanced understanding of the science of uncommon, atypical or complex conditions"]},
+  {code:"MK2",dom:"MK",name:"Therapeutic Knowledge",role:"expert",levels:["Explains the scientific basis for common therapies","Explains indications, contraindications, risks and benefits of common therapies","Integrates therapeutic options in comorbidity, multisystem disease or uncertain diagnosis","Integrates therapeutic options within the patient's clinical and psychosocial context","Demonstrates a nuanced understanding of emerging, atypical or complex therapeutic options"]},
+  {code:"MK3",dom:"MK",name:"Knowledge of Diagnostic Testing",role:"expert",levels:["Explains the rationale, risks and benefits of common tests; interprets common results","Explains the rationale, risks and benefits of complex tests; interprets complex data","Integrates value and test characteristics of diagnostic strategies in common disease","Integrates diagnostic strategies in comorbidity or multisystem disease; integrates complex data accurately","Demonstrates a nuanced understanding of emerging tests; anticipates the limitations of diagnostic data"]},
+  {code:"SBP1",dom:"SBP",name:"Patient Safety and Quality Improvement",role:"manager",levels:["Knows common patient-safety events, how to report them, and basic QI methods and metrics","Identifies system factors behind safety events; reports them; describes local QI initiatives","Participates in analysing and disclosing safety events and in local QI initiatives","Conducts analysis of safety events and discloses them; can identify, run and analyse a QI project","Engages teams to modify systems; mentors others in disclosure; creates and assesses institutional QI"]},
+  {code:"SBP2",dom:"SBP",name:"System Navigation for Patient-Centered Care",role:"manager",levels:["Knows what care coordination and safe transitions of care require","Coordinates care and performs safe hand-offs in routine clinical situations","Coordinates care and performs safe hand-offs in complex clinical situations","Role models and advocates for coordinated care and safe transitions within and across systems","Analyses care coordination and leads the design of improvements"]},
+  {code:"SBP3",dom:"SBP",name:"Physician Role in Health Care Systems",role:"advocate",levels:["Identifies the key components of the health care system and the principles of cost-effective care","Describes how system components interrelate and affect care; considers each patient's payment model","Discusses how individual practice affects the broader system; shared decision making informed by cost","Manages system components for efficient care and transitions; advocates for patients' care needs regardless of ability to pay","Advocates for or leads systems change; participates in health-policy advocacy"]},
+  {code:"PBLI1",dom:"PBLI",name:"Evidence-Based and Informed Practice",role:"scholar",levels:["Accesses available evidence and incorporates patient preferences for a routine patient","Articulates clinical questions and elicits patient values to guide evidence-based care","Locates and applies the best available evidence, integrated with preference, to complex patients","Critically appraises and applies evidence despite uncertainty or conflict, tailored to the individual","Coaches others in appraising evidence; contributes to guideline development"]},
+  {code:"PBLI2",dom:"PBLI",name:"Reflective Practice and Commitment to Personal Growth",role:"scholar",levels:["Sets goals for own development; identifies factors behind performance gaps; seeks improvement with prompting","Open to performance data; reflects on gaps; designs a learning plan with guidance","Seeks performance data episodically; institutes behaviour change; creates own learning plan independently","Seeks performance data consistently; challenges assumptions; measures the learning plan's effect and improves it","Role models seeking performance data; coaches others on reflective practice and learning plans"]},
+  {code:"PROF1",dom:"PROF",name:"Professional Behavior and Ethical Principles",role:"prof",levels:["Identifies triggers for professionalism lapses and how to report them; knows the core ethical principles","Shows insight into professional behaviour in routine situations; takes responsibility for own lapses; analyses straightforward ethical situations","Behaves professionally in complex or stressful situations; seeks help in complex ethical situations; analyses complex situations","Recognises situations that may trigger lapses and intervenes; uses appropriate resources for ethical dilemmas","Coaches others whose behaviour falls short; addresses system factors behind ethical problems"]},
+  {code:"PROF2",dom:"PROF",name:"Accountability / Conscientiousness",role:"prof",levels:["Takes responsibility for incomplete tasks and responds promptly to reminders","Completes tasks on time with attention to detail in routine situations; recognises what may delay own tasks","Completes tasks on time with attention to detail in complex or stressful situations","Recognises situations that may affect others' ability to complete tasks; proactively ensures needs are met","Takes ownership of system outcomes"]},
+  {code:"PROF3",dom:"PROF",name:"Self-Awareness and Help-Seeking",role:"prof",levels:["Recognises own well-being and the limits of own or team knowledge, with assistance","Independently recognises own well-being and limits, and seeks help appropriately","With assistance, proposes a plan to optimise well-being and to remediate limits","Independently develops a plan to optimise well-being and remediate limits","Coaches others when emotional responses or limitations fall short of expectations"]},
+  {code:"ICS1",dom:"ICS",name:"Patient and Family-Centered Communication",role:"comm",levels:["Shows respect and builds rapport; identifies common barriers; recognises the need to adjust communication","Builds a therapeutic relationship in straightforward encounters; identifies complex barriers; organises and initiates the conversation","Builds a therapeutic relationship in challenging encounters; reflects on own biases when prompted; delivers difficult information sensitively with guidance","Easily builds relationships whatever the complexity; recognises own biases; uses shared decision making independently","Mentors others in situational awareness; role models shared decision making under uncertainty or conflict"]},
+  {code:"ICS2",dom:"ICS",name:"Interprofessional and Team Communication",role:"collab",levels:["Respectfully requests and receives consultations; values all team members; solicits feedback","Requests and responds to consultations clearly; communicates effectively with the team; gives feedback to peers and learners","Checks own understanding of recommendations; adapts communication style to the team; gives constructive feedback to superiors","Coordinates recommendations from different team members; resolves conflict when needed","Role models flexible communication that values every team member; facilitates team-based feedback in complex situations"]},
+  {code:"ICS3",dom:"ICS",name:"Communication within Health Care Systems",role:"comm",levels:["Records information accurately; safeguards personal health information; uses required channels","Organised diagnostic and therapeutic reasoning in notes; appropriate use of documentation shortcuts; respectfully raises concerns about the system","Concise reasoning in the record; chooses direct or indirect communication by context; offers clear suggestions to improve the system","Clear, concise, timely written communication with anticipatory guidance; an example for others; initiates difficult conversations with stakeholders","Models feedback on others' written communication; guides institutional communication; facilitates dialogue on systems issues"]}
+];
+const SA_LEVEL_WORDS={1:"Level 1",2:"Level 2",3:"Level 3",4:"Level 4",5:"Level 5"};
+const SA_PERIODS={1:{label:"First half",months:"Oct – Mar",quarters:[1,2]},2:{label:"Second half",months:"Apr – Sep",quarters:[3,4]}};
+let SA_ROWS=[],SA_PERIOD_ROWS=[],SA_STATE="idle",SA_ERR="";
+let _saDraft=null,_saOpen={};   // _saOpen: {code:true} rows whose five level descriptions are unfolded
+function saAY(){return CURRENT_ACADEMIC_YEAR;}
+function saDefaultPeriod(){return currentQuarter()<=2?1:2;}
+function saP(){return STATE.saPeriod||saDefaultPeriod();}
+function saPeriodRow(ay,p){return SA_PERIOD_ROWS.find(x=>x.academic_year===ay&&x.period===p)||null;}
+function saLocked(ay,p){const x=saPeriodRow(ay,p);return !!(x&&x.locked);}
+function saFind(rid,p,ay){ay=ay||saAY();return SA_ROWS.find(x=>x.resident_id===rid&&x.academic_year===ay&&x.period===p)||null;}
+function saIsPd(){const r=STATE.user&&STATE.user.role;return r==="pd"||r==="deputy_pd";}
+// Who may read a resident's self-assessment: the resident, their mentor, pd/deputy/chief (mirrors the RLS).
+function saCanRead(rid){
+  const u=STATE.user;if(!u)return false;
+  if(u.role==="resident")return u.rid===rid;
+  if(u.role==="consultant")return MENTORS[rid]===u.cid;
+  return meIsPdSide();
+}
+function saCount(row){return row?SA_ITEMS.filter(i=>Number((row.levels||{})[i.code])>=1).length:0;}
+function saAvg(codes,row){
+  if(!row)return null;const v=codes.map(c=>Number((row.levels||{})[c])).filter(x=>x>=1&&x<=5);
+  return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*10)/10:null;
+}
+// The mentor's ILP rating for a CanMEDS role over the two quarters of the half-year: the latest submitted one.
+function saMentorRating(rid,p,roleKey){
+  const qs=SA_PERIODS[p].quarters.slice().reverse();
+  for(const q of qs){const ev=ME_ROWS.find(x=>x.resident_id===rid&&x.academic_year===saAY()&&x.quarter===q&&x.status==="submitted");
+    if(ev){const v=Number((ev.ratings||{})[roleKey]);if(v>=1)return{v,q};}}
+  return null;
+}
+async function loadSelfAssess(){
+  SA_STATE="loading";
+  const a=await fetchAllRows(()=>sb.from("self_assessments").select("*").order("id"));
+  if(a.error){SA_STATE="error";SA_ERR=a.error.message||String(a.error);render();return;}
+  const b=await sb.from("self_assessment_periods").select("*");
+  if(b.error){SA_STATE="error";SA_ERR=b.error.message||String(b.error);render();return;}
+  SA_ROWS=a.data||[];SA_PERIOD_ROWS=b.data||[];SA_STATE="ready";SA_ERR="";
+  render();
+}
+function saInjectCss(){
+  if(document.getElementById("sa-css"))return;
+  const s=document.createElement("style");s.id="sa-css";
+  s.textContent=
+    ".sa-dom{margin-top:34px}.sa-dom:first-of-type{margin-top:18px}"+
+    ".sa-domhd{display:flex;align-items:baseline;gap:12px;padding-bottom:8px;border-bottom:1px solid rgba(31,26,18,.14);flex-wrap:wrap}"+
+    ".sa-domhd h2{margin:0;font-family:'Playfair Display',Georgia,serif;font-size:1.3rem;font-weight:400;color:#1F1A12}"+
+    ".sa-domhd .ab{font-size:.68rem;font-weight:700;letter-spacing:.1em;color:#a94e2c}"+
+    ".sa-domhd .role{margin-left:auto;font-size:.72rem;color:#5C5345}.sa-domhd .role b{color:#1F1A12;font-weight:600}"+
+    ".sa-item{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:10px 32px;padding:18px 0;border-bottom:1px solid rgba(31,26,18,.07)}"+
+    ".sa-item .code{font-size:.66rem;font-weight:700;letter-spacing:.08em;color:#6E6455;margin-bottom:3px}"+
+    ".sa-item h3{margin:0;font-size:.98rem;font-weight:700;color:#1F1A12;line-height:1.3}"+
+    ".sa-item .pick{font-size:.8rem;line-height:1.5;color:#443C2F;margin-top:8px;min-height:1.2em}.sa-item .pick b{color:#a94e2c;font-weight:700;margin-right:6px}.sa-item .pick.none{color:#6E6455;font-style:italic}"+
+    ".sa-item .more{font-size:.72rem;font-weight:600;color:#9d4a2a;cursor:pointer;margin-top:6px;display:inline-block}"+
+    ".sa-levels{margin:8px 0 0;padding:0;list-style:none;font-size:.76rem;line-height:1.45;color:#5C5345}.sa-levels li{display:grid;grid-template-columns:52px 1fr;gap:8px;padding:3px 0}.sa-levels li b{color:#443C2F;font-weight:700}.sa-levels li.on{color:#1F1A12}.sa-levels li.on b{color:#a94e2c}"+
+    ".sa-seg{display:flex;gap:6px}.sa-seg button{flex:1 1 0;min-width:0;background:transparent;border:1px solid rgba(31,26,18,.14);border-radius:10px;padding:10px 4px;font:inherit;font-size:1rem;font-weight:700;color:#1F1A12;cursor:pointer;transition:all .14s}"+
+    ".sa-seg button:hover{border-color:#c96a4a;color:#a94e2c}.sa-seg button.on{background:#a94e2c;border-color:#a94e2c;color:#FEFBF3}"+
+    ".sa-seg button:disabled{cursor:default}.sa-seg button:disabled:hover{border-color:rgba(31,26,18,.14);color:#1F1A12}.sa-seg button.on:disabled:hover{color:#FEFBF3}"+
+    ".sa-seg .m{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1 1 0;min-width:0}.sa-seg .m small{font-size:.6rem;font-weight:600;color:#6E6455;letter-spacing:.04em}"+
+    ".sa-cmp{display:grid;grid-template-columns:minmax(0,1fr) 72px 72px 84px;gap:0 14px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(31,26,18,.07);font-size:.86rem}"+
+    ".sa-cmp.hd{font-size:.66rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5C5345;border-bottom:1px solid rgba(31,26,18,.14);padding:8px 0}"+
+    ".sa-cmp.role{background:#F6EFE2;margin:14px -10px 0;padding:10px;border-radius:8px;border-bottom:none;font-weight:600}"+
+    ".sa-cmp .num{text-align:center;font-weight:700;font-variant-numeric:tabular-nums}.sa-cmp .num.dim{color:#6E6455;font-weight:400}"+
+    ".sa-cmp .sub{display:block;font-size:.68rem;font-weight:400;color:#5C5345;margin-top:2px}"+
+    ".sa-gap{display:inline-block;padding:3px 9px;border-radius:999px;font-size:.7rem;font-weight:700;text-align:center;white-space:nowrap}"+
+    ".sa-gap.over{background:rgba(201,106,74,.16);color:#9d4a2a}.sa-gap.under{background:rgba(164,122,40,.16);color:#6a4c10}.sa-gap.ok{background:rgba(127,184,156,.2);color:#26523A}.sa-gap.na{color:#6E6455;font-weight:400}"+
+    ".sa-stat{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:.72rem;font-weight:700}"+
+    ".sa-stat.done{background:rgba(127,184,156,.2);color:#26523A}.sa-stat.draft{background:rgba(164,122,40,.14);color:#6a4c10}.sa-stat.none{background:#F6EFE2;color:#5C5345;font-weight:600}"+
+    ".sa-note{font-size:.86rem;line-height:1.6;white-space:pre-wrap;color:#1F1A12}.sa-note.empty{color:#6E6455;font-style:italic}"+
+    ".sa-ctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:.8rem;color:#5C5345}.sa-ctl input[type=date]{width:auto;padding:6px 10px;font-size:.8rem}"+
+    "@media (max-width:760px){.sa-item{grid-template-columns:1fr}.sa-seg button{padding:8px 2px;font-size:.9rem}.sa-cmp{grid-template-columns:minmax(0,1fr) 44px 44px 64px;gap:0 6px;font-size:.78rem}.sa-domhd .role{margin-left:0;flex-basis:100%}}"+
+    "@media print{body.me-printing .sa-seg,body.me-printing .sa-item .more{display:none!important}body.me-printing .sa-item,body.me-printing .sa-cmp{break-inside:avoid}body.me-printing .sa-dom{margin-top:18px}}";
+  document.head.appendChild(s);
+}
+function meTabs(cur){
+  const u=STATE.user;const tabs=[["plans","Learning plans"],["self","Self-assessment"]];
+  if(meIsPdSide())tabs.push(["ccc","CCC submissions"]);
+  return el("div",{cls:"me-noprint",st:{display:"flex",gap:"2px",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"22px",flexWrap:"wrap"}},
+    ...tabs.map(([k,l])=>el("span",{cls:"tab"+(cur===k?" on":""),onClick:()=>{_meDraft=null;_saDraft=null;set({meTab:k,meSel:null,saSel:null});}},l)));
+}
+function saPeriodPills(p,onPick){
+  return el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}},
+    ...[1,2].map(n=>el("span",{cls:"pill"+(p===n?" on":""),onClick:()=>onPick(n)},SA_PERIODS[n].label+" · "+SA_PERIODS[n].months)));
+}
+function saPeriodLine(p){
+  const row=saPeriodRow(saAY(),p);const bits=[ayLabel(saAY())+" · "+SA_PERIODS[p].label+" ("+SA_PERIODS[p].months+")"];
+  if(row&&row.due_on)bits.push("due "+fmtDate(row.due_on));
+  if(row&&row.locked)bits.push("locked by the Program Director"+(row.locked_at?" on "+fmtDate(row.locked_at.slice(0,10)):""));
+  return bits.join(" · ");
+}
+function renderSelfAssess(){
+  saInjectCss();
+  const u=STATE.user;
+  if(SA_STATE==="idle")loadSelfAssess();
+  if(SA_STATE==="idle"||SA_STATE==="loading")return el("div",{cls:"content"},meHeader(""),meTabs(STATE.meTab),el("div",{cls:"sh",st:{padding:"40px 0"}},"Loading self-assessments…"));
+  if(SA_STATE==="error")return el("div",{cls:"content"},meHeader(""),meTabs(STATE.meTab),
+    el("p",{cls:"alert-yellow"},"The self-assessment tables are not there yet. Run supabase/add_self_assessments.sql in the Supabase SQL Editor, then reload."),
+    el("div",{st:{fontSize:".72rem",color:"rgba(31,26,18,.35)"}},SA_ERR));
+  if(u.role==="resident")return saResidentForm();
+  if(STATE.saSel){const r=resById(STATE.saSel);if(r&&saCanRead(r.id))return saCompareView(r);}
+  if(STATE.meTab==="ccc"&&meIsPdSide())return saCccView();
+  return saListView();
+}
+// ── Resident: rate the 19 sub-competencies for the period ──
+function saBlankDraft(rid,p){return{resident_id:rid,academic_year:saAY(),period:p,levels:{},doing_well:"",work_on:"",status:"draft"};}
+function saDraftFor(rid,p){
+  if(_saDraft&&_saDraft.resident_id===rid&&_saDraft.period===p&&_saDraft.academic_year===saAY())return _saDraft;
+  const ex=saFind(rid,p);
+  _saDraft=ex?JSON.parse(JSON.stringify({...ex,levels:ex.levels||{},doing_well:ex.doing_well||"",work_on:ex.work_on||""})):saBlankDraft(rid,p);
+  return _saDraft;
+}
+async function saSave(d,submit){
+  if(submit){const missing=SA_ITEMS.filter(i=>!(d.levels[i.code]>=1));
+    if(missing.length){showToast("Choose a level for every sub-competency before submitting — "+missing.length+" still unrated ("+missing.slice(0,4).map(i=>i.code).join(", ")+(missing.length>4?"…":"")+").","error");return;}}
+  const u=STATE.user;const now=new Date().toISOString();
+  const payload={resident_id:d.resident_id,academic_year:d.academic_year,period:d.period,levels:d.levels,
+    doing_well:d.doing_well||null,work_on:d.work_on||null,status:submit?"submitted":"draft",
+    submitted_at:submit?now:(d.status==="submitted"?d.submitted_at:null),updated_at:now};
+  STATE.saSaving=true;render();
+  const{data,error}=await sb.from("self_assessments").upsert(payload,{onConflict:"resident_id,academic_year,period"}).select().single();
+  STATE.saSaving=false;
+  if(error){showToast("Could not save: "+(error.code==="42501"?"this period has been locked by the Program Director.":error.message),"error");render();return;}
+  const i=SA_ROWS.findIndex(x=>x.id===data.id);if(i>=0)SA_ROWS[i]=data;else SA_ROWS.push(data);
+  _saDraft=null;showToast(submit?"Self-assessment submitted. You can still edit it until the period is locked.":"Draft saved.");render();
+}
+function saSeg(value,onPick,disabled){
+  return el("div",{cls:"sa-seg"},...[1,2,3,4,5].map(n=>el("button",{cls:value===n?"on":"",disabled:!!disabled,title:SA_LEVEL_WORDS[n],onClick:()=>{if(!disabled)onPick(n);}},String(n))));
+}
+function saLevelList(item,value){
+  return el("ul",{cls:"sa-levels"},...item.levels.map((t,i)=>el("li",{cls:value===i+1?"on":""},el("b",null,"Level "+(i+1)),el("span",null,t))));
+}
+function saItemRow(item,value,onPick,editable){
+  const open=!!_saOpen[item.code];
+  return el("div",{cls:"sa-item"},
+    el("div",null,el("div",{cls:"code"},item.code),el("h3",null,item.name),
+      value?el("div",{cls:"pick"},el("b",null,"Level "+value),item.levels[value-1]):el("div",{cls:"pick none"},editable?"Choose the level that describes you now.":"Not rated"),
+      open?saLevelList(item,value):null,
+      el("span",{cls:"more me-noprint",onClick:()=>{_saOpen[item.code]=!open;render();}},open?"Hide the levels":"What do the levels mean?")),
+    el("div",null,saSeg(value,onPick,!editable),
+      el("div",{st:{display:"flex",justifyContent:"space-between",fontSize:".62rem",color:"#6E6455",marginTop:"5px",padding:"0 2px"}},el("span",null,"Novice"),el("span",null,"Ready for unsupervised practice is level 4"),el("span",null,"Aspirational"))));
+}
+function saTextBlock(label,hint,value,onInput,editable,placeholder){
+  return el("div",{st:{padding:"18px 0",borderBottom:"1px solid rgba(31,26,18,.07)"}},
+    el("div",{cls:"me-lbl"},label),hint?el("div",{st:{fontSize:".76rem",color:"#5C5345",marginBottom:"8px"}},hint):null,
+    editable?el("textarea",{placeholder:placeholder||"",st:{minHeight:"90px",resize:"vertical",fontSize:".86rem",lineHeight:"1.5"},onInput:e=>onInput(e.target.value)},value||"")
+      :el("div",{cls:"sa-note"+(value?"":" empty")},value||"Nothing written"));
+}
+function saFormBody(d,editable,who){
+  const n=saCount(d);
+  return [
+    el("div",{st:{display:"flex",justifyContent:"space-between",gap:"16px",padding:"14px 0 0",fontSize:".76rem",color:"#5C5345",flexWrap:"wrap"}},
+      el("span",{st:{maxWidth:"560px",lineHeight:"1.5"}},who==="self"?"For each sub-competency choose the level that best describes where you are now, honestly. Level 4 is the target for graduation; a lower level is expected earlier in training, and the committee compares this with the faculty ratings to see where you and they agree.":"The resident's own ratings for this period, as submitted."),
+      el("span",{st:{whiteSpace:"nowrap"}},el("b",{st:{color:n===SA_ITEMS.length?"#26523A":"#1F1A12"}},n+" of "+SA_ITEMS.length)," rated")),
+    ...SA_DOMAINS.map(([ab,name])=>el("div",{cls:"sa-dom"},
+      el("div",{cls:"sa-domhd"},el("span",{cls:"ab"},ab),el("h2",null,name)),
+      ...SA_ITEMS.filter(i=>i.dom===ab).map(i=>saItemRow(i,Number(d.levels[i.code])||null,v=>{d.levels[i.code]=v;render();},editable)))),
+    el("div",{st:{marginTop:"28px"}},
+      el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.4rem",color:"#1F1A12",marginBottom:"4px"}},"In your own words"),
+      saTextBlock("What I am doing well","",d.doing_well,v=>{d.doing_well=v;},editable,"Two or three things you are confident about, with an example if you can."),
+      saTextBlock("What I want to work on before the next review","",d.work_on,v=>{d.work_on=v;},editable,"Specific goals you want to bring to your mentor and the committee."))];
+}
+function saResidentForm(){
+  const u=STATE.user,r=resById(u.rid),p=saP();
+  if(!r)return el("div",{cls:"content"},meHeader(""),meTabs("self"),el("div",{st:{padding:"32px 0",color:"#5C5345"}},"No resident record is linked to this login."));
+  const ex=saFind(r.id,p),locked=saLocked(saAY(),p),editable=!locked;
+  const d=editable?saDraftFor(r.id,p):(ex||saBlankDraft(r.id,p));
+  const status=ex?(ex.status==="submitted"?"Submitted "+fmtDate((ex.submitted_at||"").slice(0,10)):"Draft"):"Not started";
+  return el("div",{cls:"content"},
+    meHeader("Your learning plan with your mentor, and your own Milestone self-assessment before each Clinical Competency Committee review."),
+    meTabs("self"),
+    el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:"16px",flexWrap:"wrap",marginBottom:"8px"}},
+      el("div",null,
+        el("div",{cls:"me-lbl"},"Milestone self-assessment · ACGME-I Internal Medicine 2.0"),
+        el("h2",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.6rem",fontWeight:"400",color:"#1F1A12",margin:"0 0 4px"}},r.name),
+        el("div",{st:{fontSize:".84rem",color:"#5C5345"}},r.level+" · "+saPeriodLine(p))),
+      el("div",{st:{textAlign:"right"}},
+        el("span",{cls:"sa-stat "+(ex?(ex.status==="submitted"?"done":"draft"):"none")},status))),
+    el("div",{cls:"me-noprint",st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px",flexWrap:"wrap",padding:"14px 0 6px",borderBottom:"1px solid rgba(31,26,18,.12)"}},
+      saPeriodPills(p,n=>{_saDraft=null;set({saPeriod:n});}),
+      locked?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"This period is locked; the committee has your submitted answers."):el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"Saved answers can be changed until the Program Director locks the period.")),
+    ...saFormBody(d,editable,"self"),
+    el("div",{cls:"me-noprint",st:{display:"flex",gap:"10px",justifyContent:"flex-end",alignItems:"center",padding:"24px 0",flexWrap:"wrap"}},
+      editable?el("button",{cls:"me-btn ghost",disabled:!!STATE.saSaving,onClick:()=>saSave(d,false)},"Save draft"):null,
+      editable?el("button",{cls:"me-btn",disabled:!!STATE.saSaving,onClick:()=>showConfirm("Submit your self-assessment for "+SA_PERIODS[p].label.toLowerCase()+" of "+ayLabel(saAY())+"? Your mentor and the Program Director will see it beside your mentor's rating. You can still change it until the period is locked.",()=>saSave(d,true),"Submit")},ex&&ex.status==="submitted"?"Update submission":"Submit self-assessment"):null));
+}
+// ── Mentor / PD: the residents they may read, with status for the period ──
+function saListView(){
+  const u=STATE.user,p=saP();
+  const mine=u.role==="consultant";
+  const vr=mine?RESIDENTS.filter(r=>MENTORS[r.id]===u.cid):RESIDENTS;
+  const sub=mine?"Your mentees' own Milestone ratings for each half-year, read beside your learning-plan rating.":"Every resident's Milestone self-assessment for the half-year, read beside the mentor's rating.";
+  if(mine&&!vr.length)return el("div",{cls:"content"},meHeader(sub),meTabs("self"),
+    el("div",{st:{padding:"32px 0",color:"#5C5345",fontSize:".9rem",lineHeight:"1.6",maxWidth:"520px"}},"No resident is assigned to you as mentor yet, so there is no self-assessment for you to read."));
+  const done=vr.filter(r=>{const x=saFind(r.id,p);return x&&x.status==="submitted";}).length;
+  return el("div",{cls:"content"},meHeader(sub),meTabs("self"),
+    el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"16px",flexWrap:"wrap",marginBottom:"18px"}},
+      saPeriodPills(p,n=>set({saPeriod:n})),
+      el("div",{st:{fontSize:".8rem",color:"#5C5345"}},saPeriodLine(p)+": ",el("b",{st:{color:"#1F1A12"}},done+" of "+vr.length+" submitted"))),
+    el("div",{st:{overflowX:"auto"}},el("table",{cls:"me-tbl"},
+      el("thead",null,el("tr",null,el("th",null,"Resident"),el("th",null,"Level"),mine?null:el("th",null,"Mentor"),el("th",null,"Self-assessment"),el("th",{st:{textAlign:"center"}},"Own average"),el("th",{st:{textAlign:"center"}},"Mentor's ILP"),el("th",null,""))),
+      el("tbody",null,...vr.map(r=>{
+        const x=saFind(r.id,p);const own=saAvg(SA_ITEMS.map(i=>i.code),x);
+        const me=saMentorAvg(r.id,p);
+        return el("tr",{cls:"rowlink",onClick:()=>set({saSel:r.id})},
+          el("td",{st:{fontWeight:"600"}},r.name),
+          el("td",{st:{color:"#5C5345"}},r.level),
+          mine?null:el("td",{st:{color:MENTORS[r.id]?"#1F1A12":"#8a7f6c",fontSize:".8rem",fontStyle:MENTORS[r.id]?"normal":"italic"}},MENTORS[r.id]?mentorName(r.id):"No official mentor"),
+          el("td",null,x?el("span",{cls:"sa-stat "+(x.status==="submitted"?"done":"draft")},x.status==="submitted"?"Submitted "+fmtDate((x.submitted_at||"").slice(0,10)):"Draft · "+saCount(x)+" of "+SA_ITEMS.length):el("span",{cls:"sa-stat none"},"Not started")),
+          el("td",{st:{textAlign:"center",fontWeight:"700"}},own!=null?own.toFixed(1):el("span",{st:{color:"rgba(31,26,18,.25)"}},"—")),
+          el("td",{st:{textAlign:"center",fontWeight:"700",color:me!=null?meTone(me):"inherit"}},me!=null?me.toFixed(1):el("span",{st:{color:"rgba(31,26,18,.25)"}},"—")),
+          el("td",{st:{textAlign:"right",whiteSpace:"nowrap"}},el("span",{cls:"lnk",st:{fontSize:".8rem",fontWeight:"600",color:"#a94e2c"}},x?"Compare":"Open")));
+      })))));
+}
+function saMentorAvg(rid,p){
+  const v=ME_ROLES.map(x=>saMentorRating(rid,p,x.key)).filter(Boolean).map(x=>x.v);
+  return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*10)/10:null;
+}
+// ── Mentor / PD: one resident, self-rating beside the mentor's ILP rating, grouped by CanMEDS role ──
+function saGapChip(own,mentor){
+  if(own==null||mentor==null)return el("span",{cls:"sa-gap na"},"—");
+  const d=Math.round((own-mentor)*10)/10;
+  if(Math.abs(d)<1)return el("span",{cls:"sa-gap ok"},"agree");
+  return el("span",{cls:"sa-gap "+(d>0?"over":"under")},d>0?"self +"+d.toFixed(1):"self −"+Math.abs(d).toFixed(1));
+}
+function saCompareView(r){
+  const u=STATE.user,p=saP();
+  const x=saFind(r.id,p);
+  const locked=saLocked(saAY(),p);
+  const ilpQ=SA_PERIODS[p].quarters.filter(q=>{const e=ME_ROWS.find(y=>y.resident_id===r.id&&y.academic_year===saAY()&&y.quarter===q&&y.status==="submitted");return !!e;});
+  const own=saAvg(SA_ITEMS.map(i=>i.code),x),me=saMentorAvg(r.id,p);
+  const gaps=ME_ROLES.map(role=>{const codes=SA_ITEMS.filter(i=>i.role===role.key).map(i=>i.code);const o=saAvg(codes,x);const m=saMentorRating(r.id,p,role.key);return{role,codes,o,m:m?m.v:null,q:m?m.q:null};});
+  const blind=gaps.filter(g=>g.o!=null&&g.m!=null&&Math.abs(g.o-g.m)>=1);
+  const backTab=STATE.meTab==="ccc"?"ccc":"self";
+  return el("div",{cls:"content"},
+    el("button",{cls:"back-btn me-noprint",onClick:()=>set({saSel:null})},"← "+(backTab==="ccc"?"CCC submissions":"All residents")),
+    el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:"16px",flexWrap:"wrap",marginBottom:"8px"}},
+      el("div",null,
+        el("div",{cls:"me-lbl"},"Milestone self-assessment · beside the mentor's learning plan"),
+        el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",margin:"0 0 4px"}},r.name),
+        el("div",{st:{fontSize:".84rem",color:"#5C5345"}},r.level+" · "+saPeriodLine(p)+" · Mentor: ",el("span",{st:{color:"#1F1A12"}},MENTORS[r.id]?mentorName(r.id):"No official mentor"))),
+      el("div",{st:{display:"flex",gap:"28px",textAlign:"right"}},
+        el("div",null,el("div",{cls:"me-lbl",st:{marginBottom:"2px"}},"Own rating"),el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2.4rem",lineHeight:"1",color:"#1F1A12"}},own!=null?own.toFixed(1):"—"),el("div",{st:{fontSize:".7rem",color:"#5C5345"}},"average Milestone level")),
+        el("div",null,el("div",{cls:"me-lbl",st:{marginBottom:"2px"}},"Mentor's ILP"),el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2.4rem",lineHeight:"1",color:meTone(me)}},me!=null?me.toFixed(1):"—"),el("div",{st:{fontSize:".7rem",color:"#5C5345"}},ilpQ.length?"Q"+ilpQ.join(" + Q")+" of this half":"no plan submitted yet")))),
+    el("div",{cls:"me-noprint",st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px",flexWrap:"wrap",padding:"14px 0 6px",borderBottom:"1px solid rgba(31,26,18,.12)"}},
+      saPeriodPills(p,n=>set({saPeriod:n})),
+      el("div",{st:{fontSize:".78rem",color:"#5C5345"}},x?(x.status==="submitted"?"Submitted "+fmtDate((x.submitted_at||"").slice(0,10)):"Still a draft — "+saCount(x)+" of "+SA_ITEMS.length+" rated"):"Not started",locked?" · period locked":"")),
+    !x?el("div",{st:{padding:"32px 0",color:"#5C5345",fontSize:".9rem",lineHeight:"1.6",maxWidth:"560px"}},r.name+" has not started a self-assessment for this period. The mentor's learning plan is on the Learning plans tab."):
+    el("div",null,
+      el("div",{st:{marginTop:"26px"}},
+        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.4rem",color:"#1F1A12",marginBottom:"4px"}},"Where they agree and where they do not"),
+        el("div",{st:{fontSize:".78rem",color:"#5C5345",lineHeight:"1.55",maxWidth:"680px",marginBottom:"12px"}},"The resident's average Milestone level for the sub-competencies that sit under each CanMEDS role, beside the mentor's latest ILP rating for the same half-year. Both run 1–5 but mean different things (Milestone level against the ILP's \"meets expectations\" scale), so a gap of a point or more is a prompt for the conversation, not a verdict."),
+        blind.length?el("div",{st:{fontSize:".84rem",color:"#1F1A12",marginBottom:"12px"}},el("b",{st:{color:"#a94e2c"}},"Possible blind spot"+(blind.length>1?"s":"")+": "),blind.map(g=>g.role.role+" ("+(g.o>g.m?"rates self higher":"rates self lower")+")").join(" · ")):
+          el("div",{st:{fontSize:".84rem",color:"#26523A",marginBottom:"12px"}},gaps.some(g=>g.m!=null)?"No gap of a point or more between the resident and the mentor.":"No mentor rating for this half-year yet, so there is nothing to compare against."),
+        el("div",{cls:"sa-cmp hd"},el("span",null,"CanMEDS role · Milestone sub-competencies"),el("span",{cls:"num"},"Self"),el("span",{cls:"num"},"Mentor"),el("span",null,"")),
+        ...gaps.flatMap(g=>[
+          el("div",{cls:"sa-cmp role"},el("span",null,g.role.role,el("span",{cls:"sub"},g.codes.join(" · "))),el("span",{cls:"num"},g.o!=null?g.o.toFixed(1):"—"),el("span",{cls:"num",st:{color:g.m!=null?meTone(g.m):"inherit"}},g.m!=null?g.m.toFixed(1):"—"),saGapChip(g.o,g.m)),
+          ...SA_ITEMS.filter(i=>i.role===g.role.key).map(i=>{const v=Number((x.levels||{})[i.code])||null;
+            return el("div",{cls:"sa-cmp"},el("span",null,el("span",{st:{fontSize:".66rem",fontWeight:"700",letterSpacing:".06em",color:"#6E6455",marginRight:"8px"}},i.code),i.name,v?el("span",{cls:"sub"},i.levels[v-1]):null),el("span",{cls:"num"},v?String(v):el("span",{style:"color:rgba(31,26,18,.25)"},"—")),el("span",{cls:"num dim"},""),el("span",null,""));})])),
+      el("div",{st:{marginTop:"28px"}},
+        el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.4rem",color:"#1F1A12",marginBottom:"4px"}},"In the resident's own words"),
+        saTextBlock("What I am doing well","",x.doing_well,null,false),
+        saTextBlock("What I want to work on before the next review","",x.work_on,null,false))),
+    el("div",{cls:"me-noprint",st:{display:"flex",gap:"10px",justifyContent:"flex-end",alignItems:"center",padding:"24px 0",flexWrap:"wrap"}},
+      saIsPd()&&x?el("button",{cls:"me-btn ghost",onClick:mePrint},"Print for the CCC file"):null,
+      el("button",{cls:"me-btn ghost",onClick:()=>{_meDraft=null;set({meTab:"plans",meSel:r.id,meQ:ilpQ.length?ilpQ[ilpQ.length-1]:SA_PERIODS[p].quarters[0],saSel:null});}},"Open the learning plan")));
+}
+// ── PD: who has and has not submitted; due date and lock for the period ──
+async function saSavePeriod(p,patch){
+  const u=STATE.user;const ex=saPeriodRow(saAY(),p);
+  const payload={academic_year:saAY(),period:p,label:SA_PERIODS[p].label,due_on:ex?ex.due_on:null,locked:ex?!!ex.locked:false,...patch,updated_at:new Date().toISOString(),updated_by:u.profileId};
+  if(patch.locked===true){payload.locked_at=new Date().toISOString();payload.locked_by=u.profileId;}
+  if(patch.locked===false){payload.locked_at=null;payload.locked_by=null;}
+  const{data,error}=await sb.from("self_assessment_periods").upsert(payload,{onConflict:"academic_year,period"}).select().single();
+  if(error){showToast("Could not save the period: "+error.message,"error");return;}
+  const i=SA_PERIOD_ROWS.findIndex(x=>x.id===data.id);if(i>=0)SA_PERIOD_ROWS[i]=data;else SA_PERIOD_ROWS.push(data);
+  showToast(patch.locked===true?"Period locked. Residents can no longer change their answers.":patch.locked===false?"Period reopened.":"Due date saved.");render();
+}
+function saCccView(){
+  const p=saP(),row=saPeriodRow(saAY(),p),locked=!!(row&&row.locked);
+  const vr=RESIDENTS.slice();
+  const sub=vr.filter(r=>{const x=saFind(r.id,p);return x&&x.status==="submitted";});
+  const dr=vr.filter(r=>{const x=saFind(r.id,p);return x&&x.status!=="submitted";});
+  const no=vr.filter(r=>!saFind(r.id,p));
+  const byLevel=list=>{const g={};list.forEach(r=>{(g[r.level]=g[r.level]||[]).push(r);});return Object.keys(g).sort().map(l=>l+": "+g[l].map(r=>r.name.replace(/^Dr\.\s*/,"")).join(", "));};
+  const canCtl=saIsPd();
+  return el("div",{cls:"content"},
+    meHeader("Who has submitted their Milestone self-assessment for the Clinical Competency Committee, and the period's due date and lock."),
+    meTabs("ccc"),
+    el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"16px",flexWrap:"wrap",marginBottom:"18px"}},
+      saPeriodPills(p,n=>set({saPeriod:n})),
+      el("div",{st:{fontSize:".8rem",color:"#5C5345"}},ayLabel(saAY())+" · "+SA_PERIODS[p].label+" · ",el("b",{st:{color:"#1F1A12"}},sub.length+" of "+vr.length+" submitted"),dr.length?" · "+dr.length+" in draft":"",no.length?" · "+no.length+" not started":"")),
+    el("div",{cls:"sa-ctl",st:{padding:"14px 0 18px",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"8px"}},
+      el("span",null,"Due date"),
+      canCtl?el("input",{type:"date",value:row&&row.due_on?row.due_on:"",onChange:e=>saSavePeriod(p,{due_on:e.target.value||null})}):el("b",null,row&&row.due_on?fmtDate(row.due_on):"not set"),
+      el("span",{st:{marginLeft:"18px"}},locked?"Locked"+(row.locked_at?" "+fmtDate(row.locked_at.slice(0,10)):""):"Open — residents can still edit"),
+      canCtl?el("button",{cls:"me-btn"+(locked?" ghost":""),st:{padding:"7px 16px",fontSize:".78rem"},onClick:()=>showConfirm(locked?"Reopen "+SA_PERIODS[p].label.toLowerCase()+" of "+ayLabel(saAY())+"? Residents will be able to change their answers again.":"Lock "+SA_PERIODS[p].label.toLowerCase()+" of "+ayLabel(saAY())+"? Residents will no longer be able to change their self-assessment; the committee works from what is submitted now.",()=>saSavePeriod(p,{locked:!locked}),locked?"Reopen":"Lock")},locked?"Reopen period":"Lock period"):null),
+    no.length?el("div",{st:{padding:"14px 0",borderBottom:"1px solid rgba(31,26,18,.07)"}},el("div",{cls:"me-lbl",st:{color:"#9d4a2a"}},"Not started ("+no.length+")"),...byLevel(no).map(t=>el("div",{st:{fontSize:".84rem",color:"#1F1A12",lineHeight:"1.6"}},t))):null,
+    dr.length?el("div",{st:{padding:"14px 0",borderBottom:"1px solid rgba(31,26,18,.07)"}},el("div",{cls:"me-lbl",st:{color:"#6a4c10"}},"In draft ("+dr.length+")"),...byLevel(dr).map(t=>el("div",{st:{fontSize:".84rem",color:"#1F1A12",lineHeight:"1.6"}},t))):null,
+    el("div",{st:{marginTop:"22px"}},
+      el("div",{cls:"me-lbl",st:{color:"#26523A"}},"Submitted ("+sub.length+")"),
+      sub.length?el("div",{st:{overflowX:"auto"}},el("table",{cls:"me-tbl"},
+        el("thead",null,el("tr",null,el("th",null,"Resident"),el("th",null,"Level"),el("th",null,"Mentor"),el("th",null,"Submitted"),el("th",{st:{textAlign:"center"}},"Own"),el("th",{st:{textAlign:"center"}},"Mentor's ILP"),el("th",null,"Gaps"),el("th",null,""))),
+        el("tbody",null,...sub.map(r=>{const x=saFind(r.id,p);const own=saAvg(SA_ITEMS.map(i=>i.code),x),me=saMentorAvg(r.id,p);
+          const g=ME_ROLES.filter(role=>{const o=saAvg(SA_ITEMS.filter(i=>i.role===role.key).map(i=>i.code),x);const m=saMentorRating(r.id,p,role.key);return o!=null&&m&&Math.abs(o-m.v)>=1;});
+          return el("tr",{cls:"rowlink",onClick:()=>set({saSel:r.id})},
+            el("td",{st:{fontWeight:"600"}},r.name),el("td",{st:{color:"#5C5345"}},r.level),
+            el("td",{st:{fontSize:".8rem",color:MENTORS[r.id]?"#1F1A12":"#8a7f6c",fontStyle:MENTORS[r.id]?"normal":"italic"}},MENTORS[r.id]?mentorName(r.id):"No official mentor"),
+            el("td",{st:{fontSize:".8rem"}},fmtDate((x.submitted_at||"").slice(0,10))),
+            el("td",{st:{textAlign:"center",fontWeight:"700"}},own!=null?own.toFixed(1):"—"),
+            el("td",{st:{textAlign:"center",fontWeight:"700",color:me!=null?meTone(me):"inherit"}},me!=null?me.toFixed(1):el("span",{st:{color:"rgba(31,26,18,.25)"}},"—")),
+            el("td",{st:{fontSize:".78rem",color:g.length?"#9d4a2a":"#5C5345"}},me==null?"no ILP yet":g.length?g.map(z=>z.role).join(", "):"none"),
+            el("td",{st:{textAlign:"right",whiteSpace:"nowrap"}},el("span",{cls:"lnk",st:{fontSize:".8rem",fontWeight:"600",color:"#a94e2c"}},"Open · print")));})))):
+      el("div",{st:{padding:"14px 0",fontSize:".86rem",color:"#5C5345"}},"Nobody has submitted yet for this period.")));
 }
 let _lastMod=null;
 function render(){
