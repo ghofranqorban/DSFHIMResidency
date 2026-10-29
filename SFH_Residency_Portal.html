@@ -17565,10 +17565,12 @@ function showToast(msg,type){
   if(type===undefined)type="error";
   let container=document.getElementById("toast-root");
   if(!container){container=document.createElement("div");container.id="toast-root";container.style.cssText="position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:360px;width:calc(100% - 40px);";document.body.appendChild(container);}
-  const cfg={error:{bg:"#fdf2f2",border:"#fca5a5",ico:"\u274c",color:"#991b1b"},success:{bg:"#f0fdf4",border:"#86efac",ico:"\u2714",color:"#166534"},warning:{bg:"#fffbeb",border:"#fcd34d",ico:"\u26a0",color:"#6a4c10"},info:{bg:"#eff6ff",border:"#93c5fd",ico:"\u2139",color:"#1d4ed8"}}[type]||{bg:"#fdf2f2",border:"#fca5a5",ico:"\u274c",color:"#991b1b"};
+  // Stroke icons in the portal palette (no emoji): a circled cross, a circled tick, a triangle, a circled i.
+  const ICO={error:'<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>',success:'<circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>',warning:'<path d="M12 4l8.5 15h-17z"/><path d="M12 10v4M12 17h.01"/>',info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'};
+  const cfg={error:{bg:"#fbeeee",border:"rgba(181,32,64,.35)",color:"#8f1a33"},success:{bg:"#eef5ef",border:"rgba(38,82,58,.35)",color:"#26523A"},warning:{bg:"#fbf5e6",border:"rgba(164,122,40,.4)",color:"#6a4c10"},info:{bg:"#F6EFE2",border:"rgba(31,26,18,.18)",color:"#443C2F"}}[type]||{bg:"#fdf2f2",border:"#fca5a5",ico:"\u274c",color:"#991b1b"};
   const t=document.createElement("div");
   t.style.cssText="background:"+cfg.bg+";border:1.5px solid "+cfg.border+";color:"+cfg.color+";padding:12px 14px;border-radius:10px;font-size:.86rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.12);pointer-events:all;display:flex;align-items:flex-start;gap:8px;animation:toastIn .2s ease;";
-  const ico=document.createElement("span");ico.textContent=cfg.ico;ico.style.flexShrink="0";
+  const ico=document.createElement("span");ico.style.cssText="flex-shrink:0;display:inline-flex;margin-top:1px;";ico.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(ICO[type]||ICO.info)+"</svg>";
   const msgEl=document.createElement("span");msgEl.style.flex="1";msgEl.textContent=String(msg);
   const cls=document.createElement("span");cls.style.cssText="cursor:pointer;margin-left:4px;opacity:.5;";cls.textContent="\u2715";cls.onclick=()=>t.remove();
   t.appendChild(ico);t.appendChild(msgEl);t.appendChild(cls);
@@ -18606,9 +18608,22 @@ const SA_LEVEL_WORDS={1:"Level 1",2:"Level 2",3:"Level 3",4:"Level 4",5:"Level 5
 const SA_PERIODS={1:{label:"First half",months:"Oct – Mar",quarters:[1,2]},2:{label:"Second half",months:"Apr – Sep",quarters:[3,4]}};
 let SA_ROWS=[],SA_PERIOD_ROWS=[],SA_STATE="idle",SA_ERR="";
 let _saDraft=null,_saOpen={};   // _saOpen: {code:true} rows whose five level descriptions are unfolded
-function saAY(){return CURRENT_ACADEMIC_YEAR;}
-function saDefaultPeriod(){return currentQuarter()<=2?1:2;}
-function saP(){return STATE.saPeriod||saDefaultPeriod();}
+// The CCC reviews the half-year that has just ENDED, so the form a resident fills in now covers the last
+// completed half (in Oct–Mar that is Apr–Sep of the previous academic year); the running half is shown but
+// stays closed until the day after it ends. STATE.saKey = "<academic_year>-<period>" selects one of the
+// three on offer: the half before, the one under review, and the running one.
+function saHalfEnd(ay,p){return p===1?new Date(ay+1,3,1):new Date(ay+1,9,1);}   // first day AFTER the half
+function saHalfLabel(ay,p){return p===1?"Oct "+ay+" – Mar "+(ay+1):"Apr – Sep "+(ay+1);}
+function saLatestDone(){return currentQuarter()<=2?{ay:CURRENT_ACADEMIC_YEAR-1,p:2}:{ay:CURRENT_ACADEMIC_YEAR,p:1};}
+function saPrevHalf(h){return h.p===2?{ay:h.ay,p:1}:{ay:h.ay-1,p:2};}
+function saNextHalf(h){return h.p===1?{ay:h.ay,p:2}:{ay:h.ay+1,p:1};}
+function saChoices(){const c=saLatestDone();return[saPrevHalf(c),c,saNextHalf(c)];}
+function saKeyOf(h){return h.ay+"-"+h.p;}
+function saSel(){const m=String(STATE.saKey||"").match(/^(\d+)-([12])$/);return m?{ay:+m[1],p:+m[2]}:saLatestDone();}
+function saNotYet(h){return new Date()<saHalfEnd(h.ay,h.p);}
+function saOpensOn(h){const d=saHalfEnd(h.ay,h.p);return fmtDate(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"));}
+function saAY(){return saSel().ay;}
+function saP(){return saSel().p;}
 function saPeriodRow(ay,p){return SA_PERIOD_ROWS.find(x=>x.academic_year===ay&&x.period===p)||null;}
 function saLocked(ay,p){const x=saPeriodRow(ay,p);return !!(x&&x.locked);}
 function saFind(rid,p,ay){ay=ay||saAY();return SA_ROWS.find(x=>x.resident_id===rid&&x.academic_year===ay&&x.period===p)||null;}
@@ -18681,12 +18696,15 @@ function meTabs(cur){
   return el("div",{cls:"me-noprint",st:{display:"flex",gap:"2px",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"22px",flexWrap:"wrap"}},
     ...tabs.map(([k,l])=>el("span",{cls:"tab"+(cur===k?" on":""),onClick:()=>{_meDraft=null;_saDraft=null;set({meTab:k,meSel:null,saSel:null});}},l)));
 }
-function saPeriodPills(p,onPick){
+function saPeriodPills(){
+  const cur=saSel();
   return el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}},
-    ...[1,2].map(n=>el("span",{cls:"pill"+(p===n?" on":""),onClick:()=>onPick(n)},SA_PERIODS[n].label+" · "+SA_PERIODS[n].months)));
+    ...saChoices().map(h=>{const on=h.ay===cur.ay&&h.p===cur.p,ny=saNotYet(h);
+      return el("span",{cls:"pill"+(on?" on":""),st:ny&&!on?{opacity:".55"}:null,title:ny?"Opens "+saOpensOn(h)+", after the half-year ends":"",onClick:()=>{_saDraft=null;set({saKey:saKeyOf(h)});}},saHalfLabel(h.ay,h.p)+(ny?" · not yet":""));}));
 }
 function saPeriodLine(p){
-  const row=saPeriodRow(saAY(),p);const bits=[ayLabel(saAY())+" · "+SA_PERIODS[p].label+" ("+SA_PERIODS[p].months+")"];
+  const h=saSel(),row=saPeriodRow(h.ay,p);const bits=[SA_PERIODS[p].label+" of "+ayLabel(h.ay)+" ("+saHalfLabel(h.ay,p)+")"];
+  if(saNotYet(h))bits.push("opens "+saOpensOn(h)+", after the half-year ends");
   if(row&&row.due_on)bits.push("due "+fmtDate(row.due_on));
   if(row&&row.locked)bits.push("locked by the Program Director"+(row.locked_at?" on "+fmtDate(row.locked_at.slice(0,10)):""));
   return bits.join(" · ");
@@ -18774,7 +18792,7 @@ function saFormBody(d,editable,who){
 function saResidentForm(){
   const u=STATE.user,r=resById(u.rid),p=saP();
   if(!r)return el("div",{cls:"content"},meHeader(""),meTabs("self"),el("div",{st:{padding:"32px 0",color:"#5C5345"}},"No resident record is linked to this login."));
-  const ex=saFind(r.id,p),locked=saLocked(saAY(),p),editable=!locked;
+  const ex=saFind(r.id,p),locked=saLocked(saAY(),p),notYet=saNotYet(saSel()),editable=!locked&&!notYet;
   const d=editable?saDraftFor(r.id,p):(ex||saBlankDraft(r.id,p));
   if(editable)saStash(d);
   const wrap={cls:"content"};if(editable)wrap.onInput=()=>saStash(d);
@@ -18790,10 +18808,13 @@ function saResidentForm(){
       el("div",{st:{textAlign:"right"}},
         el("span",{cls:"sa-stat "+(ex?(ex.status==="submitted"?"done":"draft"):"none")},status))),
     el("div",{cls:"me-noprint",st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px",flexWrap:"wrap",padding:"14px 0 6px",borderBottom:"1px solid rgba(31,26,18,.12)"}},
-      saPeriodPills(p,n=>{_saDraft=null;set({saPeriod:n});}),
-      locked?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"This period is locked; the committee has your submitted answers."):el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"Saved answers can be changed until the Program Director locks the period.")),
+      saPeriodPills(),
+      notYet?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"This half-year is still running."):locked?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"This period is locked; the committee has your submitted answers."):el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"Saved answers can be changed until the Program Director locks the period.")),
+    notYet&&!ex?el("div",{st:{padding:"36px 0",maxWidth:"560px"}},
+      el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.4rem",color:"#1F1A12",marginBottom:"8px"}},"Opens "+saOpensOn(saSel())),
+      el("div",{st:{fontSize:".88rem",lineHeight:"1.6",color:"#5C5345"}},"You assess the half-year after it ends, so the committee reads how you saw the months you have just completed. The one under review now is "+saHalfLabel(saLatestDone().ay,saLatestDone().p)+".")):null,
     d._restored?el("div",{cls:"me-noprint",st:{fontSize:".8rem",color:"#6a4c10",padding:"12px 0 0"}},"Unsaved answers were restored from this browser. Press Save draft to keep them."):null,
-    ...saFormBody(d,editable,"self"),
+    ...(notYet&&!ex?[]:saFormBody(d,editable,"self")),
     el("div",{cls:"me-noprint",st:{display:"flex",gap:"10px",justifyContent:"flex-end",alignItems:"center",padding:"24px 0",flexWrap:"wrap"}},
       editable?el("button",{cls:"me-btn ghost",disabled:!!STATE.saSaving,onClick:()=>saSave(d,false)},"Save draft"):null,
       editable?el("button",{cls:"me-btn",disabled:!!STATE.saSaving,onClick:()=>showConfirm("Submit your self-assessment for "+SA_PERIODS[p].label.toLowerCase()+" of "+ayLabel(saAY())+"? Your mentor and the Program Director will see it beside your mentor's rating. You can still change it until the period is locked.",()=>saSave(d,true),"Submit")},ex&&ex.status==="submitted"?"Update submission":"Submit self-assessment"):null));
@@ -18809,7 +18830,7 @@ function saListView(){
   const done=vr.filter(r=>{const x=saFind(r.id,p);return x&&x.status==="submitted";}).length;
   return el("div",{cls:"content"},meHeader(sub),meTabs("self"),
     el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"16px",flexWrap:"wrap",marginBottom:"18px"}},
-      saPeriodPills(p,n=>set({saPeriod:n})),
+      saPeriodPills(),
       el("div",{st:{fontSize:".8rem",color:"#5C5345"}},saPeriodLine(p)+": ",el("b",{st:{color:"#1F1A12"}},done+" of "+vr.length+" submitted"))),
     el("div",{st:{overflowX:"auto"}},el("table",{cls:"me-tbl"},
       el("thead",null,el("tr",null,el("th",null,"Resident"),el("th",null,"Level"),mine?null:el("th",null,"Mentor"),el("th",null,"Self-assessment"),el("th",{st:{textAlign:"center"}},"Own average"),el("th",{st:{textAlign:"center"}},"Mentor's ILP"),el("th",null,""))),
@@ -18857,7 +18878,7 @@ function saCompareView(r){
         el("div",null,el("div",{cls:"me-lbl",st:{marginBottom:"2px"}},"Own rating"),el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2.4rem",lineHeight:"1",color:"#1F1A12"}},own!=null?own.toFixed(1):"—"),el("div",{st:{fontSize:".7rem",color:"#5C5345"}},"average Milestone level")),
         el("div",null,el("div",{cls:"me-lbl",st:{marginBottom:"2px"}},"Mentor's ILP"),el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2.4rem",lineHeight:"1",color:meTone(me)}},me!=null?me.toFixed(1):"—"),el("div",{st:{fontSize:".7rem",color:"#5C5345"}},ilpQ.length?"Q"+ilpQ.join(" + Q")+" of this half":"no plan submitted yet")))),
     el("div",{cls:"me-noprint",st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px",flexWrap:"wrap",padding:"14px 0 6px",borderBottom:"1px solid rgba(31,26,18,.12)"}},
-      saPeriodPills(p,n=>set({saPeriod:n})),
+      saPeriodPills(),
       el("div",{st:{fontSize:".78rem",color:"#5C5345"}},x?(x.status==="submitted"?"Submitted "+fmtDate((x.submitted_at||"").slice(0,10)):"Still a draft — "+saCount(x)+" of "+SA_ITEMS.length+" rated"):"Not started",locked?" · period locked":"")),
     !x?el("div",{st:{padding:"32px 0",color:"#5C5345",fontSize:".9rem",lineHeight:"1.6",maxWidth:"560px"}},r.name+" has not started a self-assessment for this period. The mentor's learning plan is on the Learning plans tab."):
     el("div",null,
@@ -18891,7 +18912,7 @@ async function saSavePeriod(p,patch){
   showToast(patch.locked===true?"Period locked. Residents can no longer change their answers.":patch.locked===false?"Period reopened.":"Due date saved.");render();
 }
 function saCccView(){
-  const p=saP(),row=saPeriodRow(saAY(),p),locked=!!(row&&row.locked);
+  const p=saP(),row=saPeriodRow(saAY(),p),locked=!!(row&&row.locked),notYet=saNotYet(saSel());
   const vr=RESIDENTS.slice();
   const sub=vr.filter(r=>{const x=saFind(r.id,p);return x&&x.status==="submitted";});
   const dr=vr.filter(r=>{const x=saFind(r.id,p);return x&&x.status!=="submitted";});
@@ -18902,8 +18923,9 @@ function saCccView(){
     meHeader("Who has submitted their Milestone self-assessment for the Clinical Competency Committee, and the period's due date and lock."),
     meTabs("ccc"),
     el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"16px",flexWrap:"wrap",marginBottom:"18px"}},
-      saPeriodPills(p,n=>set({saPeriod:n})),
-      el("div",{st:{fontSize:".8rem",color:"#5C5345"}},ayLabel(saAY())+" · "+SA_PERIODS[p].label+" · ",el("b",{st:{color:"#1F1A12"}},sub.length+" of "+vr.length+" submitted"),dr.length?" · "+dr.length+" in draft":"",no.length?" · "+no.length+" not started":"")),
+      saPeriodPills(),
+      el("div",{st:{fontSize:".8rem",color:"#5C5345"}},saPeriodLine(p)+" · ",el("b",{st:{color:"#1F1A12"}},sub.length+" of "+vr.length+" submitted"),dr.length?" · "+dr.length+" in draft":"",no.length?" · "+no.length+" not started":"")),
+    notYet?el("div",{st:{padding:"14px 0 18px",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"8px",fontSize:".84rem",color:"#5C5345"}},"This half-year is still running: residents can start it on "+saOpensOn(saSel())+". Nothing to lock yet."):
     el("div",{cls:"sa-ctl",st:{padding:"14px 0 18px",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"8px"}},
       el("span",null,"Due date"),
       canCtl?el("input",{type:"date",value:row&&row.due_on?row.due_on:"",onChange:e=>saSavePeriod(p,{due_on:e.target.value||null})}):el("b",null,row&&row.due_on?fmtDate(row.due_on):"not set"),

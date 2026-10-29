@@ -60,14 +60,18 @@ create policy self_assessments_select on self_assessments for select to authenti
         select 1 from residents r where r.id = self_assessments.resident_id and r.mentor_id = app_consultant_id()))
 );
 
--- A resident writes only their own row, and only while the period is not locked.
+-- A resident writes only their own row, only after the half-year has ended (period 1 = Oct–Mar, so from
+-- 1 April; period 2 = Apr–Sep, so from 1 October of the next academic year), and only while the period is
+-- not locked by the PD.
 drop policy if exists self_assessments_write on self_assessments;
 create policy self_assessments_write on self_assessments for all to authenticated using (
   app_role() = 'resident' and resident_id = app_resident_id()
+  and current_date >= case period when 1 then make_date(academic_year + 1, 4, 1) else make_date(academic_year + 1, 10, 1) end
   and not exists (select 1 from self_assessment_periods p
                   where p.academic_year = self_assessments.academic_year and p.period = self_assessments.period and p.locked)
 ) with check (
   app_role() = 'resident' and resident_id = app_resident_id()
+  and current_date >= case period when 1 then make_date(academic_year + 1, 4, 1) else make_date(academic_year + 1, 10, 1) end
   and not exists (select 1 from self_assessment_periods p
                   where p.academic_year = self_assessments.academic_year and p.period = self_assessments.period and p.locked)
 );
