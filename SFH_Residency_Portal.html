@@ -149,6 +149,17 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .oc-hover-tip .oc-dp-line{display:flex;gap:5px;margin-top:2px;}
 .oc-hover-tip .oc-dp-warn{color:#f2b8a0;}
 .oc-hover-tip .oc-dp-leave{color:#f2c98a;}
+.oc-dp-less{color:#1d7a4f;font-weight:600;} .oc-hover-tip .oc-dp-less{color:#a7e3c0;}
+.oc-mm-badge{font-size:.63rem;font-weight:700;color:#1d5c43;background:rgba(42,122,90,.12);border:1px solid rgba(42,122,90,.35);border-radius:4px;padding:1px 5px;display:inline-block;margin-top:2px;white-space:nowrap;}
+.oc-mm-badge.sofar{background:transparent;color:#2a7a5a;font-weight:600;border-style:dashed;}
+.oc-less-row{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:8px;background:#F6EFE2;border:1px solid rgba(31,26,18,.08);}
+.oc-less-row input{width:16px;height:16px;cursor:pointer;accent-color:#26523A;flex-shrink:0;}
+.oc-less-row .nm{flex:1;font-weight:600;font-size:.84rem;color:#1F1A12;}
+.oc-less-row .nm small{font-weight:500;color:rgba(31,26,18,.45);margin-left:5px;}
+.oc-less-rec{font-size:.72rem;font-weight:600;color:#5C5345;white-space:nowrap;}
+.oc-less-rec.full{color:#1d5c43;background:rgba(42,122,90,.12);border:1px solid rgba(42,122,90,.3);border-radius:999px;padding:2px 9px;}
+.oc-less-rec .sf{font-weight:500;font-style:italic;opacity:.75;}
+.oc-less-grp{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(31,26,18,.4);margin:16px 0 8px;}
 /* ── Full-screen schedule view ── */
 #oc-fullscreen{position:fixed;inset:0;background:#F6EFE2;z-index:9000;display:none;flex-direction:column;}
 #oc-fullscreen.open{display:flex;}
@@ -250,6 +261,7 @@ th.ov-th{text-align:center;}
 .ov-th-p{color:#2a7a5a;} .ov-th-l{color:#A47A28;} .ov-th-a{color:#b52040;} .ov-th-e{color:#7c3aed;} .ov-th-o{color:rgba(31,26,18,.45);}
 .ov-td{text-align:center;font-weight:700;font-size:.82rem;}
 .ov-td-p{color:#2a7a5a;} .ov-td-l{color:#A47A28;} .ov-td-a{color:#b52040;} .ov-td-e{color:#7c3aed;} .ov-td-o{color:rgba(31,26,18,.45);}
+.ov-full{display:inline-block;margin-left:7px;font-size:.62rem;font-weight:700;letter-spacing:.03em;color:#1d5c43;background:rgba(42,122,90,.12);border:1px solid rgba(42,122,90,.3);border-radius:999px;padding:1px 8px;white-space:nowrap;vertical-align:1px;}
 /* ── Home page: hero ── */
 .home-hero{position:relative;background:linear-gradient(148deg,#7c3820 0%,#c96a4a 45%,#e8956d 70%,#fde0c8 100%);padding:52px 48px 56px;overflow:hidden;flex-shrink:0;}
 .home-hero-shapes{position:absolute;inset:0;pointer-events:none;overflow:hidden;}
@@ -3692,6 +3704,15 @@ function oncallSpotlight(blk,targetDate,rid,rname,blockStart,blockEnd,anchorEl){
   let html="<div class='oc-dp-name'>"+label+" \u2014 "+dates.length+" on-call day"+(dates.length===1?"":"s")+" this block</div>";
   const c=oncallDayCounts(blk,rid,rname);
   html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.78);margin-bottom:4px;'>"+c.block.wd+" weekday \u00b7 "+c.block.we+" weekend"+(c.block.ctu?" \u00b7 "+c.block.ctu+" CTU daycover":"")+"</div>";
+  if(rid){
+    if(ocLessFor(blk,rid).length)html+="<div class='oc-dp-line oc-dp-less'>\u2605 One less on-call this block (reward)</div>";
+    // The attendance line is the scheduler's: it is what earns the reward. A resident
+    // hovering their own name gets their counts and reward, not the record behind it.
+    if(isOncallEditor()){
+      const ref=ocRewardRef(blk,ocAY()),rec=mmBlockRecord(rid,ref.blk,ref.ay);
+      if(rec)html+="<div class='oc-dp-line"+(rec.full?" oc-dp-less":"")+"' style='"+(rec.full?"":"color:rgba(254,251,243,.78);")+"margin-bottom:4px;'>Morning Meeting Blk "+ref.blk+": "+mmRecordLabel(rec)+(rec.full&&rec.done?" \u2014 full":"")+"</div>";
+    }
+  }
   lines.forEach(l=>{html+="<div class='oc-dp-line "+(l.type==="leave"?"oc-dp-leave":"oc-dp-warn")+"'>"+(l.type==="leave"?"\uD83C\uDF34 ":"\u26A0 ")+l.text+"</div>";});
   if(!lines.length)html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.55);'>No conflicts detected</div>";
   const fsOpen=document.getElementById("oc-fullscreen")?.classList.contains("open");
@@ -3809,11 +3830,75 @@ async function loadOncallPrefsStatus(ay){
   else if(yr>CURRENT_ACADEMIC_YEAR)ONCALL_PREFS_STATUS_PLAN=m;
   else ONCALL_PAST[yr]=Object.assign(ONCALL_PAST[yr]||{},{status:m});
 }
+// ── Less on-call (reward) ────────────────────────────────────────────────────
+// One on-call fewer than the block average, granted per resident per block. It is the
+// mirror of the Extra mark: Extra sits on a schedule row because it is a shift that was
+// worked; Less is a shift that was not, so it has no date and lives in its own table,
+// keyed by year, block and resident. Residents read their own rows, schedulers read all.
+let ONCALL_LESS=[],ONCALL_LESS_PLAN=null;
+function ocLess(){const y=ocAY();if(y===CURRENT_ACADEMIC_YEAR)return ONCALL_LESS;if(y>CURRENT_ACADEMIC_YEAR)return ONCALL_LESS_PLAN||[];return(ONCALL_PAST[y]&&ONCALL_PAST[y].less)||[];}
+function ocLessFor(blk,rid){return ocLess().filter(r=>r.resident_id===rid&&(blk==null||r.block_number===blk));}
+async function loadOncallLess(ay){
+  const yr=ay==null?CURRENT_ACADEMIC_YEAR:ay;
+  const{data,error}=await sb.from("oncall_less").select("*").eq("academic_year",yr).order("id");
+  if(error){console.warn("oncall_less load",error.message);return;}
+  if(yr===CURRENT_ACADEMIC_YEAR)ONCALL_LESS=data||[];
+  else if(yr>CURRENT_ACADEMIC_YEAR)ONCALL_LESS_PLAN=data||[];
+  else ONCALL_PAST[yr]=Object.assign(ONCALL_PAST[yr]||{},{less:data||[]});
+}
+// Replaces the block's marks with `rows` ({resident_id, reason}): the modal saves the whole
+// list, not a diff, the same way a day's assignments are saved.
+async function saveOncallLess(blk,rows){
+  if(ocIsPast()){showToast("This year is closed and cannot be changed.");return false;}
+  const yr=ocAY();
+  const{error:de}=await sb.from("oncall_less").delete().eq("academic_year",yr).eq("block_number",blk);
+  if(de){showToast("Could not save: "+de.message);return false;}
+  if(rows.length){
+    const{error:ie}=await sb.from("oncall_less").insert(rows.map(r=>({academic_year:yr,block_number:blk,resident_id:r.resident_id,reason:r.reason||null,created_by:STATE.user?.profileId||null})));
+    if(ie){showToast("Could not save: "+ie.message);return false;}
+  }
+  await loadOncallLess(yr);
+  return true;
+}
+// The block whose Morning Meetings decide the reward when building `blk`: the one before it.
+// Block 1 looks back at the last block of the previous year, which the live attendance map
+// holds only while that year is still the current one (a plan year's Block 1 reads the live
+// Block 13; the live year's Block 1 has nothing to read).
+function ocRewardRef(blk,ay){return blk>1?{blk:blk-1,ay:ay}:{blk:rotaPeriods(ay-1).length,ay:ay-1};}
+// A resident's Morning Meeting record for one block, counted over the sessions where
+// attendance was taken (a date with at least one mark), so an unmarked or cancelled session
+// counts against nobody. "Full" is the bar for one less on-call: present at every one —
+// not late, not excused, not away. `done` says whether the block is over, so a clean
+// record mid-block reads as "so far", not as earned.
+function mmBlockRecord(rid,blk,ay){
+  const att=ay===CURRENT_ACADEMIC_YEAR?MM_ATT_LIVE:(mmAY()===ay?MM_ATT:null);
+  if(!att)return null;
+  const sess=MM_SESSIONS.filter(s=>s.academic_year===ay&&s.block_number===blk);
+  const r={taken:0,p:0,l:0,a:0,e:0,o:0};
+  sess.forEach(s=>{const day=(att[blk]||{})[s.session_date];if(!day||!Object.keys(day).length)return;r.taken++;const st=day[rid];if(st==="P")r.p++;else if(st==="L")r.l++;else if(st==="A")r.a++;else if(st==="E")r.e++;else if(st==="O")r.o++;});
+  r.done=ocBlockEnded(blk,ay);
+  r.full=r.taken>0&&r.p===r.taken;
+  return r;
+}
+// A block has ended once the next one has begun. Read from the next block's start, never
+// from a length: blocks are not all 28 days (Block 13 runs 5 weeks in some years).
+function ocBlockEnded(blk,ay){
+  const nxt=blk<rotaPeriods(ay).length?blockStartDate(blk+1,ay):blockStartDate(1,ay+1);
+  const st=blockStartDate(blk,ay);
+  const end=nxt||(st?new Date(st.getTime()+blockDays(blk,ay)*86400000):null);
+  return!!end&&toLocalYMD(end)<=toLocalYMD(new Date());
+}
+function mmRecordLabel(r){
+  if(!r||!r.taken)return"no Morning Meeting attendance on record";
+  const parts=[r.p+"/"+r.taken+" present"];
+  if(r.l)parts.push(r.l+" late");if(r.a)parts.push(r.a+" absent");if(r.e)parts.push(r.e+" excused");if(r.o)parts.push(r.o+" away");
+  return parts.join(" · ")+(r.done?"":" so far");
+}
 // Pulls next year in on first look. ONCALL_PLAN_DATA stays null until then, which is also how
 // the toggle knows whether it still has to fetch.
 async function ocLoadPlanYear(){
   const yr=CURRENT_ACADEMIC_YEAR+1;
-  await Promise.all([loadOncallPrefs(yr),loadOncallPrefsStatus(yr)]);
+  await Promise.all([loadOncallPrefs(yr),loadOncallPrefsStatus(yr),loadOncallLess(yr)]);
   await loadOncallData(yr);
 }
 // Block and picker state are cleared on the way across, so a draft typed against Block 3 of
@@ -3823,6 +3908,7 @@ async function ocLoadPlanYear(){
 async function ocLoadPastYear(yr){
   ONCALL_PAST[yr]=ONCALL_PAST[yr]||{};
   await loadOncallPrefs(yr);
+  await loadOncallLess(yr);
   await loadOncallData(yr);
 }
 async function ocLoadYearRange(){
@@ -4785,6 +4871,7 @@ function renderLogin(){
     loadOncallSlots();
     loadOncallPrefs();
     loadOncallPrefsStatus();
+    loadOncallLess();
     loadBestResident();
     render();
   }
@@ -6792,9 +6879,14 @@ function renderAttOverview(cfg){
     const active=sort.field===field;
     return el("button",{cls:"ov-sortbtn"+(active?" active":""),onClick:()=>setSort(field)},label+(active?(sort.dir==="desc"?" \u2193":" \u2191"):""));
   }
+  // "Full attendance" is present at every session where attendance was taken — not late,
+  // not excused, not away. An unmarked session counts against nobody. On the on-call side
+  // this record is what earns one less on-call in the block after.
   function buildRows(sessions){
-    const rows=vr.map(r=>({r,c:attCounts(sessions,cfg.attStore,r.id)}));
-    rows.sort((x,y)=>sort.dir==="desc"?y.c[sort.field]-x.c[sort.field]:x.c[sort.field]-y.c[sort.field]);
+    const taken=sessions.filter(s=>{const d=(cfg.attStore[s.block_number]||{})[s.session_date];return d&&Object.keys(d).length>0;}).length;
+    const rows=vr.map(r=>{const c=attCounts(sessions,cfg.attStore,r.id);return{r,c,taken,full:taken>0&&c.p===taken};});
+    const f=sort.field,dir=sort.dir==="desc"?1:-1;
+    rows.sort((x,y)=>dir*(y.c[f]-x.c[f])||(f==="p"?(y.full-x.full)||(x.c.a-y.c.a)||(x.c.l-y.c.l):0));
     return rows;
   }
   const statCols=[["p","Present"],["l","Late"],["a","Absent"],["e","Excused"],["o","Outside"]];
@@ -6808,7 +6900,7 @@ function renderAttOverview(cfg){
         )),
         el("tbody",null,
           ...rows.map((row,i)=>el("tr",null,
-            el("td",{cls:"sticky-col"},el("div",{cls:"flex-gap"},el("span",{cls:"ov-rank"},String(i+1)),avEl(row.r),el("span",{cls:"name",st:{fontSize:".82rem"}},row.r.name))),
+            el("td",{cls:"sticky-col"},el("div",{cls:"flex-gap"},el("span",{cls:"ov-rank"},String(i+1)),avEl(row.r),el("span",{cls:"name",st:{fontSize:".82rem"}},row.r.name),row.full?el("span",{cls:"ov-full",title:"Present at every session where attendance was taken"},"Full \u00b7 "+row.c.p+"/"+row.taken):null)),
             ...statCols.map(([f])=>el("td",{cls:"ov-td ov-td-"+f},String(row.c[f]))),
             showTotal?el("td",{st:{textAlign:"center",fontWeight:"700"}},String(row.c.total)):null
           ))
@@ -6826,12 +6918,12 @@ function renderAttOverview(cfg){
     const sessions=cfg.sessionsAll.filter(s=>s.block_number===blk);
     body=el("div",null,
       el("div",{st:{marginBottom:"14px"}},renderBlockPills(blk,n=>set({[cfg.blockKey]:n}))),
-      el("div",{cls:"flex-gap",st:{marginBottom:"14px"}},sortBtn("a","Most Absent"),sortBtn("l","Most Late")),
+      el("div",{cls:"flex-gap",st:{marginBottom:"14px"}},sortBtn("a","Most Absent"),sortBtn("l","Most Late"),sortBtn("p","Most Attended")),
       buildTable(buildRows(sessions),false)
     );
   }else{
     body=el("div",null,
-      el("div",{cls:"flex-gap",st:{marginBottom:"14px"}},sortBtn("a","Most Absent"),sortBtn("l","Most Late")),
+      el("div",{cls:"flex-gap",st:{marginBottom:"14px"}},sortBtn("a","Most Absent"),sortBtn("l","Most Late"),sortBtn("p","Most Attended")),
       buildTable(buildRows(cfg.sessionsAll),true)
     );
   }
@@ -16797,6 +16889,68 @@ function renderOncallEditModal(){
     )
   );
 }
+// ─── LESS ON-CALL (REWARD) ───────────────────────────────────────────────────
+// Who gets one on-call fewer than average this block. The list leads with the residents
+// who were present at every Morning Meeting of the block before — the rule the PD set —
+// but the tick is the scheduler's: anyone can be marked, and a mark can be taken back.
+let _ocLessSel=null;
+function renderOncallLessModal(){
+  if(!STATE.oncallLessOpen)return null;
+  const blk=STATE.oncallBlock||CURRENT_PERIOD,yr=ocAY();
+  const ref=ocRewardRef(blk,yr);
+  const current=ocLess().filter(r=>r.block_number===blk);
+  if(!_ocLessSel)_ocLessSel=new Set(current.map(r=>r.resident_id));
+  function close(){_ocLessSel=null;set({oncallLessOpen:false});}
+  const roster=sortByLevel(ocRoster());
+  current.forEach(r=>{if(!roster.some(x=>x.id===r.resident_id)){const off=anyResById(r.resident_id);if(off)roster.unshift(off);}});
+  const recs={};roster.forEach(r=>{recs[r.id]=mmBlockRecord(r.id,ref.blk,ref.ay);});
+  const fullIds=roster.filter(r=>recs[r.id]&&recs[r.id].full).map(r=>r.id);
+  const refDone=fullIds.length?recs[fullIds[0]].done:true;
+  function recEl(r){
+    const rec=recs[r.id];
+    if(rec&&rec.full)return el("span",{cls:"oc-less-rec full"},rec.p+"/"+rec.taken+" present",rec.done?null:el("span",{cls:"sf"}," so far"));
+    return el("span",{cls:"oc-less-rec"},mmRecordLabel(rec));
+  }
+  function updateCount(){const c=document.getElementById("oc_less_count");if(c)c.textContent=_ocLessSel.size?_ocLessSel.size+" resident"+(_ocLessSel.size===1?"":"s")+" marked":"No one marked";}
+  function row(r){
+    const chk=document.createElement("input");chk.type="checkbox";chk.checked=_ocLessSel.has(r.id);
+    chk.onchange=()=>{chk.checked?_ocLessSel.add(r.id):_ocLessSel.delete(r.id);updateCount();};
+    return el("label",{cls:"oc-less-row"},chk,el("span",{cls:"nm"},dname(r.name),el("small",null,r.level)),recEl(r));
+  }
+  const fullRows=roster.filter(r=>fullIds.indexOf(r.id)>=0),otherRows=roster.filter(r=>fullIds.indexOf(r.id)<0);
+  async function save(){
+    const btn=document.getElementById("oc_less_save");if(btn){btn.disabled=true;btn.textContent="Saving...";}
+    const rows=[..._ocLessSel].map(id=>({resident_id:id,reason:fullIds.indexOf(id)>=0?"Present at every Morning Meeting of Block "+ref.blk:null}));
+    const ok=await saveOncallLess(blk,rows);
+    if(ok){showToast(rows.length?rows.length+" resident"+(rows.length===1?"":"s")+" marked for one less on-call in Block "+blk+".":"No less on-call marks in Block "+blk+".","success");close();}
+    else if(btn){btn.disabled=false;btn.textContent="Save";}
+  }
+  return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
+    el("div",{cls:"modal-card",st:{width:"600px",maxWidth:"100%"}},
+      el("div",{cls:"modal-header"},
+        el("h3",{cls:"modal-title"},"Less on-call — Block "+blk),
+        el("button",{cls:"modal-close",onClick:close},"×")
+      ),
+      el("div",{cls:"modal-body"},
+        el("p",{cls:"sh",st:{marginTop:"0",marginBottom:"14px",color:"#5C5345"}},
+          "One on-call fewer than the block average. The rule: present at every Morning Meeting of Block "+ref.blk+" — not late, not excused, not away. The mark shows on the hover card, in Statistics and on the resident's own page; it does not change the grid."),
+        !refDone?el("div",{cls:"alert-yellow",st:{fontSize:".8rem"}},"Block "+ref.blk+" is still running: a clean record so far is not yet a full one."):null,
+        el("div",{st:{display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}},
+          el("span",{id:"oc_less_count",st:{fontSize:".8rem",fontWeight:"600",color:"#26523A"}},_ocLessSel.size?_ocLessSel.size+" resident"+(_ocLessSel.size===1?"":"s")+" marked":"No one marked"),
+          fullIds.length?el("button",{cls:"sbtn ghost",st:{marginLeft:"auto",fontSize:".76rem"},onClick:()=>{fullIds.forEach(id=>_ocLessSel.add(id));set({});}},"Mark all "+fullIds.length+" with full attendance"):null
+        ),
+        fullRows.length?el("div",{cls:"oc-less-grp"},"Present at every Morning Meeting of Block "+ref.blk+" · "+fullRows.length):null,
+        fullRows.length?el("div",{st:{display:"flex",flexDirection:"column",gap:"7px"}},...fullRows.map(row)):null,
+        el("div",{cls:"oc-less-grp"},fullRows.length?"Everyone else":"No one has a full record for Block "+ref.blk),
+        el("div",{st:{display:"flex",flexDirection:"column",gap:"7px"}},...otherRows.map(row))
+      ),
+      el("div",{cls:"modal-footer"},
+        el("button",{cls:"sbtn",onClick:close},"Cancel"),
+        el("button",{cls:"sbtn primary",id:"oc_less_save",onClick:save},"Save")
+      )
+    )
+  );
+}
 // ─── CALENDAR ────────────────────────────────────────────────────────────────
 // A month grid over every schedule the portal already holds client-side, plus the
 // one-off events PD/chief pin on top (calendar_events). Read-only for residents;
@@ -17132,10 +17286,19 @@ function renderOncall(){
         drop.appendChild(clearLi);
         const sorted=sortByLevel(ocRoster());
         const matches=q?sorted.filter(r=>dname(r.name).toLowerCase().includes(q.toLowerCase())):sorted;
+        const refD=ocRewardRef(blk,ocAY());
         matches.forEach(r=>{
           const li=document.createElement("li");
           li.textContent=dname(r.name)+" ("+r.level+")";
           li.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;border-bottom:1px solid #f9fafb;";
+          const recD=mmBlockRecord(r.id,refD.blk,refD.ay),markedD=ocLessFor(blk,r.id).length>0;
+          if(markedD||(recD&&recD.full)){
+            const mm=document.createElement("span");
+            mm.style.cssText="margin-left:7px;font-size:.7rem;font-weight:700;color:#1d7a4f;";
+            mm.textContent="\u2605 Less on-call"+(markedD||recD.done?"":" \u00b7 so far");
+            mm.title=recD&&recD.full?"Present at every Morning Meeting of Block "+refD.blk+" ("+recD.p+"/"+recD.taken+")":"Marked for one less on-call this block";
+            li.appendChild(mm);
+          }
           if(oncallPrefHasPick(blk,r.id,date)){
             const warn=document.createElement("span");
             warn.style.cssText="margin-left:7px;font-size:.7rem;font-weight:700;color:#a94e2c;";
@@ -17208,15 +17371,23 @@ function renderOncall(){
       nm.textContent=res?dname(res.name):(entry.resident_name||"?");
       nm.dataset.ocDate=date;
       nm.style.cursor="default";
+      // The hover card totals a colleague's on-calls for the block. That is for whoever
+      // builds the schedule (PD, deputy, chief, the on-call committee); a resident gets it
+      // on their own name only, never on a colleague's.
+      const seesCard=isOncallEditor()||isSelfCell;
       if(res){
         nm.dataset.ocRid=res.id;
-        nm.onmouseenter=()=>oncallSpotlight(blk,date,res.id,null,blkDateStart,blkDateEnd,nm);
-        nm.onmouseleave=()=>oncallClearSpotlight();
+        if(seesCard){
+          nm.onmouseenter=()=>oncallSpotlight(blk,date,res.id,null,blkDateStart,blkDateEnd,nm);
+          nm.onmouseleave=()=>oncallClearSpotlight();
+        }
       }else if(entry.resident_name){
         const rname=entry.resident_name.trim().toLowerCase();
         nm.dataset.ocRname=rname;
-        nm.onmouseenter=()=>oncallSpotlight(blk,date,null,rname,blkDateStart,blkDateEnd,nm);
-        nm.onmouseleave=()=>oncallClearSpotlight();
+        if(isOncallEditor()){
+          nm.onmouseenter=()=>oncallSpotlight(blk,date,null,rname,blkDateStart,blkDateEnd,nm);
+          nm.onmouseleave=()=>oncallClearSpotlight();
+        }
       }
       cell.appendChild(nm);
       // The "Asked off" mark is for whoever builds the schedule. On the published grid a
@@ -17228,10 +17399,24 @@ function renderOncall(){
         pf.title="This resident asked not to be on call on "+fmtDate(date);
         cell.appendChild(pf);
       }
+      // Builder-only, like "Asked off": "Less on-call" under a name means this resident is
+      // due one on-call fewer this block — marked in the Less on-call list, or earned by a
+      // full Morning Meeting record in the block before. The record itself is in the tooltip.
+      if(res&&canEditOncall()){
+        const ref=ocRewardRef(blk,ocAY()),rec=mmBlockRecord(res.id,ref.blk,ref.ay);
+        const marked=ocLessFor(blk,res.id).length>0,earned=!!(rec&&rec.full);
+        if(marked||earned){
+          const mb=document.createElement("span");
+          mb.className="oc-mm-badge"+(marked||rec.done?"":" sofar");
+          mb.textContent="\u2605 Less on-call"+(marked||rec.done?"":" \u00b7 so far");
+          mb.title=(marked?"Marked for one less on-call this block":"Due one less on-call this block")+(earned?" \u2014 present at every Morning Meeting of Block "+ref.blk+" ("+rec.p+"/"+rec.taken+(rec.done?")":" so far)"):"");
+          cell.appendChild(mb);
+        }
+      }
       if(entry.is_extra){
         const badge=document.createElement("span");
         badge.style.cssText="font-size:.63rem;background:#fde8e8;color:#b91c1c;border:1px solid #fca5a5;border-radius:4px;padding:1px 5px;display:inline-block;margin-top:2px;white-space:nowrap;";
-        badge.textContent="Extra";
+        badge.textContent="Extra \u2691";
         cell.appendChild(badge);
       }
     }
@@ -17286,6 +17471,7 @@ function renderOncall(){
       el("div",{st:{marginBottom:"16px",display:"flex",gap:"10px",flexWrap:"wrap"}},
         canEdit?el("button",{cls:"sbtn primary",onClick:()=>set({oncallEditDate:allDates[0]?.date||""})}, " Add / Edit Day"):null,
         canEdit?el("button",{cls:"sbtn",onClick:ocColsOpen,title:"Add, rename, reorder or retire the columns of the grid"},"Columns"):null,
+        canEdit?el("button",{cls:"sbtn",onClick:()=>{_ocLessSel=null;set({oncallLessOpen:true});},title:"Who gets one on-call fewer than average this block"},"Less on-call"+(ocLess().filter(r=>r.block_number===blk).length?" \u00b7 "+ocLess().filter(r=>r.block_number===blk).length:"")):null,
         el("button",{cls:"sbtn",onClick:()=>set({oncallFullscreen:true})},"⛶ Full Screen"),
         hasData?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem"},onClick:()=>exportOncall(blk)},"Export Excel"):null
       ),
@@ -17309,7 +17495,7 @@ function renderOncall(){
             )
           ),
           el("div",{cls:"oc-dock-panel"},
-            el("div",{id:"oc-dock-body"},el("div",{cls:"oc-dock-empty"},"Hover a resident's name to see conflict & leave details"))
+            el("div",{id:"oc-dock-body"},el("div",{cls:"oc-dock-empty"},isOncallEditor()?"Hover a resident's name to see conflict & leave details":"Hover your own name to see your on-call days"))
           )
         )
       )
@@ -17341,10 +17527,17 @@ function renderOncall(){
           el("div",{st:{fontWeight:"600",fontSize:".86rem"}},label),
           el("div",{st:{fontSize:".76rem",color:"rgba(31,26,18,.42)"}},hrs)
         ),
-        e.is_extra?el("span",{st:{fontSize:".7rem",background:"#fde8e8",color:"#b91c1c",border:"1px solid #fca5a5",borderRadius:"6px",padding:"2px 8px",whiteSpace:"nowrap"}},"Extra Penalty"):null
+        e.is_extra?el("span",{st:{fontSize:".7rem",background:"#fde8e8",color:"#b91c1c",border:"1px solid #fca5a5",borderRadius:"6px",padding:"2px 8px",whiteSpace:"nowrap"}},"Extra Penalty \u2691"):null
       );
     }
+    const myLess=ocLessFor(null,u.rid).slice().sort((a,b)=>a.block_number-b.block_number);
     return el("div",null,
+      myLess.length?el("div",{cls:"alert-green",st:{marginBottom:"16px"}},
+        el("div",{st:{fontWeight:"700",marginBottom:myLess.length>1?"4px":"0"}},"\u2605 "+(myLess.length===1?"One less on-call in Block "+myLess[0].block_number:"One less on-call in "+myLess.length+" blocks")),
+        ...(myLess.length===1
+          ?(myLess[0].reason?[el("div",{st:{fontSize:".8rem",opacity:".85"}},myLess[0].reason)]:[])
+          :myLess.map(m=>el("div",{st:{fontSize:".8rem",opacity:".85"}},"Block "+m.block_number+(m.reason?" \u2014 "+m.reason:""))))
+      ):null,
       upcoming.length>0
         ?el("div",{cls:"card",st:{marginBottom:"16px"}},
             el("div",{cls:"card-title"},"Upcoming On-Calls"),
@@ -17576,8 +17769,9 @@ function renderOncall(){
         bExtra:blkEntries.filter(e=>e.resident_id===r.id&&e.is_extra).length,
         aReg:aR.length,aWe:weOf(aR),aCv:cvOf(aR),aWd:aR.length-weOf(aR)-cvOf(aR),
         aExtra:allEntries.filter(e=>e.resident_id===r.id&&e.is_extra).length,
+        bLess:ocLessFor(blk,r.id).length,aLess:ocLessFor(null,r.id).length,
       };
-    }).filter(s=>s.bReg+s.bExtra+s.aReg+s.aExtra>0)
+    }).filter(s=>s.bReg+s.bExtra+s.aReg+s.aExtra+s.bLess+s.aLess>0)
        .sort((a,b)=>(_LVL_ORD[a.res.level]??9)-(_LVL_ORD[b.res.level]??9)||a.res.name.localeCompare(b.res.name));
     const totBReg=blkEntries.filter(e=>!e.is_extra).length;
     const totBExtra=blkEntries.filter(e=>e.is_extra).length;
@@ -17585,6 +17779,7 @@ function renderOncall(){
     const totAExtra=allEntries.filter(e=>e.is_extra).length;
     const totBWe=weOf(regOf(blkEntries)),totAWe=weOf(regOf(allEntries));
     const totBCv=cvOf(regOf(blkEntries)),totACv=cvOf(regOf(allEntries));
+    const totBLess=ocLess().filter(r=>r.block_number===blk).length,totALess=ocLess().length;
     function statCard(val,label,col){
       return el("div",{cls:"card",st:{flex:"1",minWidth:"150px",textAlign:"center",padding:"18px 12px"}},
         el("div",{st:{fontSize:"2rem",fontWeight:"800",color:col}},val),
@@ -17597,14 +17792,16 @@ function renderOncall(){
         statCard(totBReg-totBWe-totBCv,"Weekday — Block "+blk,"#1a4a7a"),
         statCard(totBWe,"Weekend — Block "+blk,"#1a4a7a"),
         statCard(totBCv,"CTU Daycover — Block "+blk,"#1a4a7a"),
-        statCard(totBExtra,"Extra (Penalty) — Block "+blk,"#b91c1c")
+        statCard(totBExtra,"Extra (Penalty) — Block "+blk,"#b91c1c"),
+        statCard(totBLess,"Less (Reward) — Block "+blk,"#26523A")
       ),
       el("div",{st:{display:"flex",gap:"14px",flexWrap:"wrap",marginBottom:"20px"}},
         statCard(totAReg,"Regular — All Blocks","#1a4a7a"),
         statCard(totAReg-totAWe-totACv,"Weekday — All Blocks","#1a4a7a"),
         statCard(totAWe,"Weekend — All Blocks","#1a4a7a"),
         statCard(totACv,"CTU Daycover — All Blocks","#1a4a7a"),
-        statCard(totAExtra,"Extra — All Blocks","#b91c1c")
+        statCard(totAExtra,"Extra — All Blocks","#b91c1c"),
+        statCard(totALess,"Less — All Blocks","#26523A")
       ),
       !resStats.length?el("p",{cls:"sh"},"No on-call data to analyze yet."):
       el("div",{cls:"card"},
@@ -17614,8 +17811,8 @@ function renderOncall(){
             el("thead",null,
               el("tr",null,
                 el("th",null,"Resident"),el("th",null,"Level"),
-                el("th",{st:{textAlign:"center"}},"Blk "+blk+" Regular"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Weekday"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Weekend"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" CTU Daycover"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Extra"),
-                el("th",{st:{textAlign:"center"}},"All Regular"),el("th",{st:{textAlign:"center"}},"All Weekday"),el("th",{st:{textAlign:"center"}},"All Weekend"),el("th",{st:{textAlign:"center"}},"All CTU Daycover"),el("th",{st:{textAlign:"center"}},"All Extra")
+                el("th",{st:{textAlign:"center"}},"Blk "+blk+" Regular"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Weekday"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Weekend"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" CTU Daycover"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Extra"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Less"),
+                el("th",{st:{textAlign:"center"}},"All Regular"),el("th",{st:{textAlign:"center"}},"All Weekday"),el("th",{st:{textAlign:"center"}},"All Weekend"),el("th",{st:{textAlign:"center"}},"All CTU Daycover"),el("th",{st:{textAlign:"center"}},"All Extra"),el("th",{st:{textAlign:"center"}},"All Less")
               )
             ),
             el("tbody",null,
@@ -17627,11 +17824,13 @@ function renderOncall(){
                 el("td",{st:{textAlign:"center"}},s.bWe||"—"),
                 el("td",{st:{textAlign:"center"}},s.bCv||"—"),
                 el("td",{st:{textAlign:"center",fontWeight:"700",color:s.bExtra?"#b91c1c":""}},s.bExtra||"—"),
+                el("td",{st:{textAlign:"center",fontWeight:"700",color:s.bLess?"#26523A":""}},s.bLess||"—"),
                 el("td",{st:{textAlign:"center",fontWeight:"700"}},s.aReg||"—"),
                 el("td",{st:{textAlign:"center"}},s.aWd||"—"),
                 el("td",{st:{textAlign:"center"}},s.aWe||"—"),
                 el("td",{st:{textAlign:"center"}},s.aCv||"—"),
-                el("td",{st:{textAlign:"center",color:s.aExtra?"#b91c1c":""}},s.aExtra||"—")
+                el("td",{st:{textAlign:"center",color:s.aExtra?"#b91c1c":""}},s.aExtra||"—"),
+                el("td",{st:{textAlign:"center",color:s.aLess?"#26523A":""}},s.aLess||"—")
               ))
             )
           )
@@ -19137,6 +19336,7 @@ function render(){
   if(STATE.cmModal)app.appendChild(renderCanmedsModal());
   if(STATE.oncallEditDate)app.appendChild(renderOncallEditModal());
   if(STATE.oncallColsOpen){const _occ=renderOncallColsModal();if(_occ)app.appendChild(_occ);}
+  if(STATE.oncallLessOpen){const _ocl=renderOncallLessModal();if(_ocl)app.appendChild(_ocl);}
   if(STATE.showPromoModal&&isPD())app.appendChild(renderPromoModal());
   if(STATE.showBroadcast)(isPD()||STATE.user?.role==="chief")&&app.appendChild(renderBroadcastModal());
   if(STATE.showCalModal)app.appendChild(renderCalModal());
@@ -19355,6 +19555,7 @@ function renderCalModal(){
         loadOncallSlots();
         loadOncallPrefs();
         loadOncallPrefsStatus();
+        loadOncallLess();
         loadBestResident();
         loadLeavePlan();
         loadGimPrefs();
