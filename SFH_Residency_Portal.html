@@ -17858,14 +17858,18 @@ let _meDraft=null;   // the form being edited; written by the inputs without a r
 // completed quarters before the running one, plus the running one itself. STATE.meKey = "<year>-<quarter>".
 function meQEnd(ay,q){return new Date(ay+1,[0,3,6,9][q-1],1);}   // first day AFTER the quarter
 function meQLabel(ay,q){return"Q"+q+" · "+ME_Q_LABEL[q]+" "+(q===1?ay:ay+1);}
-function meLatestDone(){const c=currentQuarter();return c===1?{ay:CURRENT_ACADEMIC_YEAR-1,q:4}:{ay:CURRENT_ACADEMIC_YEAR,q:c-1};}
+// A quarter's plan becomes the one the page opens on from the first day of its LAST month (the PD,
+// 29 Oct 2026: "Oct–Dec 2026 should be open by December 2026"): Q1 from 1 Dec, Q2 from 1 Mar, Q3 from
+// 1 Jun, Q4 from 1 Sep. Before that it is listed greyed as "running" but can still be written.
+function meOpenFrom(ay,q){return new Date(q===1?ay:ay+1,[11,2,5,8][q-1],1);}
+function meLatestDone(){const r={ay:CURRENT_ACADEMIC_YEAR,q:currentQuarter()};return new Date()>=meOpenFrom(r.ay,r.q)?r:mePrevQ(r);}
 function mePrevQ(h){return h.q===1?{ay:h.ay-1,q:4}:{ay:h.ay,q:h.q-1};}
 function meNextQ(h){return h.q===4?{ay:h.ay+1,q:1}:{ay:h.ay,q:h.q+1};}
 function meWindow(){const c=meLatestDone(),b=mePrevQ(c),a=mePrevQ(b);return[mePrevQ(a),a,b,c];}   // four completed quarters
 function meChoices(){return meWindow().concat([meNextQ(meLatestDone())]);}
 function meKeyOf(h){return h.ay+"-"+h.q;}
 function meSel(){const m=String(STATE.meKey||"").match(/^(\d+)-([1-4])$/);return m?{ay:+m[1],q:+m[2]}:meLatestDone();}
-function meRunning(h){return new Date()<meQEnd(h.ay,h.q);}
+function meRunning(h){return new Date()<meOpenFrom(h.ay,h.q);}
 function meAY(){return meSel().ay;}
 function meQ(){return meSel().q;}
 function meFind(rid,q,ay){ay=ay==null?meAY():ay;return ME_ROWS.find(r=>r.resident_id===rid&&r.academic_year===ay&&r.quarter===q)||null;}
@@ -17933,7 +17937,7 @@ function meQuarterPills(){
   const cur=meSel();
   return el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}},
     ...meChoices().map(h=>{const on=h.ay===cur.ay&&h.q===cur.q,run=meRunning(h);
-      return el("span",{cls:"pill"+(on?" on":""),st:run&&!on?{opacity:".6"}:null,title:run?"The quarter now running; it ends "+fmtDate(meQEnd(h.ay,h.q).toISOString().slice(0,10)):"",onClick:()=>{_meDraft=null;set({meKey:meKeyOf(h)});}},meQLabel(h.ay,h.q)+(run?" · running":""));}));
+      return el("span",{cls:"pill"+(on?" on":""),st:run&&!on?{opacity:".6"}:null,title:run?"The quarter now running; it becomes the current plan on "+fmtDate(meOpenFrom(h.ay,h.q).toISOString().slice(0,10)):"",onClick:()=>{_meDraft=null;set({meKey:meKeyOf(h)});}},meQLabel(h.ay,h.q)+(run?" · running":""));}));
 }
 function renderMentorship(){
   meInjectCss();
