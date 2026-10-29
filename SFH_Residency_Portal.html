@@ -17853,9 +17853,22 @@ const ME_SCALE=[[1,"Needs significant improvement"],[2,"Below expectations"],[3,
 const ME_Q_LABEL={1:"Oct – Dec",2:"Jan – Mar",3:"Apr – Jun",4:"Jul – Sep"};
 let ME_ROWS=[],ME_STATE="idle",ME_ERR="";
 let _meDraft=null;   // the form being edited; written by the inputs without a render
-function meAY(){return CURRENT_ACADEMIC_YEAR;}
-function meQ(){return STATE.meQ||kpiQuarterDefault();}
-function meFind(rid,q){return ME_ROWS.find(r=>r.resident_id===rid&&r.academic_year===meAY()&&r.quarter===q)||null;}
+// The plan is written for the quarter that has just ENDED (the PD, 29 Oct 2026: the plans filled in
+// October are Q4 of 2025-26), so the default is the last completed quarter and the page offers the four
+// completed quarters before the running one, plus the running one itself. STATE.meKey = "<year>-<quarter>".
+function meQEnd(ay,q){return new Date(ay+1,[0,3,6,9][q-1],1);}   // first day AFTER the quarter
+function meQLabel(ay,q){return"Q"+q+" · "+ME_Q_LABEL[q]+" "+(q===1?ay:ay+1);}
+function meLatestDone(){const c=currentQuarter();return c===1?{ay:CURRENT_ACADEMIC_YEAR-1,q:4}:{ay:CURRENT_ACADEMIC_YEAR,q:c-1};}
+function mePrevQ(h){return h.q===1?{ay:h.ay-1,q:4}:{ay:h.ay,q:h.q-1};}
+function meNextQ(h){return h.q===4?{ay:h.ay+1,q:1}:{ay:h.ay,q:h.q+1};}
+function meWindow(){const c=meLatestDone(),b=mePrevQ(c),a=mePrevQ(b);return[mePrevQ(a),a,b,c];}   // four completed quarters
+function meChoices(){return meWindow().concat([meNextQ(meLatestDone())]);}
+function meKeyOf(h){return h.ay+"-"+h.q;}
+function meSel(){const m=String(STATE.meKey||"").match(/^(\d+)-([1-4])$/);return m?{ay:+m[1],q:+m[2]}:meLatestDone();}
+function meRunning(h){return new Date()<meQEnd(h.ay,h.q);}
+function meAY(){return meSel().ay;}
+function meQ(){return meSel().q;}
+function meFind(rid,q,ay){ay=ay==null?meAY():ay;return ME_ROWS.find(r=>r.resident_id===rid&&r.academic_year===ay&&r.quarter===q)||null;}
 function meIsPdSide(){const r=STATE.user&&STATE.user.role;return r==="pd"||r==="deputy_pd"||r==="chief";}
 // Mirrors the RLS write rule: is_pd_or_chief() or the resident's own mentor.
 function meCanWrite(rid){
@@ -17916,9 +17929,11 @@ function meHeader(sub){
     el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Mentorship Individualized Learning Plan"),
     el("div",{st:{fontSize:".82rem",color:"#5C5345"}},sub));
 }
-function meQuarterPills(q,onPick,only){
+function meQuarterPills(){
+  const cur=meSel();
   return el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}},
-    ...[1,2,3,4].filter(n=>!only||only.includes(n)).map(n=>el("span",{cls:"pill"+(q===n?" on":""),onClick:()=>onPick(n)},"Q"+n+" · "+ME_Q_LABEL[n])));
+    ...meChoices().map(h=>{const on=h.ay===cur.ay&&h.q===cur.q,run=meRunning(h);
+      return el("span",{cls:"pill"+(on?" on":""),st:run&&!on?{opacity:".6"}:null,title:run?"The quarter now running; it ends "+fmtDate(meQEnd(h.ay,h.q).toISOString().slice(0,10)):"",onClick:()=>{_meDraft=null;set({meKey:meKeyOf(h)});}},meQLabel(h.ay,h.q)+(run?" · running":""));}));
 }
 function renderMentorship(){
   meInjectCss();
@@ -17946,18 +17961,18 @@ function meListView(){
   const noMentor=vr.filter(r=>!MENTORS[r.id]).length;
   return el("div",{cls:"content"},meHeader(sub),meTabs("plans"),
     el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"16px",flexWrap:"wrap",marginBottom:"18px"}},
-      meQuarterPills(q,n=>set({meQ:n})),
-      el("div",{st:{fontSize:".8rem",color:"#5C5345"}},ayLabel(meAY())+" · Q"+q+": ",el("b",{st:{color:"#1F1A12"}},done+" of "+vr.length+" submitted"),drafts?" · "+drafts+" in draft":"")),
+      meQuarterPills(),
+      el("div",{st:{fontSize:".8rem",color:"#5C5345"}},meQLabel(meAY(),q)+": ",el("b",{st:{color:"#1F1A12"}},done+" of "+vr.length+" submitted"),drafts?" · "+drafts+" in draft":"")),
     !mine&&noMentor?el("div",{st:{fontSize:".78rem",color:"#5C5345",marginBottom:"10px"}},noMentor+" resident"+(noMentor===1?" has":"s have")+" no official mentor; the Program Director completes their learning plan."):null,
     el("div",{st:{overflowX:"auto"}},el("table",{cls:"me-tbl"},
-      el("thead",null,el("tr",null,el("th",null,"Resident"),el("th",null,"Level"),mine?null:el("th",null,"Mentor"),...[1,2,3,4].map(n=>el("th",{st:{textAlign:"center"}},"Q"+n)),el("th",null,""))),
+      el("thead",null,el("tr",null,el("th",null,"Resident"),el("th",null,"Level"),mine?null:el("th",null,"Mentor"),...meWindow().map(h=>el("th",{st:{textAlign:"center"},title:meQLabel(h.ay,h.q)},"Q"+h.q,el("span",{st:{display:"block",fontSize:".58rem",fontWeight:"600",letterSpacing:"0",textTransform:"none",color:"#6E6455"}},ME_Q_LABEL[h.q]+" "+(h.q===1?h.ay:h.ay+1)))),el("th",null,""))),
       el("tbody",null,...vr.map(r=>{
         const ev=meFind(r.id,q);const canW=meCanWrite(r.id);
         return el("tr",{cls:"rowlink",onClick:()=>{_meDraft=null;set({meSel:r.id});}},
           el("td",{st:{fontWeight:"600"}},r.name),
           el("td",{st:{color:"#5C5345"}},r.level),
           mine?null:el("td",{st:{color:MENTORS[r.id]?"#1F1A12":"#8a7f6c",fontSize:".8rem",fontStyle:MENTORS[r.id]?"normal":"italic"}},MENTORS[r.id]?mentorName(r.id):"No official mentor"),
-          ...[1,2,3,4].map(n=>{const e=meFind(r.id,n);const a=meAvg(e);
+          ...meWindow().map(h=>{const e=meFind(r.id,h.q,h.ay);const a=meAvg(e);
             return el("td",{st:{textAlign:"center"}},e?el("span",{cls:"me-chip",st:{color:e.status==="submitted"?"#FEFBF3":meTone(a),background:e.status==="submitted"?meTone(a):"#F6EFE2"}},e.status==="submitted"?(a!=null?a.toFixed(1):"✓"):"Draft"):el("span",{st:{color:"rgba(31,26,18,.25)"}},"—"));}),
           el("td",{st:{textAlign:"right",whiteSpace:"nowrap"}},el("span",{cls:"lnk",st:{fontSize:".8rem",fontWeight:"600",color:"#a94e2c"}},ev&&ev.status==="submitted"?"Read":canW?(ev?"Continue":"Start plan"):"")));
       })))));
@@ -18035,13 +18050,13 @@ function meFormView(r){
       el("div",null,
         el("div",{st:{fontSize:".68rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#a94e2c",marginBottom:"8px"}},"Individualized Learning Plan · CanMEDS"),
         el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",margin:"0 0 4px"}},r.name),
-        el("div",{st:{fontSize:".84rem",color:"#5C5345"}},r.level+" · "+ayLabel(meAY())+" · Quarter "+q+" ("+ME_Q_LABEL[q]+") · Mentor: ",el("span",{st:{color:"#1F1A12"}},who))),
+        el("div",{st:{fontSize:".84rem",color:"#5C5345"}},r.level+" · "+ayLabel(meAY())+" · "+meQLabel(meAY(),q)+" · Mentor: ",el("span",{st:{color:"#1F1A12"}},who))),
       el("div",{st:{textAlign:"right"}},
         el("div",{cls:"me-lbl",st:{marginBottom:"2px"}},locked?"Submitted":ex?"Draft":"Not started"),
         el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2.4rem",lineHeight:"1",color:meTone(avg)}},avg!=null?avg.toFixed(1):"—"),
         el("div",{st:{fontSize:".7rem",color:"#5C5345"}},"average of 5"))),
     el("div",{cls:"me-noprint",st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px",flexWrap:"wrap",padding:"14px 0 6px",borderBottom:"1px solid rgba(31,26,18,.12)"}},
-      meQuarterPills(q,n=>{_meDraft=null;set({meQ:n});}),
+      meQuarterPills(),
       locked?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"Submitted "+fmtDate((ex.submitted_at||"").slice(0,10))+(meIsPdSide()?" · ":""),meIsPdSide()?el("span",{cls:"lnk",st:{color:"#a94e2c",fontWeight:"600",cursor:"pointer"},onClick:()=>showConfirm("Reopen this learning plan? The mentor can edit it again and the resident stops seeing it until it is submitted once more.",()=>meReopen(ex),"Reopen")},"Reopen"):null):
       !canW?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"Read only — only the resident's mentor or the PD can write this."):null),
     d._restored?el("div",{cls:"me-noprint",st:{fontSize:".8rem",color:"#6a4c10",padding:"12px 0 0"}},"Unsaved answers were restored from this browser. Press Save draft to keep them."):null,
@@ -18069,13 +18084,12 @@ function meFormView(r){
 // ── Resident: their own submitted evaluations, read only ──
 function meResidentView(){
   const u=STATE.user;const r=resById(u.rid);
-  const mine=ME_ROWS.filter(x=>x.resident_id===u.rid&&x.academic_year===meAY()&&x.status==="submitted").sort((a,b)=>a.quarter-b.quarter);
+  const mine=ME_ROWS.filter(x=>x.resident_id===u.rid&&x.status==="submitted").sort((a,b)=>(a.academic_year-b.academic_year)||(a.quarter-b.quarter));
   const sub="Your individualized learning plan with your mentor across the seven CanMEDS roles, once a quarter.";
   if(!r||!mine.length)return el("div",{cls:"content"},meHeader(sub),meTabs("plans"),
-    el("div",{st:{padding:"32px 0",color:"#5C5345",fontSize:".9rem",lineHeight:"1.6",maxWidth:"520px"}},"No learning plan has been submitted for you yet this year. Your mentor"+(MENTORS[u.rid]?" ("+mentorName(u.rid)+")":"")+" completes one each quarter; it will appear here once submitted."));
-  const qs=mine.map(x=>x.quarter);
-  const q=qs.includes(STATE.meQ)?STATE.meQ:qs[qs.length-1];
-  STATE.meQ=q;
+    el("div",{st:{padding:"32px 0",color:"#5C5345",fontSize:".9rem",lineHeight:"1.6",maxWidth:"520px"}},"No learning plan has been submitted for you yet. Your mentor"+(MENTORS[u.rid]?" ("+mentorName(u.rid)+")":"")+" completes one each quarter; it will appear here once submitted."));
+  const keys=mine.map(x=>x.academic_year+"-"+x.quarter);
+  if(!keys.includes(String(STATE.meKey)))STATE.meKey=keys[keys.length-1];
   return meFormView(r);
 }
 // ─── RESIDENT FEEDBACK ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -18898,7 +18912,7 @@ function saCompareView(r){
         saTextBlock("What I want to work on before the next review","",x.work_on,null,false))),
     el("div",{cls:"me-noprint",st:{display:"flex",gap:"10px",justifyContent:"flex-end",alignItems:"center",padding:"24px 0",flexWrap:"wrap"}},
       saIsPd()&&x?el("button",{cls:"me-btn ghost",onClick:mePrint},"Print for the CCC file"):null,
-      el("button",{cls:"me-btn ghost",onClick:()=>{_meDraft=null;set({meTab:"plans",meSel:r.id,meQ:ilpQ.length?ilpQ[ilpQ.length-1]:SA_PERIODS[p].quarters[0],saSel:null});}},"Open the learning plan")));
+      el("button",{cls:"me-btn ghost",onClick:()=>{_meDraft=null;set({meTab:"plans",meSel:r.id,meKey:saAY()+"-"+(ilpQ.length?ilpQ[ilpQ.length-1]:SA_PERIODS[p].quarters[0]),saSel:null});}},"Open the learning plan")));
 }
 // ── PD: who has and has not submitted; due date and lock for the period ──
 async function saSavePeriod(p,patch){
