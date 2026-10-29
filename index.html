@@ -1988,6 +1988,7 @@ async function loadAcademicYears(){
     applyScoring(scoringFrom(setting("scoring")));
     applyModuleSettings(setting("modules"));
     applyPrivilegeSettings(setting("privileges"));
+    applyReviewPeriods(setting("review_periods"));
     // An empty table is treated like a missing one: the built-in lists stay, and nothing goes blank.
     LISTS_ERR=(rc.error&&rc.error.message)||(ac.error&&ac.error.message)||null;
     if(!rc.error&&rc.data&&rc.data.length)applyRotationCatalogue(rc.data);
@@ -14423,6 +14424,108 @@ function ctlAccessView(){
       el("button",{cls:"sbtn ghost",onClick:()=>set({ctlAccess:{modules:MODS_DEFAULT.map(m=>({id:m.id,label:m.id==="leave_plan"?(MODS.find(x=>x.id===m.id)||m).label:m.label,desc:m.id==="leave_plan"?(MODS.find(x=>x.id===m.id)||m).desc:m.desc,roles:m.roles.slice()})),
         privileges:PRIV_DEFS.map(p=>({key:p.key,label:p.label,kinds:p.kinds.slice()}))}})},"Reset to the portal's standard set-up")));
 }
+// ─── REVIEW PERIODS (Mentorship ILP + Milestone self-assessment) ────────────────────────────────────────────────────
+// The periods a mentor's learning plan and a resident's self-assessment are written for. Per academic year, up
+// to four, each with a number (1–4, the value stored in mentorship_evaluations.quarter and
+// self_assessments.period), a short label, the months, start and end dates, and the date it opens for writing
+// (the PD, 29 Oct 2026: quarterly to begin with, "biannually later on from my control centre"). Stored in
+// portal_settings under key "review_periods" as {years:{"<ay>":[{n,label,name,start,end,opens}]}}; a year
+// with no entry uses the built-in quarters. Changing a year's periods never moves what was already written:
+// a plan keeps its period number.
+let REVIEW_PERIODS={years:{}};
+const RP_PRESETS={
+  quarterly:{title:"Quarterly",build:ay=>[
+    {n:1,label:"Q1",name:"Oct – Dec",start:ay+"-10-01",end:ay+"-12-31",opens:ay+"-12-01"},
+    {n:2,label:"Q2",name:"Jan – Mar",start:(ay+1)+"-01-01",end:(ay+1)+"-03-31",opens:(ay+1)+"-03-01"},
+    {n:3,label:"Q3",name:"Apr – Jun",start:(ay+1)+"-04-01",end:(ay+1)+"-06-30",opens:(ay+1)+"-06-01"},
+    {n:4,label:"Q4",name:"Jul – Sep",start:(ay+1)+"-07-01",end:(ay+1)+"-09-30",opens:(ay+1)+"-09-01"}]},
+  biannual:{title:"Twice a year",build:ay=>[
+    {n:1,label:"H1",name:"Oct – Mar",start:ay+"-10-01",end:(ay+1)+"-03-31",opens:(ay+1)+"-03-01"},
+    {n:2,label:"H2",name:"Apr – Sep",start:(ay+1)+"-04-01",end:(ay+1)+"-09-30",opens:(ay+1)+"-09-01"}]}
+};
+function applyReviewPeriods(v){REVIEW_PERIODS=(v&&typeof v==="object"&&v.years&&typeof v.years==="object")?{years:v.years}:{years:{}};}
+function rpCustom(ay){const y=REVIEW_PERIODS.years[String(ay)];return Array.isArray(y)&&y.length?y:null;}
+function rpFor(ay){return (rpCustom(ay)||RP_PRESETS.quarterly.build(ay)).slice().sort((a,b)=>String(a.start).localeCompare(String(b.start)));}
+function rpDef(ay,n){return rpFor(ay).find(p=>Number(p.n)===Number(n))||{n:Number(n),label:"Period "+n,name:"",start:"",end:"",opens:""};}
+function rpDate(s){return /^\d{4}-\d{2}-\d{2}$/.test(String(s||""))?new Date(s+"T00:00:00"):null;}
+// "Oct – Dec 2026", or "Oct 2026 – Mar 2027" when the period crosses a calendar year.
+function rpMonths(d){const sy=String(d.start||"").slice(0,4),ey=String(d.end||"").slice(0,4);if(!ey)return d.name||"";
+  if(sy===ey||!/–/.test(d.name||""))return (d.name||"")+" "+ey;return d.name.replace("–",sy+" –")+" "+ey;}
+async function rpSave(ay,list){
+  const years=Object.assign({},REVIEW_PERIODS.years);years[String(ay)]=list;
+  const{error}=await sb.from("portal_settings").upsert({key:"review_periods",value:{years},updated_at:new Date().toISOString(),updated_by:STATE.user.profileId},{onConflict:"key"});
+  if(error){showToast("Could not save the periods: "+error.message,"error");return false;}
+  REVIEW_PERIODS={years};return true;
+}
+// What is wrong with a year's list, in plain words; empty when it can be saved.
+function rpProblems(list){
+  const out=[];const ns=new Set();
+  list.forEach(p=>{const n=Number(p.n);
+    if(!(n>=1&&n<=4))out.push("Period numbers must be 1 to 4.");
+    if(ns.has(n))out.push("Two periods share number "+n+".");ns.add(n);
+    if(!rpDate(p.start)||!rpDate(p.end))out.push((p.label||"Period "+n)+" needs a start and an end date.");
+    else if(p.start>=p.end)out.push((p.label||"Period "+n)+" ends before it starts.");
+    if(!rpDate(p.opens))out.push((p.label||"Period "+n)+" needs an opening date.");
+    else if(p.start&&p.opens<p.start)out.push((p.label||"Period "+n)+" opens before it starts.");
+    if(!String(p.label||"").trim())out.push("Period "+n+" needs a label.");});
+  const s=list.slice().sort((a,b)=>String(a.start).localeCompare(String(b.start)));
+  for(let i=1;i<s.length;i++)if(s[i].start&&s[i-1].end&&s[i].start<=s[i-1].end)out.push((s[i].label||"A period")+" overlaps "+(s[i-1].label||"the one before")+".");
+  return Array.from(new Set(out));
+}
+function ctlPeriodsView(){
+  const ay=STATE.ctlRpAy||CURRENT_ACADEMIC_YEAR;
+  const nm=y=>"AY "+y+"-"+String((y+1)%100).padStart(2,"0");
+  const custom=!!rpCustom(ay);
+  const list=(STATE.ctlRpDraft&&STATE.ctlRpDraft.ay===ay)?STATE.ctlRpDraft.list:rpFor(ay).map(p=>Object.assign({},p));
+  const draft=()=>{if(!STATE.ctlRpDraft||STATE.ctlRpDraft.ay!==ay)STATE.ctlRpDraft={ay,list:list.map(p=>Object.assign({},p))};return STATE.ctlRpDraft.list;};
+  const dirty=!!(STATE.ctlRpDraft&&STATE.ctlRpDraft.ay===ay);
+  const problems=rpProblems(list);
+  const today=new Date();
+  const smallLabel=t=>el("div",{st:{fontSize:".62rem",fontWeight:"700",letterSpacing:".08em",textTransform:"uppercase",color:"#5C5345",marginBottom:"3px"}},t);
+  const txt=(p,k,label,w)=>el("div",null,smallLabel(label),el("input",{type:k==="label"||k==="name"?"text":"date",value:p[k]||"",maxlength:k==="label"?"6":"24","aria-label":label,st:{width:w},
+    onInput:e=>{const d=draft();const row=d.find(x=>Number(x.n)===Number(p.n));if(row)row[k]=e.target.value;},onChange:()=>render()}));
+  const state=p=>{const o=rpDate(p.opens),e=rpDate(p.end);if(!o)return["",""];
+    if(today<o)return["Opens "+fmtDate(p.opens),"#5C5345"];if(e&&today>new Date(e.getTime()+86400000))return["Past","#6E6455"];return["Open now","#26523A"];};
+  const row=p=>{const[st,c]=state(p);
+    return el("div",{st:{display:"grid",gridTemplateColumns:"74px 92px minmax(120px,1fr) 150px 150px 150px auto",gap:"12px",alignItems:"end",padding:"12px 0",borderBottom:"1px solid rgba(31,26,18,.08)"}},
+      el("div",null,smallLabel("Number"),el("div",{st:{fontSize:"1.1rem",fontWeight:"700",lineHeight:"38px",color:"#1F1A12"}},String(p.n))),
+      txt(p,"label","Label","82px"),txt(p,"name","Months","100%"),txt(p,"start","Starts","140px"),txt(p,"end","Ends","140px"),txt(p,"opens","Opens for writing","140px"),
+      el("div",{st:{display:"flex",flexDirection:"column",gap:"6px",alignItems:"flex-end"}},
+        el("span",{st:{fontSize:".7rem",fontWeight:"600",color:c,whiteSpace:"nowrap"}},st),
+        el("button",{cls:"sbtn ghost small",onClick:()=>{const d=draft();const i=d.findIndex(x=>Number(x.n)===Number(p.n));if(i>=0)d.splice(i,1);render();}},"Delete")));
+  };
+  const usePreset=key=>{const pr=RP_PRESETS[key];
+    showConfirm("Set "+nm(ay)+" to "+pr.title.toLowerCase()+" periods? The dates are filled in for you and can still be edited before you save. Plans and self-assessments already written keep their period number.",
+      ()=>{STATE.ctlRpDraft={ay,list:pr.build(ay)};render();},"Use "+pr.title.toLowerCase());};
+  const add=()=>{const d=draft();if(d.length>=4){showToast("A year can have at most four periods, because that is what the plan and self-assessment tables accept.","warning");return;}
+    const used=new Set(d.map(x=>Number(x.n)));let n=1;while(used.has(n))n++;
+    const last=d.slice().sort((a,b)=>String(a.start).localeCompare(String(b.start))).pop();
+    d.push({n,label:"P"+n,name:"",start:last&&last.end?last.end:"",end:"",opens:""});render();};
+  const save=async()=>{if(problems.length)return;const ok=await rpSave(ay,list.map(p=>({n:Number(p.n),label:String(p.label).trim(),name:String(p.name||"").trim(),start:p.start,end:p.end,opens:p.opens})));
+    if(ok){STATE.ctlRpDraft=null;showToast("Periods saved for "+nm(ay)+".","success");render();}};
+  const reset=()=>showConfirm("Go back to the built-in quarters for "+nm(ay)+"? Your custom periods for this year are removed from the settings; nothing already written is deleted.",
+    async()=>{const years=Object.assign({},REVIEW_PERIODS.years);delete years[String(ay)];
+      const{error}=await sb.from("portal_settings").upsert({key:"review_periods",value:{years},updated_at:new Date().toISOString(),updated_by:STATE.user.profileId},{onConflict:"key"});
+      if(error){showToast("Could not save: "+error.message,"error");return;}REVIEW_PERIODS={years};STATE.ctlRpDraft=null;showToast("Back to the built-in quarters.","success");render();},"Reset");
+  return el("div",{cls:"card"},
+    el("div",{cls:"card-title"},"Review periods"),
+    el("p",{cls:"sh",st:{maxWidth:"72ch",marginBottom:"14px",color:"#5C5345"}},"The periods the mentor's learning plan and the resident's Milestone self-assessment are written for. Each opens for writing on its own date (built-in: the first day of its last month) and the Mentorship page then moves to it. Up to four a year; changing them never moves what was already written."),
+    el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center",marginBottom:"14px"}},
+      ...[CURRENT_ACADEMIC_YEAR-1,CURRENT_ACADEMIC_YEAR,CURRENT_ACADEMIC_YEAR+1].map(y=>el("span",{cls:"pill"+(y===ay?" on":""),onClick:()=>set({ctlRpAy:y,ctlRpDraft:null})},nm(y))),
+      el("span",{st:{marginLeft:"auto",fontSize:".76rem",color:"#5C5345"}},custom?"Set in the portal":"Built-in quarters")),
+    el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"6px"}},
+      el("button",{cls:"sbtn ghost small",onClick:()=>usePreset("quarterly")},"Quarterly"),
+      el("button",{cls:"sbtn ghost small",onClick:()=>usePreset("biannual")},"Twice a year"),
+      el("button",{cls:"sbtn ghost small",onClick:add},"Add a period"),
+      custom?el("button",{cls:"sbtn ghost small",onClick:reset},"Back to built-in"):null),
+    ...list.slice().sort((a,b)=>String(a.start).localeCompare(String(b.start))).map(row),
+    !list.length?el("div",{cls:"sh",st:{padding:"14px 0"}},"No periods: add one or pick a preset."):null,
+    problems.length?el("div",{st:{marginTop:"12px",fontSize:".8rem",color:"#8f1a33",lineHeight:"1.6"}},...problems.map(t=>el("div",null,t))):null,
+    el("div",{st:{display:"flex",gap:"10px",alignItems:"center",marginTop:"16px"}},
+      el("button",{cls:"sbtn primary",disabled:!dirty||!!problems.length,st:(!dirty||problems.length)?{opacity:".5",cursor:"default"}:null,onClick:save},"Save periods"),
+      dirty?el("button",{cls:"sbtn ghost",onClick:()=>set({ctlRpDraft:null})},"Discard changes"):null,
+      el("span",{st:{fontSize:".76rem",color:"#5C5345"}},dirty?"Unsaved changes.":"")));
+}
 function renderControl(){
   if(!ctlCanUse())return el("div",{cls:"content"},el("p",{cls:"alert-yellow"},"Only the Program Director and the deputy PD can change these settings."));
   const tab=STATE.ctlTab||"year";
@@ -14431,13 +14534,14 @@ function renderControl(){
     el("h1",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2rem",fontWeight:"400",color:"#1F1A12",marginBottom:"4px"}},"Control Centre"),
     el("div",{st:{fontSize:".82rem",color:"#5C5345"}},"Change how the portal is set up, without asking a developer."));
   const tabs=el("div",{st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
-    ...[["year","Year setup"],["rules","Leave and rules"],["scoring","Scoring"],["lists","Lists"],["access","Modules and access"],["committees","Committees"]].map(t=>{const on=tab===t[0];
+    ...[["year","Year setup"],["rules","Leave and rules"],["scoring","Scoring"],["lists","Lists"],["access","Modules and access"],["periods","Review periods"],["committees","Committees"]].map(t=>{const on=tab===t[0];
       return el("div",{st:{padding:"10px 20px",fontSize:".84rem",fontWeight:on?"600":"500",color:on?"#a94e2c":"#5C5345",cursor:"pointer",
         borderBottom:"2px solid "+(on?"#c96a4a":"transparent"),marginBottom:"-1px"},onClick:()=>set({ctlTab:t[0]})},t[1]);}));
   if(tab==="rules")return el("div",{cls:"content"},head,tabs,ctlRulesView());
   if(tab==="scoring")return el("div",{cls:"content"},head,tabs,ctlScoringView());
   if(tab==="lists")return el("div",{cls:"content"},head,tabs,ctlListsView());
   if(tab==="access")return el("div",{cls:"content"},head,tabs,ctlAccessView());
+  if(tab==="periods")return el("div",{cls:"content"},head,tabs,ctlPeriodsView());
   if(tab==="committees"){
     return el("div",{cls:"content"},head,tabs,el("div",{cls:"card"},
       el("div",{cls:"card-title"},"Committees"),
@@ -17850,26 +17954,26 @@ const ME_ROLES=[
   {key:"prof",role:"Professional",desc:"Integrity, reliability and accountability; respect for patients and colleagues; punctuality, attendance and self-care."}
 ];
 const ME_SCALE=[[1,"Needs significant improvement"],[2,"Below expectations"],[3,"Meets expectations"],[4,"Above expectations"],[5,"Exceptional"]];
-const ME_Q_LABEL={1:"Oct – Dec",2:"Jan – Mar",3:"Apr – Jun",4:"Jul – Sep"};
 let ME_ROWS=[],ME_STATE="idle",ME_ERR="";
 let _meDraft=null;   // the form being edited; written by the inputs without a render
-// The plan is written for the quarter that has just ENDED (the PD, 29 Oct 2026: the plans filled in
-// October are Q4 of 2025-26), so the default is the last completed quarter and the page offers the four
-// completed quarters before the running one, plus the running one itself. STATE.meKey = "<year>-<quarter>".
-function meQEnd(ay,q){return new Date(ay+1,[0,3,6,9][q-1],1);}   // first day AFTER the quarter
-function meQLabel(ay,q){return"Q"+q+" · "+ME_Q_LABEL[q]+" "+(q===1?ay:ay+1);}
-// A quarter's plan becomes the one the page opens on from the first day of its LAST month (the PD,
-// 29 Oct 2026: "Oct–Dec 2026 should be open by December 2026"): Q1 from 1 Dec, Q2 from 1 Mar, Q3 from
-// 1 Jun, Q4 from 1 Sep. Before that it is listed greyed as "running" but can still be written.
-function meOpenFrom(ay,q){return new Date(q===1?ay:ay+1,[11,2,5,8][q-1],1);}
-function meLatestDone(){const r={ay:CURRENT_ACADEMIC_YEAR,q:currentQuarter()};return new Date()>=meOpenFrom(r.ay,r.q)?r:mePrevQ(r);}
-function mePrevQ(h){return h.q===1?{ay:h.ay-1,q:4}:{ay:h.ay,q:h.q-1};}
-function meNextQ(h){return h.q===4?{ay:h.ay+1,q:1}:{ay:h.ay,q:h.q+1};}
-function meWindow(){const c=meLatestDone(),b=mePrevQ(c),a=mePrevQ(b);return[mePrevQ(a),a,b,c];}   // four completed quarters
-function meChoices(){return meWindow().concat([meNextQ(meLatestDone())]);}
+// Which period the page is on. Periods come from the Control Centre (rpFor / rpDef: number 1–4, label,
+// months, start, end, opens). On offer: the last period of the previous academic year, then this year's
+// periods that have opened, then the next one (listed greyed as "running"; the plan can still be written,
+// the self-assessment cannot). The page opens on the latest period that has opened (the PD, 29 Oct 2026:
+// "Oct–Dec 2026 should be open by December 2026", and only Q4 of the last year kept). STATE.meKey = "<year>-<n>".
+function meQEnd(ay,q){const d=rpDate(rpDef(ay,q).end);return d?new Date(d.getTime()+86400000):new Date(ay+1,9,1);}   // first day AFTER the period
+function meQSub(ay,q){return rpMonths(rpDef(ay,q));}
+function meQLabel(ay,q){const d=rpDef(ay,q);return d.label+" · "+rpMonths(d);}
+function meOpenFrom(ay,q){const d=rpDef(ay,q);return rpDate(d.opens)||rpDate(d.end)||new Date(ay+1,9,1);}
+function meAll(){const prev=rpFor(CURRENT_ACADEMIC_YEAR-1),cur=rpFor(CURRENT_ACADEMIC_YEAR),out=[];
+  if(prev.length)out.push({ay:CURRENT_ACADEMIC_YEAR-1,q:Number(prev[prev.length-1].n)});
+  cur.forEach(p=>out.push({ay:CURRENT_ACADEMIC_YEAR,q:Number(p.n)}));return out;}
+function meRunning(h){return new Date()<meOpenFrom(h.ay,h.q);}
+function meWindow(){return meAll().filter(h=>!meRunning(h));}   // the periods that have opened: the table's columns
+function meChoices(){const all=meAll(),open=all.filter(h=>!meRunning(h)),next=all.find(h=>meRunning(h));return next?open.concat([next]):open;}
+function meLatestDone(){const w=meWindow();return w.length?w[w.length-1]:meAll()[0];}
 function meKeyOf(h){return h.ay+"-"+h.q;}
 function meSel(){const m=String(STATE.meKey||"").match(/^(\d+)-([1-4])$/);return m?{ay:+m[1],q:+m[2]}:meLatestDone();}
-function meRunning(h){return new Date()<meOpenFrom(h.ay,h.q);}
 function meAY(){return meSel().ay;}
 function meQ(){return meSel().q;}
 function meFind(rid,q,ay){ay=ay==null?meAY():ay;return ME_ROWS.find(r=>r.resident_id===rid&&r.academic_year===ay&&r.quarter===q)||null;}
@@ -17937,7 +18041,7 @@ function meQuarterPills(){
   const cur=meSel();
   return el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}},
     ...meChoices().map(h=>{const on=h.ay===cur.ay&&h.q===cur.q,run=meRunning(h);
-      return el("span",{cls:"pill"+(on?" on":""),st:run&&!on?{opacity:".6"}:null,title:run?"The quarter now running; it becomes the current plan on "+fmtDate(meOpenFrom(h.ay,h.q).toISOString().slice(0,10)):"",onClick:()=>{_meDraft=null;set({meKey:meKeyOf(h)});}},meQLabel(h.ay,h.q)+(run?" · running":""));}));
+      return el("span",{cls:"pill"+(on?" on":""),st:run&&!on?{opacity:".6"}:null,title:run?"The period now running; it becomes the current plan on "+fmtDate(meOpenFrom(h.ay,h.q).toISOString().slice(0,10)):"",onClick:()=>{_meDraft=null;set({meKey:meKeyOf(h)});}},meQLabel(h.ay,h.q)+(run?" · running":""));}));
 }
 function renderMentorship(){
   meInjectCss();
@@ -17969,7 +18073,7 @@ function meListView(){
       el("div",{st:{fontSize:".8rem",color:"#5C5345"}},meQLabel(meAY(),q)+": ",el("b",{st:{color:"#1F1A12"}},done+" of "+vr.length+" submitted"),drafts?" · "+drafts+" in draft":"")),
     !mine&&noMentor?el("div",{st:{fontSize:".78rem",color:"#5C5345",marginBottom:"10px"}},noMentor+" resident"+(noMentor===1?" has":"s have")+" no official mentor; the Program Director completes their learning plan."):null,
     el("div",{st:{overflowX:"auto"}},el("table",{cls:"me-tbl"},
-      el("thead",null,el("tr",null,el("th",null,"Resident"),el("th",null,"Level"),mine?null:el("th",null,"Mentor"),...meWindow().map(h=>el("th",{st:{textAlign:"center"},title:meQLabel(h.ay,h.q)},"Q"+h.q,el("span",{st:{display:"block",fontSize:".58rem",fontWeight:"600",letterSpacing:"0",textTransform:"none",color:"#6E6455"}},ME_Q_LABEL[h.q]+" "+(h.q===1?h.ay:h.ay+1)))),el("th",null,""))),
+      el("thead",null,el("tr",null,el("th",null,"Resident"),el("th",null,"Level"),mine?null:el("th",null,"Mentor"),...meWindow().map(h=>el("th",{st:{textAlign:"center"},title:meQLabel(h.ay,h.q)},rpDef(h.ay,h.q).label,el("span",{st:{display:"block",fontSize:".58rem",fontWeight:"600",letterSpacing:"0",textTransform:"none",color:"#6E6455"}},meQSub(h.ay,h.q)))),el("th",null,""))),
       el("tbody",null,...vr.map(r=>{
         const ev=meFind(r.id,q);const canW=meCanWrite(r.id);
         return el("tr",{cls:"rowlink",onClick:()=>{_meDraft=null;set({meSel:r.id});}},
@@ -18623,7 +18727,6 @@ const SA_ITEMS=[
   {code:"ICS3",dom:"ICS",name:"Communication within Health Care Systems",role:"comm",levels:["Records information accurately; safeguards personal health information; uses required channels","Organised diagnostic and therapeutic reasoning in notes; appropriate use of documentation shortcuts; respectfully raises concerns about the system","Concise reasoning in the record; chooses direct or indirect communication by context; offers clear suggestions to improve the system","Clear, concise, timely written communication with anticipatory guidance; an example for others; initiates difficult conversations with stakeholders","Models feedback on others' written communication; guides institutional communication; facilitates dialogue on systems issues"]}
 ];
 const SA_LEVEL_WORDS={1:"Level 1",2:"Level 2",3:"Level 3",4:"Level 4",5:"Level 5"};
-const SA_PERIODS={1:{label:"Q1",months:"Oct – Dec",quarters:[1]},2:{label:"Q2",months:"Jan – Mar",quarters:[2]},3:{label:"Q3",months:"Apr – Jun",quarters:[3]},4:{label:"Q4",months:"Jul – Sep",quarters:[4]}};
 let SA_ROWS=[],SA_PERIOD_ROWS=[],SA_STATE="idle",SA_ERR="";
 let _saDraft=null,_saOpen={};   // _saOpen: {code:true} rows whose five level descriptions are unfolded
 // Same quarters and the same opening rule as the learning plan (the PD, 29 Oct 2026: "make self by quarter
@@ -18657,7 +18760,7 @@ function saAvg(codes,row){
 }
 // The mentor's submitted ILP rating for a CanMEDS role in the same quarter.
 function saMentorRating(rid,p,roleKey){
-  const qs=SA_PERIODS[p].quarters.slice().reverse();
+  const qs=[p];
   for(const q of qs){const ev=ME_ROWS.find(x=>x.resident_id===rid&&x.academic_year===saAY()&&x.quarter===q&&x.status==="submitted");
     if(ev){const v=Number((ev.ratings||{})[roleKey]);if(v>=1)return{v,q};}}
   return null;
@@ -18715,7 +18818,7 @@ function saPeriodPills(){
   const cur=saSel();
   return el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}},
     ...saChoices().map(h=>{const on=h.ay===cur.ay&&h.p===cur.p,ny=saNotYet(h);
-      return el("span",{cls:"pill"+(on?" on":""),st:ny&&!on?{opacity:".55"}:null,title:ny?"Opens "+saOpensOn(h)+", the first day of the quarter's last month":"",onClick:()=>{_saDraft=null;set({saKey:saKeyOf(h)});}},saHalfLabel(h.ay,h.p)+(ny?" · not yet":""));}));
+      return el("span",{cls:"pill"+(on?" on":""),st:ny&&!on?{opacity:".55"}:null,title:ny?"Opens "+saOpensOn(h):"",onClick:()=>{_saDraft=null;set({saKey:saKeyOf(h)});}},saHalfLabel(h.ay,h.p)+(ny?" · not yet":""));}));
 }
 function saPeriodLine(p){
   const h=saSel(),row=saPeriodRow(h.ay,p);const bits=[saHalfLabel(h.ay,p)+" · "+ayLabel(h.ay)];
@@ -18824,10 +18927,10 @@ function saResidentForm(){
         el("span",{cls:"sa-stat "+(ex?(ex.status==="submitted"?"done":"draft"):"none")},status))),
     el("div",{cls:"me-noprint",st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px",flexWrap:"wrap",padding:"14px 0 6px",borderBottom:"1px solid rgba(31,26,18,.12)"}},
       saPeriodPills(),
-      notYet?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"This quarter is still running."):locked?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"This period is locked; the committee has your submitted answers."):el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"Saved answers can be changed until the Program Director locks the period.")),
+      notYet?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"This period has not opened yet."):locked?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"This period is locked; the committee has your submitted answers."):el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"Saved answers can be changed until the Program Director locks the period.")),
     notYet&&!ex?el("div",{st:{padding:"36px 0",maxWidth:"560px"}},
       el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.4rem",color:"#1F1A12",marginBottom:"8px"}},"Opens "+saOpensOn(saSel())),
-      el("div",{st:{fontSize:".88rem",lineHeight:"1.6",color:"#5C5345"}},"You assess each quarter in its last month, when your mentor writes the learning plan, so the two can be read together. The one open now is "+saHalfLabel(saLatestDone().ay,saLatestDone().p)+".")):null,
+      el("div",{st:{fontSize:".88rem",lineHeight:"1.6",color:"#5C5345"}},"You assess each period once it opens, when your mentor writes the learning plan, so the two can be read together. The one open now is "+saHalfLabel(saLatestDone().ay,saLatestDone().p)+".")):null,
     d._restored?el("div",{cls:"me-noprint",st:{fontSize:".8rem",color:"#6a4c10",padding:"12px 0 0"}},"Unsaved answers were restored from this browser. Press Save draft to keep them."):null,
     ...(notYet&&!ex?[]:saFormBody(d,editable,"self")),
     el("div",{cls:"me-noprint",st:{display:"flex",gap:"10px",justifyContent:"flex-end",alignItems:"center",padding:"24px 0",flexWrap:"wrap"}},
@@ -18877,7 +18980,7 @@ function saCompareView(r){
   const u=STATE.user,p=saP();
   const x=saFind(r.id,p);
   const locked=saLocked(saAY(),p);
-  const ilpQ=SA_PERIODS[p].quarters.filter(q=>{const e=ME_ROWS.find(y=>y.resident_id===r.id&&y.academic_year===saAY()&&y.quarter===q&&y.status==="submitted");return !!e;});
+  const ilpQ=[p].filter(q=>{const e=ME_ROWS.find(y=>y.resident_id===r.id&&y.academic_year===saAY()&&y.quarter===q&&y.status==="submitted");return !!e;});
   const own=saAvg(SA_ITEMS.map(i=>i.code),x),me=saMentorAvg(r.id,p);
   const gaps=ME_ROLES.map(role=>{const codes=SA_ITEMS.filter(i=>i.role===role.key).map(i=>i.code);const o=saAvg(codes,x);const m=saMentorRating(r.id,p,role.key);return{role,codes,o,m:m?m.v:null,q:m?m.q:null};});
   const blind=gaps.filter(g=>g.o!=null&&g.m!=null&&Math.abs(g.o-g.m)>=1);
@@ -18913,12 +19016,12 @@ function saCompareView(r){
         saTextBlock("What I want to work on before the next review","",x.work_on,null,false))),
     el("div",{cls:"me-noprint",st:{display:"flex",gap:"10px",justifyContent:"flex-end",alignItems:"center",padding:"24px 0",flexWrap:"wrap"}},
       saIsPd()&&x?el("button",{cls:"me-btn ghost",onClick:mePrint},"Print for the CCC file"):null,
-      el("button",{cls:"me-btn ghost",onClick:()=>{_meDraft=null;set({meTab:"plans",meSel:r.id,meKey:saAY()+"-"+(ilpQ.length?ilpQ[ilpQ.length-1]:SA_PERIODS[p].quarters[0]),saSel:null});}},"Open the learning plan")));
+      el("button",{cls:"me-btn ghost",onClick:()=>{_meDraft=null;set({meTab:"plans",meSel:r.id,meKey:saAY()+"-"+p,saSel:null});}},"Open the learning plan")));
 }
 // ── PD: who has and has not submitted; due date and lock for the period ──
 async function saSavePeriod(p,patch){
   const u=STATE.user;const ex=saPeriodRow(saAY(),p);
-  const payload={academic_year:saAY(),period:p,label:SA_PERIODS[p].label,due_on:ex?ex.due_on:null,locked:ex?!!ex.locked:false,...patch,updated_at:new Date().toISOString(),updated_by:u.profileId};
+  const payload={academic_year:saAY(),period:p,label:rpDef(saAY(),p).label,due_on:ex?ex.due_on:null,locked:ex?!!ex.locked:false,...patch,updated_at:new Date().toISOString(),updated_by:u.profileId};
   if(patch.locked===true){payload.locked_at=new Date().toISOString();payload.locked_by=u.profileId;}
   if(patch.locked===false){payload.locked_at=null;payload.locked_by=null;}
   const{data,error}=await sb.from("self_assessment_periods").upsert(payload,{onConflict:"academic_year,period"}).select().single();
@@ -18940,7 +19043,7 @@ function saCccView(){
     el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"16px",flexWrap:"wrap",marginBottom:"18px"}},
       saPeriodPills(),
       el("div",{st:{fontSize:".8rem",color:"#5C5345"}},saPeriodLine(p)+" · ",el("b",{st:{color:"#1F1A12"}},sub.length+" of "+vr.length+" submitted"),dr.length?" · "+dr.length+" in draft":"",no.length?" · "+no.length+" not started":"")),
-    notYet?el("div",{st:{padding:"14px 0 18px",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"8px",fontSize:".84rem",color:"#5C5345"}},"This quarter is still running: residents can start it on "+saOpensOn(saSel())+". Nothing to lock yet."):
+    notYet?el("div",{st:{padding:"14px 0 18px",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"8px",fontSize:".84rem",color:"#5C5345"}},"This period has not opened yet: residents can start it on "+saOpensOn(saSel())+". Nothing to lock yet."):
     el("div",{cls:"sa-ctl",st:{padding:"14px 0 18px",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"8px"}},
       el("span",null,"Due date"),
       canCtl?el("input",{type:"date",value:row&&row.due_on?row.due_on:"",onChange:e=>saSavePeriod(p,{due_on:e.target.value||null})}):el("b",null,row&&row.due_on?fmtDate(row.due_on):"not set"),
