@@ -1,7 +1,8 @@
 -- DSFH Residency Portal — Resident Milestone self-assessment (second tab of the Mentorship ILP module)
 -- Before each six-monthly Clinical Competency Committee review a resident rates their own progress on the
 -- 19 ACGME-I Internal Medicine Milestone sub-competencies (level 1-5) and writes two short texts.
--- One row per resident per academic year per period (1 = Oct–Mar, 2 = Apr–Sep). The resident reads and
+-- One row per resident per academic year per quarter (period 1 = Oct–Dec, 2 = Jan–Mar, 3 = Apr–Jun, 4 = Jul–Sep,
+-- the same quarters as mentorship_evaluations). The resident reads and
 -- writes only their own rows and only while the period is not locked; a consultant reads the rows of the
 -- residents they mentor; pd / deputy_pd / chief read every row (is_pd_or_chief()).
 -- self_assessment_periods holds the per-year, per-period configuration (due date, lock): readable by every
@@ -11,7 +12,7 @@
 create table if not exists self_assessment_periods (
   id bigint generated always as identity primary key,
   academic_year int not null,
-  period int not null check (period in (1,2)),
+  period int not null check (period between 1 and 4),
   label text,
   due_on date,
   locked boolean not null default false,
@@ -26,7 +27,7 @@ create table if not exists self_assessments (
   id bigint generated always as identity primary key,
   resident_id bigint not null references residents(id) on delete cascade,
   academic_year int not null,
-  period int not null check (period in (1,2)),
+  period int not null check (period between 1 and 4),
   levels jsonb not null default '{}'::jsonb,      -- {PC1..ICS3} -> 1..5
   doing_well text,
   work_on text,
@@ -60,18 +61,17 @@ create policy self_assessments_select on self_assessments for select to authenti
         select 1 from residents r where r.id = self_assessments.resident_id and r.mentor_id = app_consultant_id()))
 );
 
--- A resident writes only their own row, only after the half-year has ended (period 1 = Oct–Mar, so from
--- 1 April; period 2 = Apr–Sep, so from 1 October of the next academic year), and only while the period is
--- not locked by the PD.
+-- A resident writes only their own row, only from the first day of the quarter's last month (1 Dec, 1 Mar,
+-- 1 Jun, 1 Sep), as for the learning plan, and only while the period is not locked by the PD.
 drop policy if exists self_assessments_write on self_assessments;
 create policy self_assessments_write on self_assessments for all to authenticated using (
   app_role() = 'resident' and resident_id = app_resident_id()
-  and current_date >= case period when 1 then make_date(academic_year + 1, 4, 1) else make_date(academic_year + 1, 10, 1) end
+  and current_date >= make_date(case when period = 1 then academic_year else academic_year + 1 end, (array[12,3,6,9])[period], 1)
   and not exists (select 1 from self_assessment_periods p
                   where p.academic_year = self_assessments.academic_year and p.period = self_assessments.period and p.locked)
 ) with check (
   app_role() = 'resident' and resident_id = app_resident_id()
-  and current_date >= case period when 1 then make_date(academic_year + 1, 4, 1) else make_date(academic_year + 1, 10, 1) end
+  and current_date >= make_date(case when period = 1 then academic_year else academic_year + 1 end, (array[12,3,6,9])[period], 1)
   and not exists (select 1 from self_assessment_periods p
                   where p.academic_year = self_assessments.academic_year and p.period = self_assessments.period and p.locked)
 );

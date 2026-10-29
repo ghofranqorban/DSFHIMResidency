@@ -18593,9 +18593,9 @@ function fbHomeAlert(){
 // Second tab of the Mentorship module. Before each six-monthly Clinical Competency Committee review a resident
 // rates their OWN progress on the 19 ACGME-I Internal Medicine Milestone sub-competencies (Milestones 2.0,
 // March 2023: PC1–5, MK1–3, SBP1–3, PBLI1–2, PROF1–3, ICS1–3), level 1–5 each, plus two short texts. One row per
-// resident per academic year per review period (self_assessments; period 1 = Oct–Mar, 2 = Apr–Sep). The
+// resident per academic year per quarter (self_assessments.period = quarter 1–4, as the learning plan). The
 // resident edits until the PD locks the period (self_assessment_periods, one row per year and period: due date +
-// lock). The mentor and the PD read the self-rating beside the mentor's ILP rating for the same half-year,
+// lock). The mentor and the PD read the self-rating beside the mentor's ILP rating for the same quarter,
 // grouped by CanMEDS role, so a gap between how the resident and the mentor see things is visible. The two
 // scales differ (Milestone level vs. the ILP's "meets expectations" rating), so the comparison is a prompt for
 // the conversation, never a score, and nothing in calcKPI reads either table.
@@ -18623,23 +18623,20 @@ const SA_ITEMS=[
   {code:"ICS3",dom:"ICS",name:"Communication within Health Care Systems",role:"comm",levels:["Records information accurately; safeguards personal health information; uses required channels","Organised diagnostic and therapeutic reasoning in notes; appropriate use of documentation shortcuts; respectfully raises concerns about the system","Concise reasoning in the record; chooses direct or indirect communication by context; offers clear suggestions to improve the system","Clear, concise, timely written communication with anticipatory guidance; an example for others; initiates difficult conversations with stakeholders","Models feedback on others' written communication; guides institutional communication; facilitates dialogue on systems issues"]}
 ];
 const SA_LEVEL_WORDS={1:"Level 1",2:"Level 2",3:"Level 3",4:"Level 4",5:"Level 5"};
-const SA_PERIODS={1:{label:"First half",months:"Oct – Mar",quarters:[1,2]},2:{label:"Second half",months:"Apr – Sep",quarters:[3,4]}};
+const SA_PERIODS={1:{label:"Q1",months:"Oct – Dec",quarters:[1]},2:{label:"Q2",months:"Jan – Mar",quarters:[2]},3:{label:"Q3",months:"Apr – Jun",quarters:[3]},4:{label:"Q4",months:"Jul – Sep",quarters:[4]}};
 let SA_ROWS=[],SA_PERIOD_ROWS=[],SA_STATE="idle",SA_ERR="";
 let _saDraft=null,_saOpen={};   // _saOpen: {code:true} rows whose five level descriptions are unfolded
-// The CCC reviews the half-year that has just ENDED, so the form a resident fills in now covers the last
-// completed half (in Oct–Mar that is Apr–Sep of the previous academic year); the running half is shown but
-// stays closed until the day after it ends. STATE.saKey = "<academic_year>-<period>" selects one of the
-// three on offer: the half before, the one under review, and the running one.
-function saHalfEnd(ay,p){return p===1?new Date(ay+1,3,1):new Date(ay+1,9,1);}   // first day AFTER the half
-function saHalfLabel(ay,p){return p===1?"Oct "+ay+" – Mar "+(ay+1):"Apr – Sep "+(ay+1);}
-function saLatestDone(){return currentQuarter()<=2?{ay:CURRENT_ACADEMIC_YEAR-1,p:2}:{ay:CURRENT_ACADEMIC_YEAR,p:1};}
-function saPrevHalf(h){return h.p===2?{ay:h.ay,p:1}:{ay:h.ay-1,p:2};}
-function saNextHalf(h){return h.p===1?{ay:h.ay,p:2}:{ay:h.ay+1,p:1};}
-function saChoices(){const c=saLatestDone();return[saPrevHalf(c),c,saNextHalf(c)];}
+// Same quarters and the same opening rule as the learning plan (the PD, 29 Oct 2026: "make self by quarter
+// as the learning plan by mentor"): the page opens on the running quarter from the first day of its last
+// month and on the quarter before until then; a quarter not yet open is listed but closed to residents.
+// STATE.saKey = "<academic_year>-<quarter>". Helpers reuse meOpenFrom/meLatestDone/meChoices/meRunning.
+function saHalfLabel(ay,p){return meQLabel(ay,p);}
+function saLatestDone(){const h=meLatestDone();return{ay:h.ay,p:h.q};}
+function saChoices(){return meChoices().map(h=>({ay:h.ay,p:h.q}));}
 function saKeyOf(h){return h.ay+"-"+h.p;}
-function saSel(){const m=String(STATE.saKey||"").match(/^(\d+)-([12])$/);return m?{ay:+m[1],p:+m[2]}:saLatestDone();}
-function saNotYet(h){return new Date()<saHalfEnd(h.ay,h.p);}
-function saOpensOn(h){const d=saHalfEnd(h.ay,h.p);return fmtDate(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"));}
+function saSel(){const m=String(STATE.saKey||"").match(/^(\d+)-([1-4])$/);return m?{ay:+m[1],p:+m[2]}:saLatestDone();}
+function saNotYet(h){return meRunning({ay:h.ay,q:h.p});}
+function saOpensOn(h){const d=meOpenFrom(h.ay,h.p);return fmtDate(d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"));}
 function saAY(){return saSel().ay;}
 function saP(){return saSel().p;}
 function saPeriodRow(ay,p){return SA_PERIOD_ROWS.find(x=>x.academic_year===ay&&x.period===p)||null;}
@@ -18658,7 +18655,7 @@ function saAvg(codes,row){
   if(!row)return null;const v=codes.map(c=>Number((row.levels||{})[c])).filter(x=>x>=1&&x<=5);
   return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*10)/10:null;
 }
-// The mentor's ILP rating for a CanMEDS role over the two quarters of the half-year: the latest submitted one.
+// The mentor's submitted ILP rating for a CanMEDS role in the same quarter.
 function saMentorRating(rid,p,roleKey){
   const qs=SA_PERIODS[p].quarters.slice().reverse();
   for(const q of qs){const ev=ME_ROWS.find(x=>x.resident_id===rid&&x.academic_year===saAY()&&x.quarter===q&&x.status==="submitted");
@@ -18718,11 +18715,11 @@ function saPeriodPills(){
   const cur=saSel();
   return el("div",{st:{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}},
     ...saChoices().map(h=>{const on=h.ay===cur.ay&&h.p===cur.p,ny=saNotYet(h);
-      return el("span",{cls:"pill"+(on?" on":""),st:ny&&!on?{opacity:".55"}:null,title:ny?"Opens "+saOpensOn(h)+", after the half-year ends":"",onClick:()=>{_saDraft=null;set({saKey:saKeyOf(h)});}},saHalfLabel(h.ay,h.p)+(ny?" · not yet":""));}));
+      return el("span",{cls:"pill"+(on?" on":""),st:ny&&!on?{opacity:".55"}:null,title:ny?"Opens "+saOpensOn(h)+", the first day of the quarter's last month":"",onClick:()=>{_saDraft=null;set({saKey:saKeyOf(h)});}},saHalfLabel(h.ay,h.p)+(ny?" · not yet":""));}));
 }
 function saPeriodLine(p){
-  const h=saSel(),row=saPeriodRow(h.ay,p);const bits=[SA_PERIODS[p].label+" of "+ayLabel(h.ay)+" ("+saHalfLabel(h.ay,p)+")"];
-  if(saNotYet(h))bits.push("opens "+saOpensOn(h)+", after the half-year ends");
+  const h=saSel(),row=saPeriodRow(h.ay,p);const bits=[saHalfLabel(h.ay,p)+" · "+ayLabel(h.ay)];
+  if(saNotYet(h))bits.push("opens "+saOpensOn(h));
   if(row&&row.due_on)bits.push("due "+fmtDate(row.due_on));
   if(row&&row.locked)bits.push("locked by the Program Director"+(row.locked_at?" on "+fmtDate(row.locked_at.slice(0,10)):""));
   return bits.join(" · ");
@@ -18827,22 +18824,22 @@ function saResidentForm(){
         el("span",{cls:"sa-stat "+(ex?(ex.status==="submitted"?"done":"draft"):"none")},status))),
     el("div",{cls:"me-noprint",st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px",flexWrap:"wrap",padding:"14px 0 6px",borderBottom:"1px solid rgba(31,26,18,.12)"}},
       saPeriodPills(),
-      notYet?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"This half-year is still running."):locked?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"This period is locked; the committee has your submitted answers."):el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"Saved answers can be changed until the Program Director locks the period.")),
+      notYet?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"This quarter is still running."):locked?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"This period is locked; the committee has your submitted answers."):el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"Saved answers can be changed until the Program Director locks the period.")),
     notYet&&!ex?el("div",{st:{padding:"36px 0",maxWidth:"560px"}},
       el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.4rem",color:"#1F1A12",marginBottom:"8px"}},"Opens "+saOpensOn(saSel())),
-      el("div",{st:{fontSize:".88rem",lineHeight:"1.6",color:"#5C5345"}},"You assess the half-year after it ends, so the committee reads how you saw the months you have just completed. The one under review now is "+saHalfLabel(saLatestDone().ay,saLatestDone().p)+".")):null,
+      el("div",{st:{fontSize:".88rem",lineHeight:"1.6",color:"#5C5345"}},"You assess each quarter in its last month, when your mentor writes the learning plan, so the two can be read together. The one open now is "+saHalfLabel(saLatestDone().ay,saLatestDone().p)+".")):null,
     d._restored?el("div",{cls:"me-noprint",st:{fontSize:".8rem",color:"#6a4c10",padding:"12px 0 0"}},"Unsaved answers were restored from this browser. Press Save draft to keep them."):null,
     ...(notYet&&!ex?[]:saFormBody(d,editable,"self")),
     el("div",{cls:"me-noprint",st:{display:"flex",gap:"10px",justifyContent:"flex-end",alignItems:"center",padding:"24px 0",flexWrap:"wrap"}},
       editable?el("button",{cls:"me-btn ghost",disabled:!!STATE.saSaving,onClick:()=>saSave(d,false)},"Save draft"):null,
-      editable?el("button",{cls:"me-btn",disabled:!!STATE.saSaving,onClick:()=>showConfirm("Submit your self-assessment for "+SA_PERIODS[p].label.toLowerCase()+" of "+ayLabel(saAY())+"? Your mentor and the Program Director will see it beside your mentor's rating. You can still change it until the period is locked.",()=>saSave(d,true),"Submit")},ex&&ex.status==="submitted"?"Update submission":"Submit self-assessment"):null));
+      editable?el("button",{cls:"me-btn",disabled:!!STATE.saSaving,onClick:()=>showConfirm("Submit your self-assessment for "+saHalfLabel(saAY(),p)+"? Your mentor and the Program Director will see it beside your mentor's rating. You can still change it until the period is locked.",()=>saSave(d,true),"Submit")},ex&&ex.status==="submitted"?"Update submission":"Submit self-assessment"):null));
 }
 // ── Mentor / PD: the residents they may read, with status for the period ──
 function saListView(){
   const u=STATE.user,p=saP();
   const mine=u.role==="consultant";
   const vr=mine?RESIDENTS.filter(r=>MENTORS[r.id]===u.cid):RESIDENTS;
-  const sub=mine?"Your mentees' own Milestone ratings for each half-year, read beside your learning-plan rating.":"Every resident's Milestone self-assessment for the half-year, read beside the mentor's rating.";
+  const sub=mine?"Your mentees' own Milestone ratings for each quarter, read beside your learning-plan rating.":"Every resident's Milestone self-assessment for the quarter, read beside the mentor's rating.";
   if(mine&&!vr.length)return el("div",{cls:"content"},meHeader(sub),meTabs("self"),
     el("div",{st:{padding:"32px 0",color:"#5C5345",fontSize:".9rem",lineHeight:"1.6",maxWidth:"520px"}},"No resident is assigned to you as mentor yet, so there is no self-assessment for you to read."));
   const done=vr.filter(r=>{const x=saFind(r.id,p);return x&&x.status==="submitted";}).length;
@@ -18894,7 +18891,7 @@ function saCompareView(r){
         el("div",{st:{fontSize:".84rem",color:"#5C5345"}},r.level+" · "+saPeriodLine(p)+" · Mentor: ",el("span",{st:{color:"#1F1A12"}},MENTORS[r.id]?mentorName(r.id):"No official mentor"))),
       el("div",{st:{display:"flex",gap:"28px",textAlign:"right"}},
         el("div",null,el("div",{cls:"me-lbl",st:{marginBottom:"2px"}},"Own rating"),el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2.4rem",lineHeight:"1",color:"#1F1A12"}},own!=null?own.toFixed(1):"—"),el("div",{st:{fontSize:".7rem",color:"#5C5345"}},"average Milestone level")),
-        el("div",null,el("div",{cls:"me-lbl",st:{marginBottom:"2px"}},"Mentor's ILP"),el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2.4rem",lineHeight:"1",color:meTone(me)}},me!=null?me.toFixed(1):"—"),el("div",{st:{fontSize:".7rem",color:"#5C5345"}},ilpQ.length?"Q"+ilpQ.join(" + Q")+" of this half":"no plan submitted yet")))),
+        el("div",null,el("div",{cls:"me-lbl",st:{marginBottom:"2px"}},"Mentor's ILP"),el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"2.4rem",lineHeight:"1",color:meTone(me)}},me!=null?me.toFixed(1):"—"),el("div",{st:{fontSize:".7rem",color:"#5C5345"}},ilpQ.length?"same quarter":"no plan submitted yet")))),
     el("div",{cls:"me-noprint",st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px",flexWrap:"wrap",padding:"14px 0 6px",borderBottom:"1px solid rgba(31,26,18,.12)"}},
       saPeriodPills(),
       el("div",{st:{fontSize:".78rem",color:"#5C5345"}},x?(x.status==="submitted"?"Submitted "+fmtDate((x.submitted_at||"").slice(0,10)):"Still a draft — "+saCount(x)+" of "+SA_ITEMS.length+" rated"):"Not started",locked?" · period locked":"")),
@@ -18902,9 +18899,9 @@ function saCompareView(r){
     el("div",null,
       el("div",{st:{marginTop:"26px"}},
         el("div",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.4rem",color:"#1F1A12",marginBottom:"4px"}},"Where they agree and where they do not"),
-        el("div",{st:{fontSize:".78rem",color:"#5C5345",lineHeight:"1.55",maxWidth:"680px",marginBottom:"12px"}},"The resident's average Milestone level for the sub-competencies that sit under each CanMEDS role, beside the mentor's latest ILP rating for the same half-year. Both run 1–5 but mean different things (Milestone level against the ILP's \"meets expectations\" scale), so a gap of a point or more is a prompt for the conversation, not a verdict."),
+        el("div",{st:{fontSize:".78rem",color:"#5C5345",lineHeight:"1.55",maxWidth:"680px",marginBottom:"12px"}},"The resident's average Milestone level for the sub-competencies that sit under each CanMEDS role, beside the mentor's ILP rating for the same quarter. Both run 1–5 but mean different things (Milestone level against the ILP's \"meets expectations\" scale), so a gap of a point or more is a prompt for the conversation, not a verdict."),
         blind.length?el("div",{st:{fontSize:".84rem",color:"#1F1A12",marginBottom:"12px"}},el("b",{st:{color:"#a94e2c"}},"Possible blind spot"+(blind.length>1?"s":"")+": "),blind.map(g=>g.role.role+" ("+(g.o>g.m?"rates self higher":"rates self lower")+")").join(" · ")):
-          el("div",{st:{fontSize:".84rem",color:"#26523A",marginBottom:"12px"}},gaps.some(g=>g.m!=null)?"No gap of a point or more between the resident and the mentor.":"No mentor rating for this half-year yet, so there is nothing to compare against."),
+          el("div",{st:{fontSize:".84rem",color:"#26523A",marginBottom:"12px"}},gaps.some(g=>g.m!=null)?"No gap of a point or more between the resident and the mentor.":"No mentor rating for this quarter yet, so there is nothing to compare against."),
         el("div",{cls:"sa-cmp hd"},el("span",null,"CanMEDS role · Milestone sub-competencies"),el("span",{cls:"num"},"Self"),el("span",{cls:"num"},"Mentor"),el("span",null,"")),
         ...gaps.flatMap(g=>[
           el("div",{cls:"sa-cmp role"},el("span",null,g.role.role,el("span",{cls:"sub"},g.codes.join(" · "))),el("span",{cls:"num"},g.o!=null?g.o.toFixed(1):"—"),el("span",{cls:"num",st:{color:g.m!=null?meTone(g.m):"inherit"}},g.m!=null?g.m.toFixed(1):"—"),saGapChip(g.o,g.m)),
@@ -18943,12 +18940,12 @@ function saCccView(){
     el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"16px",flexWrap:"wrap",marginBottom:"18px"}},
       saPeriodPills(),
       el("div",{st:{fontSize:".8rem",color:"#5C5345"}},saPeriodLine(p)+" · ",el("b",{st:{color:"#1F1A12"}},sub.length+" of "+vr.length+" submitted"),dr.length?" · "+dr.length+" in draft":"",no.length?" · "+no.length+" not started":"")),
-    notYet?el("div",{st:{padding:"14px 0 18px",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"8px",fontSize:".84rem",color:"#5C5345"}},"This half-year is still running: residents can start it on "+saOpensOn(saSel())+". Nothing to lock yet."):
+    notYet?el("div",{st:{padding:"14px 0 18px",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"8px",fontSize:".84rem",color:"#5C5345"}},"This quarter is still running: residents can start it on "+saOpensOn(saSel())+". Nothing to lock yet."):
     el("div",{cls:"sa-ctl",st:{padding:"14px 0 18px",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"8px"}},
       el("span",null,"Due date"),
       canCtl?el("input",{type:"date",value:row&&row.due_on?row.due_on:"",onChange:e=>saSavePeriod(p,{due_on:e.target.value||null})}):el("b",null,row&&row.due_on?fmtDate(row.due_on):"not set"),
       el("span",{st:{marginLeft:"18px"}},locked?"Locked"+(row.locked_at?" "+fmtDate(row.locked_at.slice(0,10)):""):"Open — residents can still edit"),
-      canCtl?el("button",{cls:"me-btn"+(locked?" ghost":""),st:{padding:"7px 16px",fontSize:".78rem"},onClick:()=>showConfirm(locked?"Reopen "+SA_PERIODS[p].label.toLowerCase()+" of "+ayLabel(saAY())+"? Residents will be able to change their answers again.":"Lock "+SA_PERIODS[p].label.toLowerCase()+" of "+ayLabel(saAY())+"? Residents will no longer be able to change their self-assessment; the committee works from what is submitted now.",()=>saSavePeriod(p,{locked:!locked}),locked?"Reopen":"Lock")},locked?"Reopen period":"Lock period"):null),
+      canCtl?el("button",{cls:"me-btn"+(locked?" ghost":""),st:{padding:"7px 16px",fontSize:".78rem"},onClick:()=>showConfirm(locked?"Reopen "+saHalfLabel(saAY(),p)+"? Residents will be able to change their answers again.":"Lock "+saHalfLabel(saAY(),p)+"? Residents will no longer be able to change their self-assessment; the committee works from what is submitted now.",()=>saSavePeriod(p,{locked:!locked}),locked?"Reopen":"Lock")},locked?"Reopen period":"Lock period"):null),
     no.length?el("div",{st:{padding:"14px 0",borderBottom:"1px solid rgba(31,26,18,.07)"}},el("div",{cls:"me-lbl",st:{color:"#9d4a2a"}},"Not started ("+no.length+")"),...byLevel(no).map(t=>el("div",{st:{fontSize:".84rem",color:"#1F1A12",lineHeight:"1.6"}},t))):null,
     dr.length?el("div",{st:{padding:"14px 0",borderBottom:"1px solid rgba(31,26,18,.07)"}},el("div",{cls:"me-lbl",st:{color:"#6a4c10"}},"In draft ("+dr.length+")"),...byLevel(dr).map(t=>el("div",{st:{fontSize:".84rem",color:"#1F1A12",lineHeight:"1.6"}},t))):null,
     el("div",{st:{marginTop:"22px"}},
