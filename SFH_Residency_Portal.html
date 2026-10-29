@@ -17965,10 +17965,21 @@ function meBlankDraft(r,q){
   return{resident_id:r.id,academic_year:meAY(),quarter:q,mentor_id:MENTORS[r.id]||(STATE.user.role==="consultant"?STATE.user.cid:null),
     ratings:{},comments:{},strengths:"",improvements:"",action_plan:"",overall:null,status:"draft"};
 }
+// Unsaved answers are also kept in this browser (localStorage) while the form is open, so a lost login,
+// a closed tab or a reload does not lose them: on reopening, a kept copy newer than the saved row is
+// restored and a line says so. Cleared the moment a save succeeds. Keyed per login, resident, year, quarter.
+function meStashKey(d){return"me_draft_"+(STATE.user&&STATE.user.profileId)+"_"+d.resident_id+"_"+d.academic_year+"_"+d.quarter;}
+function meHasContent(d){return Object.keys(d.ratings||{}).length>0||!!d.strengths||!!d.improvements||!!d.action_plan||!!d.overall||Object.values(d.comments||{}).some(Boolean);}
+function meStash(d){if(!meHasContent(d))return;try{localStorage.setItem(meStashKey(d),JSON.stringify({...d,_restored:undefined,_at:Date.now()}));}catch(e){}}
+function meStashClear(d){try{localStorage.removeItem(meStashKey(d));}catch(e){}}
+function meStashRead(d){try{const s=JSON.parse(localStorage.getItem(meStashKey(d))||"null");return s&&s.resident_id===d.resident_id?s:null;}catch(e){return null;}}
 function meDraftFor(r,q){
   const ex=meFind(r.id,q);
   if(_meDraft&&_meDraft.resident_id===r.id&&_meDraft.quarter===q&&_meDraft.academic_year===meAY())return _meDraft;
   _meDraft=ex?JSON.parse(JSON.stringify({...ex,ratings:ex.ratings||{},comments:ex.comments||{},strengths:ex.strengths||"",improvements:ex.improvements||"",action_plan:ex.action_plan||""})):meBlankDraft(r,q);
+  const st=meStashRead(_meDraft);
+  if(st&&meHasContent(st)&&(!ex||!ex.updated_at||st._at>new Date(ex.updated_at).getTime()))
+    _meDraft={..._meDraft,ratings:st.ratings||{},comments:st.comments||{},strengths:st.strengths||"",improvements:st.improvements||"",action_plan:st.action_plan||"",overall:st.overall||null,_restored:true};
   return _meDraft;
 }
 async function meSave(d,submit){
@@ -17985,7 +17996,7 @@ async function meSave(d,submit){
   STATE.meSaving=false;
   if(error){showToast("Could not save: "+error.message,"error");render();return;}
   const i=ME_ROWS.findIndex(x=>x.id===data.id);if(i>=0)ME_ROWS[i]=data;else ME_ROWS.push(data);
-  _meDraft=null;
+  meStashClear(d);_meDraft=null;
   showToast(submit?"Learning plan submitted.":"Draft saved.");
   if(submit)set({meSel:null});else render();
 }
@@ -18010,10 +18021,12 @@ function meFormView(r){
   const locked=!!(ex&&ex.status==="submitted");
   const editable=canW&&!locked;
   const d=editable?meDraftFor(r,q):(ex||meBlankDraft(r,q));
+  if(editable)meStash(d);
+  const wrap={cls:"content"};if(editable)wrap.onInput=()=>meStash(d);
   const avg=meAvg(d);
   const mentor=d.mentor_id?consultById(d.mentor_id):null;
   const who=mentor?mentor.name:(MENTORS[r.id]?mentorName(r.id):"No official mentor (completed by the PD)");
-  return el("div",{cls:"content"},
+  return el("div",wrap,
     meTabs("plans"),
     el("button",{cls:"back-btn me-noprint",onClick:()=>{_meDraft=null;set({meSel:null});}},"← All residents"),
     el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:"16px",flexWrap:"wrap",marginBottom:"8px"}},
@@ -18029,6 +18042,7 @@ function meFormView(r){
       meQuarterPills(q,n=>{_meDraft=null;set({meQ:n});}),
       locked?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"Submitted "+fmtDate((ex.submitted_at||"").slice(0,10))+(meIsPdSide()?" · ":""),meIsPdSide()?el("span",{cls:"lnk",st:{color:"#a94e2c",fontWeight:"600",cursor:"pointer"},onClick:()=>showConfirm("Reopen this learning plan? The mentor can edit it again and the resident stops seeing it until it is submitted once more.",()=>meReopen(ex),"Reopen")},"Reopen"):null):
       !canW?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"Read only — only the resident's mentor or the PD can write this."):null),
+    d._restored?el("div",{cls:"me-noprint",st:{fontSize:".8rem",color:"#6a4c10",padding:"12px 0 0"}},"Unsaved answers were restored from this browser. Press Save draft to keep them."):null,
     el("div",{st:{display:"flex",justifyContent:"space-between",gap:"16px",padding:"18px 0 4px",fontSize:".76rem",color:"#5C5345",flexWrap:"wrap"}},
       el("span",null,"Rate each role on the five-point scale and add what you observed. Examples carry more weight than adjectives."),
       el("span",null,ME_SCALE.map(x=>x[0]+" "+x[1]).join(" · "))),
@@ -18692,10 +18706,19 @@ function renderSelfAssess(){
 }
 // ── Resident: rate the 19 sub-competencies for the period ──
 function saBlankDraft(rid,p){return{resident_id:rid,academic_year:saAY(),period:p,levels:{},doing_well:"",work_on:"",status:"draft"};}
+// Unsaved answers are kept in this browser while the form is open (same pattern as meStash).
+function saStashKey(d){return"sa_draft_"+(STATE.user&&STATE.user.profileId)+"_"+d.resident_id+"_"+d.academic_year+"_"+d.period;}
+function saHasContent(d){return Object.keys(d.levels||{}).length>0||!!d.doing_well||!!d.work_on;}
+function saStash(d){if(!saHasContent(d))return;try{localStorage.setItem(saStashKey(d),JSON.stringify({...d,_restored:undefined,_at:Date.now()}));}catch(e){}}
+function saStashClear(d){try{localStorage.removeItem(saStashKey(d));}catch(e){}}
+function saStashRead(d){try{const s=JSON.parse(localStorage.getItem(saStashKey(d))||"null");return s&&s.resident_id===d.resident_id?s:null;}catch(e){return null;}}
 function saDraftFor(rid,p){
   if(_saDraft&&_saDraft.resident_id===rid&&_saDraft.period===p&&_saDraft.academic_year===saAY())return _saDraft;
   const ex=saFind(rid,p);
   _saDraft=ex?JSON.parse(JSON.stringify({...ex,levels:ex.levels||{},doing_well:ex.doing_well||"",work_on:ex.work_on||""})):saBlankDraft(rid,p);
+  const st=saStashRead(_saDraft);
+  if(st&&saHasContent(st)&&(!ex||!ex.updated_at||st._at>new Date(ex.updated_at).getTime()))
+    _saDraft={..._saDraft,levels:st.levels||{},doing_well:st.doing_well||"",work_on:st.work_on||"",_restored:true};
   return _saDraft;
 }
 async function saSave(d,submit){
@@ -18710,7 +18733,7 @@ async function saSave(d,submit){
   STATE.saSaving=false;
   if(error){showToast("Could not save: "+(error.code==="42501"?"this period has been locked by the Program Director.":error.message),"error");render();return;}
   const i=SA_ROWS.findIndex(x=>x.id===data.id);if(i>=0)SA_ROWS[i]=data;else SA_ROWS.push(data);
-  _saDraft=null;showToast(submit?"Self-assessment submitted. You can still edit it until the period is locked.":"Draft saved.");render();
+  saStashClear(d);_saDraft=null;showToast(submit?"Self-assessment submitted. You can still edit it until the period is locked.":"Draft saved.");render();
 }
 function saSeg(value,onPick,disabled){
   return el("div",{cls:"sa-seg"},...[1,2,3,4,5].map(n=>el("button",{cls:value===n?"on":"",disabled:!!disabled,title:SA_LEVEL_WORDS[n],onClick:()=>{if(!disabled)onPick(n);}},String(n))));
@@ -18753,8 +18776,10 @@ function saResidentForm(){
   if(!r)return el("div",{cls:"content"},meHeader(""),meTabs("self"),el("div",{st:{padding:"32px 0",color:"#5C5345"}},"No resident record is linked to this login."));
   const ex=saFind(r.id,p),locked=saLocked(saAY(),p),editable=!locked;
   const d=editable?saDraftFor(r.id,p):(ex||saBlankDraft(r.id,p));
+  if(editable)saStash(d);
+  const wrap={cls:"content"};if(editable)wrap.onInput=()=>saStash(d);
   const status=ex?(ex.status==="submitted"?"Submitted "+fmtDate((ex.submitted_at||"").slice(0,10)):"Draft"):"Not started";
-  return el("div",{cls:"content"},
+  return el("div",wrap,
     meHeader("Your learning plan with your mentor, and your own Milestone self-assessment before each Clinical Competency Committee review."),
     meTabs("self"),
     el("div",{st:{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:"16px",flexWrap:"wrap",marginBottom:"8px"}},
@@ -18767,6 +18792,7 @@ function saResidentForm(){
     el("div",{cls:"me-noprint",st:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px",flexWrap:"wrap",padding:"14px 0 6px",borderBottom:"1px solid rgba(31,26,18,.12)"}},
       saPeriodPills(p,n=>{_saDraft=null;set({saPeriod:n});}),
       locked?el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"This period is locked; the committee has your submitted answers."):el("div",{st:{fontSize:".78rem",color:"#5C5345"}},"Saved answers can be changed until the Program Director locks the period.")),
+    d._restored?el("div",{cls:"me-noprint",st:{fontSize:".8rem",color:"#6a4c10",padding:"12px 0 0"}},"Unsaved answers were restored from this browser. Press Save draft to keep them."):null,
     ...saFormBody(d,editable,"self"),
     el("div",{cls:"me-noprint",st:{display:"flex",gap:"10px",justifyContent:"flex-end",alignItems:"center",padding:"24px 0",flexWrap:"wrap"}},
       editable?el("button",{cls:"me-btn ghost",disabled:!!STATE.saSaving,onClick:()=>saSave(d,false)},"Save draft"):null,
