@@ -160,6 +160,20 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .oc-less-rec.full{color:#1d5c43;background:rgba(42,122,90,.12);border:1px solid rgba(42,122,90,.3);border-radius:999px;padding:2px 9px;}
 .oc-less-rec .sf{font-weight:500;font-style:italic;opacity:.75;}
 .oc-less-grp{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(31,26,18,.4);margin:16px 0 8px;}
+.oc-avail{background:#F6EFE2;border:1px solid rgba(31,26,18,.08);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:.8rem;color:#1F1A12;}
+.oc-avail-hd{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
+.oc-avail-hd b{font-size:.84rem;font-weight:700;}
+.oc-avail-hd .n{color:#26523A;font-weight:700;}
+.oc-avail-hd button{margin-left:auto;}
+.oc-avail-lv{display:flex;gap:10px;align-items:baseline;margin-top:8px;line-height:1.6;}
+.oc-avail-lv>span:first-child{flex:0 0 26px;font-size:.66rem;font-weight:800;letter-spacing:.06em;color:rgba(31,26,18,.45);}
+.oc-avail-lv i{font-style:normal;font-size:.7rem;color:#6a4c10;}
+.oc-avail-grp{margin-top:12px;padding-top:10px;border-top:1px solid rgba(31,26,18,.08);}
+.oc-avail-grp .t{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(31,26,18,.4);margin-bottom:5px;}
+.oc-avail-grp .row{display:flex;gap:8px;align-items:baseline;line-height:1.7;flex-wrap:wrap;}
+.oc-avail-grp .row .rot-badge{font-size:.66rem;}
+.oc-rot-badge{font-size:.63rem;background:rgba(164,122,40,.14);color:#6a4c10;border:1px solid rgba(164,122,40,.4);border-radius:4px;padding:1px 5px;display:inline-block;margin-top:2px;white-space:nowrap;font-weight:700;}
+.oc-rot-badge.away{background:rgba(181,32,64,.1);color:#8f1832;border-color:rgba(181,32,64,.35);}
 /* ── Full-screen schedule view ── */
 #oc-fullscreen{position:fixed;inset:0;background:#F6EFE2;z-index:9000;display:none;flex-direction:column;}
 #oc-fullscreen.open{display:flex;}
@@ -1079,6 +1093,12 @@ let ROT_CATALOGUE=[];   // every row, retired included, in sort order
 let LISTS_ERR=null;     // why the tables could not be read, shown in the Lists tab
 // Names the portal's own code relies on (leave handling, the builder, imports). They cannot be retired.
 const ROT_FIXED=["GIM/CTU","Night Duty","Elective","Annual Leave","Maternity Leave","Medical Consult","Outpatient Clinic","Freeze"];
+// Rotations that carry their own on-call: a resident on one of them is covered there and out of
+// the general on-call pool for the block. Flagged per rotation in Control Centre > Lists
+// (rotation_catalogue.own_oncall); this is the built-in set until that column exists.
+const ROT_OWN_ONCALL_DEFAULT=["Night Duty","Cardiology","ICU","Emergency Medicine","Elective"];
+let ROT_OWN_ONCALL=new Set(ROT_OWN_ONCALL_DEFAULT);
+const ROT_AWAY=["Annual Leave","Maternity Leave","Freeze"];
 let ANN_CATS=[{key:"task",label:"Task"},{key:"research",label:"Research"},{key:"qi",label:"QI Project"},{key:"presentation",label:"Presentation"},
   {key:"deadline",label:"Deadline"},{key:"other",label:"Other"},{key:"general",label:"General"}];
 function applyRotationCatalogue(rows){
@@ -1086,6 +1106,9 @@ function applyRotationCatalogue(rows){
   const active=ROT_CATALOGUE.filter(r=>r.active!==false);
   ALL_ROTATIONS=active.map(r=>r.name);
   MANDATORY=active.filter(r=>r.mandatory).map(r=>r.name);
+  // Before add_oncall_own_rotations.sql has been run the rows carry no own_oncall at all, and
+  // the built-in set stays. Once the column exists the catalogue is the only source.
+  ROT_OWN_ONCALL=rows.some(r=>"own_oncall" in r)?new Set(rows.filter(r=>r.own_oncall).map(r=>r.name)):new Set(ROT_OWN_ONCALL_DEFAULT);
   RB_EXTRA=active.filter(r=>!r.mandatory&&r.name!=="Freeze").map(r=>r.name);
   SCFHS_JUNIOR={};SCFHS_SENIOR={};SCFHS_TOTAL={};SCFHS_CREDIT={};ROT_COLORS={};ROT_ABBR={};
   ROT_CATALOGUE.forEach(r=>{
@@ -3711,6 +3734,8 @@ function oncallSpotlight(blk,targetDate,rid,rname,blockStart,blockEnd,anchorEl){
     if(isOncallEditor()){
       const ref=ocRewardRef(blk,ocAY()),rec=mmBlockRecord(rid,ref.blk,ref.ay);
       if(rec)html+="<div class='oc-dp-line"+(rec.full?" oc-dp-less":"")+"' style='"+(rec.full?"":"color:rgba(254,251,243,.78);")+"margin-bottom:4px;'>Morning Meeting Blk "+ref.blk+": "+mmRecordLabel(rec)+(rec.full&&rec.done?" \u2014 full":"")+"</div>";
+      const ro=ocRotationOf(rid,blk);
+      if(ro.status!=="none")html+="<div class='oc-dp-line"+(ro.status==="in"?"":" oc-dp-warn")+"' style='"+(ro.status==="in"?"color:rgba(254,251,243,.78);":"")+"margin-bottom:4px;'>Rotation: "+ro.rots.join(" / ")+(ro.status==="own"?" \u2014 own on-call, out of the pool":ro.status==="away"?" \u2014 away this block":ocRotNote(ro)?" ("+ocRotNote(ro)+")":"")+"</div>";
     }
   }
   lines.forEach(l=>{html+="<div class='oc-dp-line "+(l.type==="leave"?"oc-dp-leave":"oc-dp-warn")+"'>"+(l.type==="leave"?"\uD83C\uDF34 ":"\u26A0 ")+l.text+"</div>";});
@@ -3893,6 +3918,67 @@ function mmRecordLabel(r){
   const parts=[r.p+"/"+r.taken+" present"];
   if(r.l)parts.push(r.l+" late");if(r.a)parts.push(r.a+" absent");if(r.e)parts.push(r.e+" excused");if(r.o)parts.push(r.o+" away");
   return parts.join(" · ")+(r.done?"":" so far");
+}
+// ── Who can take on-call this block ──────────────────────────────────────────
+// Read from the rota of the year on screen: the live year, or next year's published blocks.
+// A resident whose every working rotation of the block carries its own on-call
+// (ROT_OWN_ONCALL) is "own": covered there, out of the pool. Whole-block leave is "away".
+// A half-block leave, or a block split between an own-on-call rotation and a pool one, keeps
+// the resident in the pool with a note. No rota row yet is "none".
+function ocRotaIdx(){const y=ocAY();if(y===CURRENT_ACADEMIC_YEAR)return{map:FULL_ROTA,meta:ROTA_LEAVE_META,segs:ROTA_SEGS};if(y===CURRENT_ACADEMIC_YEAR+1)return NEXT_ROTA;return null;}
+function ocRotationOf(rid,blk){
+  const idx=ocRotaIdx();if(!idx)return{status:"none",rots:[],own:[],leaveWeeks:0};
+  const b=String(blk);
+  const segs=((idx.segs||{})[rid]||{})[b]||[];
+  const one=((idx.map||{})[rid]||{})[b];
+  const rots=segs.length?segs.map(s=>s.rot).filter(Boolean):(one?[one]:[]);
+  const m=((idx.meta||{})[rid]||{})[b];
+  const leaveWeeks=segs.reduce((n,s)=>n+(s.leaveWeeks||0),0)||(m?m.weeks:0);
+  if(!rots.length)return{status:"none",rots,own:[],leaveWeeks};
+  const work=rots.filter(r=>ROT_AWAY.indexOf(r)<0);
+  if(!work.length)return{status:"away",rots,own:[],leaveWeeks};
+  const own=work.filter(r=>ROT_OWN_ONCALL.has(r));
+  return{status:own.length===work.length?"own":"in",rots,own,leaveWeeks,partial:own.length>0&&own.length<work.length};
+}
+// The short note shown beside a name: what keeps them out, or shortens their block.
+function ocRotNote(a){
+  if(a.status==="own")return a.own.join(" / ");
+  if(a.status==="away")return a.rots.join(" / ");
+  const bits=[];
+  if(a.partial)bits.push(a.own.join(" / ")+" part of block");
+  if(a.leaveWeeks)bits.push(a.leaveWeeks+" wk leave");
+  return bits.join(" \u00b7 ");
+}
+function ocAvailability(blk){return sortByLevel(ocRoster()).map(r=>Object.assign({res:r},ocRotationOf(r.id,blk)));}
+// The strip above the builder grid. Schedulers only; it folds away with one click and stays
+// folded for the session.
+function renderOncallAvailStrip(blk){
+  if(!canEditOncall())return null;
+  const av=ocAvailability(blk);
+  if(!av.length)return null;
+  const pool=av.filter(a=>a.status==="in"),own=av.filter(a=>a.status==="own"),away=av.filter(a=>a.status==="away"),none=av.filter(a=>a.status==="none");
+  if(none.length===av.length)return el("div",{cls:"alert-yellow",st:{marginBottom:"16px",fontSize:".8rem"}},
+    "No rota for Block "+blk+" of "+ocAYLabel(ocAY())+" yet, so who can take on-call cannot be worked out. Once the block is published in the rota builder it appears here.");
+  const open=STATE.ocAvailOpen!==false;
+  const nm=a=>el("span",null,dname(a.res.name),ocRotNote(a)?el("i",null," ("+ocRotNote(a)+")"):null);
+  const join=(arr,f)=>arr.flatMap((a,i)=>i?[" \u00b7 ",f(a)]:[f(a)]);
+  const levels=["R4","R3","R2","R1"].map(lv=>{const g=pool.filter(a=>a.res.level===lv);return g.length?el("div",{cls:"oc-avail-lv"},el("span",null,lv),el("span",null,...join(g,nm))):null;});
+  // Out of the pool, grouped under the rotation that covers them.
+  const byRot={};own.forEach(a=>{const k=a.own[0]||"?";(byRot[k]=byRot[k]||[]).push(a);});
+  const ownRows=Object.keys(byRot).sort().map(k=>el("div",{cls:"row"},el("span",{cls:"rot-badge",st:rotStyle(k)},ROT_ABBR[k]||k),el("span",null,...join(byRot[k],a=>el("span",null,dname(a.res.name))))));
+  return el("div",{cls:"oc-avail"},
+    el("div",{cls:"oc-avail-hd"},
+      el("b",null,"Available for on-call \u00b7 Block "+blk),
+      el("span",{cls:"n"},pool.length+" of "+(av.length-none.length)),
+      own.length?el("span",{cls:"sh",st:{fontSize:".78rem"}},own.length+" on a rotation with its own on-call"+(away.length?", "+away.length+" away":"")):(away.length?el("span",{cls:"sh",st:{fontSize:".78rem"}},away.length+" away"):null),
+      el("button",{cls:"sbtn ghost",st:{fontSize:".74rem",padding:"3px 10px"},onClick:()=>set({ocAvailOpen:!open})},open?"Hide":"Show")),
+    open?el("div",null,
+      ...levels,
+      own.length?el("div",{cls:"oc-avail-grp"},el("div",{cls:"t"},"Own on-call this block \u00b7 "+own.length),...ownRows):null,
+      away.length?el("div",{cls:"oc-avail-grp"},el("div",{cls:"t"},"Away \u00b7 "+away.length),el("div",{cls:"row"},...join(away,nm))):null,
+      none.length?el("div",{cls:"oc-avail-grp"},el("div",{cls:"t"},"No rota yet \u00b7 "+none.length),el("div",{cls:"row"},...join(none,a=>el("span",null,dname(a.res.name))))):null
+    ):null
+  );
 }
 // Pulls next year in on first look. ONCALL_PLAN_DATA stays null until then, which is also how
 // the toggle knows whether it still has to fetch.
@@ -14357,6 +14443,11 @@ function ctlListsView(){
           el("input",{type:"checkbox",...(r.mandatory?{checked:""}:{}),"aria-label":"Mandatory rotation",st:{width:"auto",margin:"0"},
             onChange:e=>ctlListSave("rotation_catalogue","name",r.name,{mandatory:!!e.target.checked},e.target.checked?r.name+" is now a mandatory rotation.":r.name+" is no longer mandatory.")}),
           "Mandatory"),
+        el("label",{title:"Residents on this rotation take their on-call there and leave the general on-call pool for the block",
+            st:{display:"flex",alignItems:"center",gap:"6px",fontSize:".8rem",fontWeight:"500",margin:"0 0 8px",cursor:"pointer"}},
+          el("input",{type:"checkbox",...(ROT_OWN_ONCALL.has(r.name)?{checked:""}:{}),"aria-label":"Own on-call",st:{width:"auto",margin:"0"},
+            onChange:e=>ctlListSave("rotation_catalogue","name",r.name,{own_oncall:!!e.target.checked},e.target.checked?r.name+" now carries its own on-call: residents on it leave the pool.":r.name+" no longer carries its own on-call.")}),
+          "Own on-call"),
         el("div",{st:{display:"flex",gap:"10px"}},
           numIn("Junior wks",r.junior_weeks||0,v=>ctlListSave("rotation_catalogue","name",r.name,{junior_weeks:v},"Saved.")),
           numIn("Senior wks",r.senior_weeks||0,v=>ctlListSave("rotation_catalogue","name",r.name,{senior_weeks:v},"Saved.")))),
@@ -17284,13 +17375,33 @@ function renderOncall(){
         clearLi.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;color:#9ca3af;border-bottom:1px solid #f3f4f6;";
         clearLi.onmousedown=ev=>{ev.preventDefault();commitOncallCell(null,null);};
         drop.appendChild(clearLi);
-        const sorted=sortByLevel(ocRoster());
+        // The pool first, in level order; then, under a divider, the residents the rota has on
+        // a rotation with its own on-call or away. They stay selectable: an exception is the
+        // scheduler's call, the list only says what the rota says.
+        const availD={};const rankD=s=>s==="in"||s==="none"?0:1;
+        const sorted=sortByLevel(ocRoster()).map(r=>{availD[r.id]=ocRotationOf(r.id,blk);return r;}).sort((a,b)=>rankD(availD[a.id].status)-rankD(availD[b.id].status));
         const matches=q?sorted.filter(r=>dname(r.name).toLowerCase().includes(q.toLowerCase())):sorted;
         const refD=ocRewardRef(blk,ocAY());
+        let dividerDone=false;
         matches.forEach(r=>{
+          const aD=availD[r.id],outD=rankD(aD.status)===1;
+          if(outD&&!dividerDone){
+            dividerDone=true;
+            const dv=document.createElement("li");
+            dv.textContent="Not in the pool this block";
+            dv.style.cssText="padding:6px 12px;font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9ca3af;background:#faf6f1;border-top:1px solid #f3f4f6;cursor:default;";
+            dv.onmousedown=ev=>ev.preventDefault();
+            drop.appendChild(dv);
+          }
           const li=document.createElement("li");
           li.textContent=dname(r.name)+" ("+r.level+")";
-          li.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;border-bottom:1px solid #f9fafb;";
+          li.style.cssText="padding:8px 12px;cursor:pointer;font-size:.82rem;border-bottom:1px solid #f9fafb;"+(outD?"color:#9ca3af;":"");
+          if(ocRotNote(aD)){
+            const rn=document.createElement("span");
+            rn.style.cssText="margin-left:7px;font-size:.7rem;font-weight:600;color:"+(outD?"#9ca3af":"#6a4c10")+";";
+            rn.textContent="\u00b7 "+ocRotNote(aD)+(aD.status==="own"?" (own on-call)":aD.status==="away"?" (away)":"");
+            li.appendChild(rn);
+          }
           const recD=mmBlockRecord(r.id,refD.blk,refD.ay),markedD=ocLessFor(blk,r.id).length>0;
           if(markedD||(recD&&recD.full)){
             const mm=document.createElement("span");
@@ -17413,6 +17524,17 @@ function renderOncall(){
           cell.appendChild(mb);
         }
       }
+      // Builder-only: an assignment to someone the rota says is covered elsewhere, or away.
+      if(res&&canEditOncall()){
+        const ro=ocRotationOf(res.id,blk);
+        if(ro.status==="own"||ro.status==="away"){
+          const rb=document.createElement("span");
+          rb.className="oc-rot-badge"+(ro.status==="away"?" away":"");
+          rb.textContent=(ro.status==="away"?"Away: ":"On ")+(ro.status==="own"?ro.own:ro.rots).map(k=>ROT_ABBR[k]||k).join("/");
+          rb.title=ro.status==="away"?"The rota has this resident away for Block "+blk+" ("+ro.rots.join(" / ")+")":"This resident takes on-call on "+ro.own.join(" / ")+" this block and is outside the general pool";
+          cell.appendChild(rb);
+        }
+      }
       if(entry.is_extra){
         const badge=document.createElement("span");
         badge.style.cssText="font-size:.63rem;background:#fde8e8;color:#b91c1c;border:1px solid #fca5a5;border-radius:4px;padding:1px 5px;display:inline-block;margin-top:2px;white-space:nowrap;";
@@ -17468,6 +17590,7 @@ function renderOncall(){
       clashes.length?el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},
         clashes.length+" assignment"+(clashes.length===1?"":"s")+" in this block fall on a date the resident asked to avoid \u2014 marked \u201cAsked off\u201d below. You can publish anyway."
       ):null,
+      renderOncallAvailStrip(blk),
       el("div",{st:{marginBottom:"16px",display:"flex",gap:"10px",flexWrap:"wrap"}},
         canEdit?el("button",{cls:"sbtn primary",onClick:()=>set({oncallEditDate:allDates[0]?.date||""})}, " Add / Edit Day"):null,
         canEdit?el("button",{cls:"sbtn",onClick:ocColsOpen,title:"Add, rename, reorder or retire the columns of the grid"},"Columns"):null,
