@@ -14443,7 +14443,12 @@ function ctlListsView(){
           el("input",{type:"checkbox",...(r.mandatory?{checked:""}:{}),"aria-label":"Mandatory rotation",st:{width:"auto",margin:"0"},
             onChange:e=>ctlListSave("rotation_catalogue","name",r.name,{mandatory:!!e.target.checked},e.target.checked?r.name+" is now a mandatory rotation.":r.name+" is no longer mandatory.")}),
           "Mandatory"),
-        el("label",{title:"Residents on this rotation take their on-call there and leave the general on-call pool for the block",
+        // Leave and Freeze are never in the pool: the on-call builder counts a whole block of them as
+        // "away" before it looks at this flag, so the box would only mislead.
+        ROT_AWAY.includes(r.name)
+          ?el("div",{title:"A whole block of "+r.name+" counts as away in the on-call builder: never in the pool, whatever this flag says",
+              st:{fontSize:".78rem",fontWeight:"500",margin:"0 0 8px",color:"#8f1832"}},"Away: never in the on-call pool")
+          :el("label",{title:"Residents on this rotation take their on-call there and leave the general on-call pool for the block",
             st:{display:"flex",alignItems:"center",gap:"6px",fontSize:".8rem",fontWeight:"500",margin:"0 0 8px",cursor:"pointer"}},
           el("input",{type:"checkbox",...(ROT_OWN_ONCALL.has(r.name)?{checked:""}:{}),"aria-label":"Own on-call",st:{width:"auto",margin:"0"},
             onChange:e=>ctlListSave("rotation_catalogue","name",r.name,{own_oncall:!!e.target.checked},e.target.checked?r.name+" now carries its own on-call: residents on it leave the pool.":r.name+" no longer carries its own on-call.")}),
