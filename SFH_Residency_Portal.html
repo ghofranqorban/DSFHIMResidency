@@ -17535,17 +17535,20 @@ function renderOncall(){
         pf.title="This resident asked not to be on call on "+fmtDate(date);
         cell.appendChild(pf);
       }
-      // Builder-only, like "Asked off": "Less on-call" under a name means this resident is
-      // due one on-call fewer this block — marked in the Less on-call list, or earned by a
-      // full Morning Meeting record in the block before. The record itself is in the tooltip.
-      if(res&&canEditOncall()){
-        const ref=ocRewardRef(blk,ocAY()),rec=mmBlockRecord(res.id,ref.blk,ref.ay);
-        const marked=ocLessFor(blk,res.id).length>0,earned=!!(rec&&rec.full);
+      // "★ Less on-call" is a recorded reward and shows to everyone, exactly like Extra shows a
+      // recorded penalty. The dashed form — earned by a full Morning Meeting record in the block
+      // before but not yet marked in the list — is the builder's alone, like "Asked off".
+      if(res){
+        const marked=ocLessFor(blk,res.id).length>0;
+        const ref=canEditOncall()?ocRewardRef(blk,ocAY()):null,rec=ref?mmBlockRecord(res.id,ref.blk,ref.ay):null;
+        const earned=!!(rec&&rec.full);
         if(marked||earned){
           const mb=document.createElement("span");
-          mb.className="oc-mm-badge"+(marked||rec.done?"":" sofar");
-          mb.textContent="\u2605 Less on-call"+(marked||rec.done?"":" \u00b7 so far");
-          mb.title=(marked?"Marked for one less on-call this block":"Due one less on-call this block")+(earned?" \u2014 present at every Morning Meeting of Block "+ref.blk+" ("+rec.p+"/"+rec.taken+(rec.done?")":" so far)"):"");
+          mb.className="oc-mm-badge"+(marked?"":" sofar");
+          mb.textContent="\u2605 Less on-call"+(marked?"":(rec.done?" \u00b7 not marked yet":" \u00b7 so far"));
+          mb.title=marked
+            ?"One less on-call this block (reward)"+(earned?" \u2014 present at every Morning Meeting of Block "+ref.blk+" ("+rec.p+"/"+rec.taken+")":"")
+            :"Due one less on-call: present at every Morning Meeting of Block "+ref.blk+" ("+rec.p+"/"+rec.taken+(rec.done?")":" so far)")+" \u2014 not marked in the Less on-call list yet";
           cell.appendChild(mb);
         }
       }

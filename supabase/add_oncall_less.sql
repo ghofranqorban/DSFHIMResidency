@@ -9,9 +9,10 @@
 -- not excused, not away. The portal shows that record to whoever builds the
 -- schedule; the tick itself is the scheduler's.
 --
--- Who reads: a resident reads their own rows; the PD, deputy, chief and anyone
--- holding the on-call privilege read all (oncall_can_edit(), from
--- add_oncall_prefs.sql). Who writes: the same schedulers.
+-- Who reads: everyone signed in. The mark shows under the resident's name on
+-- the published grid for all to see, exactly as the Extra mark does (the PD's
+-- decision, 30 Oct 2026). Who writes: the PD, deputy, chief and anyone holding
+-- the on-call privilege (oncall_can_edit(), from add_oncall_prefs.sql).
 --
 -- Run in the Supabase SQL Editor. Safe to re-run.
 -- ============================================================================
@@ -48,7 +49,7 @@ drop policy if exists oncall_less_delete on oncall_less;
 
 create policy oncall_less_read on oncall_less
   for select to authenticated
-  using ( resident_id = app_resident_id() or oncall_can_edit() );
+  using ( true );
 create policy oncall_less_insert on oncall_less
   for insert to authenticated
   with check ( oncall_can_edit() );
