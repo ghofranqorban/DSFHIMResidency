@@ -152,6 +152,18 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .oc-dp-less{color:#1d7a4f;font-weight:600;} .oc-hover-tip .oc-dp-less{color:#a7e3c0;}
 .oc-mm-badge{font-size:.63rem;font-weight:700;color:#1d5c43;background:rgba(42,122,90,.12);border:1px solid rgba(42,122,90,.35);border-radius:4px;padding:1px 5px;display:inline-block;margin-top:2px;white-space:nowrap;}
 .oc-mm-badge.sofar{background:transparent;color:#2a7a5a;font-weight:600;border-style:dashed;}
+.oc-mm-badge.extra{color:#8f1832;background:rgba(181,32,64,.1);border-color:rgba(181,32,64,.4);}
+.oc-mm-badge.extra.sofar{background:transparent;color:#a94e2c;}
+.oc-less-rec.bad{color:#8f1832;background:rgba(181,32,64,.08);border:1px solid rgba(181,32,64,.3);border-radius:999px;padding:2px 9px;}
+.oc-mark{display:inline-flex;border:1px solid rgba(31,26,18,.15);border-radius:999px;overflow:hidden;flex-shrink:0;}
+.oc-mark button{border:0;background:transparent;padding:4px 10px;font-size:.72rem;font-weight:700;cursor:pointer;color:rgba(31,26,18,.45);}
+.oc-mark button+button{border-left:1px solid rgba(31,26,18,.12);}
+.oc-mark button.on-less{background:#26523A;color:#FEFBF3;}
+.oc-mark button.on-extra{background:#8f1832;color:#FEFBF3;}
+.modal-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;}
+.modal-header .modal-title{margin:0;}
+.modal-close{background:none;border:0;font-size:1.5rem;line-height:1;cursor:pointer;color:rgba(31,26,18,.45);padding:0 4px;flex-shrink:0;}
+.modal-close:hover{color:#1F1A12;}
 .oc-less-row{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:8px;background:#F6EFE2;border:1px solid rgba(31,26,18,.08);}
 .oc-less-row input{width:16px;height:16px;cursor:pointer;accent-color:#26523A;flex-shrink:0;}
 .oc-less-row .nm{flex:1;font-weight:600;font-size:.84rem;color:#1F1A12;}
@@ -1919,7 +1931,7 @@ let AY_ROWS=[];
 // carry its own, in academic_years.rules (supabase/add_academic_year_rules.sql); anything a year does not
 // set falls back to the values below, which are the rules the portal has always used.
 const AY_RULES_DEFAULT={cap:5,r1LockedBlocks:[1,2],r3OnlyBlocks:[13],uncappedBlocks:[13],annualQuota:28,eduQuota:7,
-  gimSlots:{R1:6,R2:4,R3:4,R4:0},r4EarlyMax:7};
+  gimSlots:{R1:6,R2:4,R3:4,R4:0},r4EarlyMax:7,extraAbsences:5};
 function ayRules(ay){
   const D=AY_RULES_DEFAULT,row=AY_ROWS.find(r=>Number(r.ay)===ay),r=(row&&row.rules&&typeof row.rules==="object")?row.rules:{};
   const num=(v,d,lo,hi)=>{const n=Number(v);return Number.isFinite(n)&&n>=lo&&n<=hi?Math.round(n):d;};
@@ -1933,7 +1945,8 @@ function ayRules(ay){
     annualQuota:num(r.annualQuota,D.annualQuota,0,365),
     eduQuota:num(r.eduQuota,D.eduQuota,0,365),
     gimSlots:{R1:num(g.R1,D.gimSlots.R1,0,13),R2:num(g.R2,D.gimSlots.R2,0,13),R3:num(g.R3,D.gimSlots.R3,0,13),R4:num(g.R4,D.gimSlots.R4,0,13)},
-    r4EarlyMax:num(r.r4EarlyMax,D.r4EarlyMax,1,13)
+    r4EarlyMax:num(r.r4EarlyMax,D.r4EarlyMax,1,13),
+    extraAbsences:num(r.extraAbsences,D.extraAbsences,0,60)
   };
 }
 function lpCap(){return ayRules(LP_AY).cap;}
@@ -3729,6 +3742,7 @@ function oncallSpotlight(blk,targetDate,rid,rname,blockStart,blockEnd,anchorEl){
   html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.78);margin-bottom:4px;'>"+c.block.wd+" weekday \u00b7 "+c.block.we+" weekend"+(c.block.ctu?" \u00b7 "+c.block.ctu+" CTU daycover":"")+"</div>";
   if(rid){
     if(ocLessFor(blk,rid).length)html+="<div class='oc-dp-line oc-dp-less'>\u2605 One less on-call this block (reward)</div>";
+    if(ocExtraDueFor(blk,rid).length)html+="<div class='oc-dp-line oc-dp-warn'>\u2691 One extra on-call due this block (penalty)</div>";
     // The attendance line is the scheduler's: it is what earns the reward. A resident
     // hovering their own name gets their counts and reward, not the record behind it.
     if(isOncallEditor()){
@@ -3862,7 +3876,13 @@ async function loadOncallPrefsStatus(ay){
 // keyed by year, block and resident. Residents read their own rows, schedulers read all.
 let ONCALL_LESS=[],ONCALL_LESS_PLAN=null;
 function ocLess(){const y=ocAY();if(y===CURRENT_ACADEMIC_YEAR)return ONCALL_LESS;if(y>CURRENT_ACADEMIC_YEAR)return ONCALL_LESS_PLAN||[];return(ONCALL_PAST[y]&&ONCALL_PAST[y].less)||[];}
-function ocLessFor(blk,rid){return ocLess().filter(r=>r.resident_id===rid&&(blk==null||r.block_number===blk));}
+// Rows carry a kind: "less" (reward) or "extra" (penalty, oncall_less.kind, add_oncall_extra_due.sql).
+// Rows written before the column existed have none and are rewards.
+function ocKind(r){return r.kind==="extra"?"extra":"less";}
+function ocLessFor(blk,rid){return ocLess().filter(r=>r.resident_id===rid&&ocKind(r)==="less"&&(blk==null||r.block_number===blk));}
+function ocExtraDueFor(blk,rid){return ocLess().filter(r=>r.resident_id===rid&&ocKind(r)==="extra"&&(blk==null||r.block_number===blk));}
+// The absence bar for a penalty, from the rules of the year being built.
+function ocExtraAbsences(ay){return ayRules(ay).extraAbsences;}
 async function loadOncallLess(ay){
   const yr=ay==null?CURRENT_ACADEMIC_YEAR:ay;
   const{data,error}=await sb.from("oncall_less").select("*").eq("academic_year",yr).order("id");
@@ -3871,15 +3891,21 @@ async function loadOncallLess(ay){
   else if(yr>CURRENT_ACADEMIC_YEAR)ONCALL_LESS_PLAN=data||[];
   else ONCALL_PAST[yr]=Object.assign(ONCALL_PAST[yr]||{},{less:data||[]});
 }
-// Replaces the block's marks with `rows` ({resident_id, reason}): the modal saves the whole
-// list, not a diff, the same way a day's assignments are saved.
+// Replaces the block's marks with `rows` ({resident_id, kind, reason}): the modal saves the
+// whole list, not a diff, the same way a day's assignments are saved. If the kind column is
+// not there yet, rewards still save and a penalty is refused with a message naming the SQL.
 async function saveOncallLess(blk,rows){
   if(ocIsPast()){showToast("This year is closed and cannot be changed.");return false;}
   const yr=ocAY();
   const{error:de}=await sb.from("oncall_less").delete().eq("academic_year",yr).eq("block_number",blk);
   if(de){showToast("Could not save: "+de.message);return false;}
   if(rows.length){
-    const{error:ie}=await sb.from("oncall_less").insert(rows.map(r=>({academic_year:yr,block_number:blk,resident_id:r.resident_id,reason:r.reason||null,created_by:STATE.user?.profileId||null})));
+    const payload=rows.map(r=>({academic_year:yr,block_number:blk,resident_id:r.resident_id,kind:r.kind==="extra"?"extra":"less",reason:r.reason||null,created_by:STATE.user?.profileId||null}));
+    let{error:ie}=await sb.from("oncall_less").insert(payload);
+    if(ie&&/kind/.test(ie.message)){
+      if(payload.some(p=>p.kind==="extra")){showToast("Extra on-call marks need supabase/add_oncall_extra_due.sql to be run first. Nothing was saved.");await loadOncallLess(yr);return false;}
+      ({error:ie}=await sb.from("oncall_less").insert(payload.map(p=>{const q=Object.assign({},p);delete q.kind;return q;})));
+    }
     if(ie){showToast("Could not save: "+ie.message);return false;}
   }
   await loadOncallLess(yr);
@@ -14273,11 +14299,16 @@ function ctlRulesView(){
       el("div",{st:{display:"flex",gap:"22px",flexWrap:"wrap"}},
         num("R4 first elective and clinic by block","The latest block allowed",x=>x.r4EarlyMax,(x,v)=>{x.r4EarlyMax=v;},1,13))),
     el("div",{cls:"card",st:{marginBottom:"18px"}},
+      el("div",{cls:"card-title"},"On-call rewards and penalties"),
+      el("p",{cls:"sh",st:{fontSize:".8rem",marginBottom:"12px",maxWidth:"72ch"}},"Read from the block before the one being built. Present at every Morning Meeting earns one less on-call; more than the number of absences below earns one extra. The builder lists the candidates, the tick is the scheduler's."),
+      el("div",{st:{display:"flex",gap:"22px",flexWrap:"wrap"}},
+        num("Absences for an extra on-call","Morning Meeting absences, more than this many; late and excused do not count",x=>x.extraAbsences,(x,v)=>{x.extraAbsences=v;},0,60))),
+    el("div",{cls:"card",st:{marginBottom:"18px"}},
       el("div",{cls:"card-title"},"In effect after saving"),
       el("p",{cls:"sh",st:{fontSize:".8rem",lineHeight:"1.7",maxWidth:"72ch"}},
         "R1s cannot pick blocks: "+list(d.r1LockedBlocks)+". Only R3s can pick blocks: "+list(d.r3OnlyBlocks)+". No cap on blocks: "+list(d.uncappedBlocks)+
         ". Otherwise "+d.cap+" people per half-block. Annual leave "+d.annualQuota+" days, educational "+d.eduQuota+". GIM slots: R1 "+d.gimSlots.R1+", R2 "+d.gimSlots.R2+", R3 "+d.gimSlots.R3+", R4 "+d.gimSlots.R4+
-        ". An R4's first elective and clinic must be in blocks 1 to "+d.r4EarlyMax+"."),
+        ". An R4's first elective and clinic must be in blocks 1 to "+d.r4EarlyMax+". More than "+d.extraAbsences+" Morning Meeting absences in a block earn an extra on-call in the next."),
       el("p",{cls:"sh",st:{fontSize:".74rem",maxWidth:"72ch",marginTop:"6px"}},"Choices residents have already saved are kept. The new rules apply to new picks and to the PD views.")),
     el("div",{st:{display:"flex",gap:"10px"}},
       el("button",{cls:"sbtn primary",st:{opacity:dirty?"1":".5"},onClick:()=>{
@@ -17011,52 +17042,67 @@ let _ocLessSel=null;
 function renderOncallLessModal(){
   if(!STATE.oncallLessOpen)return null;
   const blk=STATE.oncallBlock||CURRENT_PERIOD,yr=ocAY();
-  const ref=ocRewardRef(blk,yr);
+  const ref=ocRewardRef(blk,yr),bar=ocExtraAbsences(yr);
   const current=ocLess().filter(r=>r.block_number===blk);
-  if(!_ocLessSel)_ocLessSel=new Set(current.map(r=>r.resident_id));
+  // One mark per resident: "less" or "extra". A resident cannot hold both.
+  if(!_ocLessSel){_ocLessSel={};current.forEach(r=>{_ocLessSel[r.resident_id]=ocKind(r);});}
   function close(){_ocLessSel=null;set({oncallLessOpen:false});}
   const roster=sortByLevel(ocRoster());
   current.forEach(r=>{if(!roster.some(x=>x.id===r.resident_id)){const off=anyResById(r.resident_id);if(off)roster.unshift(off);}});
   const recs={};roster.forEach(r=>{recs[r.id]=mmBlockRecord(r.id,ref.blk,ref.ay);});
   const fullIds=roster.filter(r=>recs[r.id]&&recs[r.id].full).map(r=>r.id);
-  const refDone=fullIds.length?recs[fullIds[0]].done:true;
+  const owedIds=roster.filter(r=>recs[r.id]&&recs[r.id].a>bar).map(r=>r.id);
+  const anyRec=roster.find(r=>recs[r.id]&&recs[r.id].taken);
+  const refDone=anyRec?recs[anyRec.id].done:true;
   function recEl(r){
     const rec=recs[r.id];
     if(rec&&rec.full)return el("span",{cls:"oc-less-rec full"},rec.p+"/"+rec.taken+" present",rec.done?null:el("span",{cls:"sf"}," so far"));
+    if(rec&&rec.a>bar)return el("span",{cls:"oc-less-rec bad"},rec.a+" absent of "+rec.taken,rec.done?null:el("span",{cls:"sf"}," so far"));
     return el("span",{cls:"oc-less-rec"},mmRecordLabel(rec));
   }
-  function updateCount(){const c=document.getElementById("oc_less_count");if(c)c.textContent=_ocLessSel.size?_ocLessSel.size+" resident"+(_ocLessSel.size===1?"":"s")+" marked":"No one marked";}
+  const counts=()=>{const v=Object.values(_ocLessSel);const l=v.filter(k=>k==="less").length,x=v.filter(k=>k==="extra").length;return(!l&&!x)?"No one marked":[l?l+" less":null,x?x+" extra":null].filter(Boolean).join(" \u00b7 ");};
+  function updateCount(){const c=document.getElementById("oc_less_count");if(c)c.textContent=counts();}
   function row(r){
-    const chk=document.createElement("input");chk.type="checkbox";chk.checked=_ocLessSel.has(r.id);
-    chk.onchange=()=>{chk.checked?_ocLessSel.add(r.id):_ocLessSel.delete(r.id);updateCount();};
-    return el("label",{cls:"oc-less-row"},chk,el("span",{cls:"nm"},dname(r.name),el("small",null,r.level)),recEl(r));
+    const cur=_ocLessSel[r.id]||null;
+    const bl=el("button",{type:"button",cls:cur==="less"?"on-less":"",title:"One less on-call this block"},"\u2605 Less");
+    const bx=el("button",{type:"button",cls:cur==="extra"?"on-extra":"",title:"One extra on-call due this block"},"\u2691 Extra");
+    const pick=k=>{if(_ocLessSel[r.id]===k)delete _ocLessSel[r.id];else _ocLessSel[r.id]=k;bl.className=_ocLessSel[r.id]==="less"?"on-less":"";bx.className=_ocLessSel[r.id]==="extra"?"on-extra":"";updateCount();};
+    bl.onclick=()=>pick("less");bx.onclick=()=>pick("extra");
+    return el("div",{cls:"oc-less-row"},el("span",{cls:"oc-mark"},bl,bx),el("span",{cls:"nm"},dname(r.name),el("small",null,r.level)),recEl(r));
   }
-  const fullRows=roster.filter(r=>fullIds.indexOf(r.id)>=0),otherRows=roster.filter(r=>fullIds.indexOf(r.id)<0);
+  const fullRows=roster.filter(r=>fullIds.indexOf(r.id)>=0);
+  const owedRows=roster.filter(r=>owedIds.indexOf(r.id)>=0&&fullIds.indexOf(r.id)<0);
+  const otherRows=roster.filter(r=>fullIds.indexOf(r.id)<0&&owedIds.indexOf(r.id)<0);
   async function save(){
     const btn=document.getElementById("oc_less_save");if(btn){btn.disabled=true;btn.textContent="Saving...";}
-    const rows=[..._ocLessSel].map(id=>({resident_id:id,reason:fullIds.indexOf(id)>=0?"Present at every Morning Meeting of Block "+ref.blk:null}));
+    const rows=Object.keys(_ocLessSel).map(Number).map(id=>({resident_id:id,kind:_ocLessSel[id],
+      reason:_ocLessSel[id]==="less"
+        ?(fullIds.indexOf(id)>=0?"Present at every Morning Meeting of Block "+ref.blk:null)
+        :(owedIds.indexOf(id)>=0?"Absent from "+recs[id].a+" Morning Meetings of Block "+ref.blk+" (more than "+bar+")":null)}));
     const ok=await saveOncallLess(blk,rows);
-    if(ok){showToast(rows.length?rows.length+" resident"+(rows.length===1?"":"s")+" marked for one less on-call in Block "+blk+".":"No less on-call marks in Block "+blk+".","success");close();}
+    if(ok){showToast(rows.length?counts()+" marked for Block "+blk+".":"No marks in Block "+blk+".","success");close();}
     else if(btn){btn.disabled=false;btn.textContent="Save";}
   }
+  const grp=(t,rows)=>rows.length?[el("div",{cls:"oc-less-grp"},t+" \u00b7 "+rows.length),el("div",{st:{display:"flex",flexDirection:"column",gap:"7px"}},...rows.map(row))]:[];
   return el("div",{cls:"modal-overlay",onClick:e=>{if(e.target===e.currentTarget)close();}},
-    el("div",{cls:"modal-card",st:{width:"600px",maxWidth:"100%"}},
+    el("div",{cls:"modal-card",st:{width:"640px",maxWidth:"100%"}},
       el("div",{cls:"modal-header"},
-        el("h3",{cls:"modal-title"},"Less on-call — Block "+blk),
-        el("button",{cls:"modal-close",onClick:close},"×")
+        el("h3",{cls:"modal-title"},"Less and extra on-call \u2014 Block "+blk),
+        el("button",{cls:"modal-close",onClick:close},"\u00d7")
       ),
       el("div",{cls:"modal-body"},
         el("p",{cls:"sh",st:{marginTop:"0",marginBottom:"14px",color:"#5C5345"}},
-          "One on-call fewer than the block average. The rule: present at every Morning Meeting of Block "+ref.blk+" — not late, not excused, not away. The mark shows on the hover card, in Statistics and on the resident's own page; it does not change the grid."),
-        !refDone?el("div",{cls:"alert-yellow",st:{fontSize:".8rem"}},"Block "+ref.blk+" is still running: a clean record so far is not yet a full one."):null,
+          "Read from Block "+ref.blk+". \u2605 Less: one on-call fewer than average, for a resident present at every Morning Meeting \u2014 not late, not excused, not away. \u2691 Extra: one on-call more, for more than "+bar+" absences (the bar is set in Control Centre > Leave and rules). The mark shows under the name in the grid for everyone, on the hover card, in Statistics and on the resident's own page. The extra shift itself is still flagged on the day you assign it."),
+        !refDone?el("div",{cls:"alert-yellow",st:{fontSize:".8rem"}},"Block "+ref.blk+" is still running: these records are not final."):null,
         el("div",{st:{display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}},
-          el("span",{id:"oc_less_count",st:{fontSize:".8rem",fontWeight:"600",color:"#26523A"}},_ocLessSel.size?_ocLessSel.size+" resident"+(_ocLessSel.size===1?"":"s")+" marked":"No one marked"),
-          fullIds.length?el("button",{cls:"sbtn ghost",st:{marginLeft:"auto",fontSize:".76rem"},onClick:()=>{fullIds.forEach(id=>_ocLessSel.add(id));set({});}},"Mark all "+fullIds.length+" with full attendance"):null
+          el("span",{id:"oc_less_count",st:{fontSize:".8rem",fontWeight:"600",color:"#26523A"}},counts()),
+          el("span",{st:{marginLeft:"auto",display:"flex",gap:"8px",flexWrap:"wrap"}},
+            fullIds.length?el("button",{cls:"sbtn ghost",st:{fontSize:".76rem"},onClick:()=>{fullIds.forEach(id=>{_ocLessSel[id]="less";});set({});}},"Mark all "+fullIds.length+" with full attendance"):null,
+            owedIds.length?el("button",{cls:"sbtn ghost",st:{fontSize:".76rem",color:"#8f1832"},onClick:()=>{owedIds.forEach(id=>{_ocLessSel[id]="extra";});set({});}},"Mark all "+owedIds.length+" over "+bar+" absences"):null)
         ),
-        fullRows.length?el("div",{cls:"oc-less-grp"},"Present at every Morning Meeting of Block "+ref.blk+" · "+fullRows.length):null,
-        fullRows.length?el("div",{st:{display:"flex",flexDirection:"column",gap:"7px"}},...fullRows.map(row)):null,
-        el("div",{cls:"oc-less-grp"},fullRows.length?"Everyone else":"No one has a full record for Block "+ref.blk),
-        el("div",{st:{display:"flex",flexDirection:"column",gap:"7px"}},...otherRows.map(row))
+        ...grp("Present at every Morning Meeting of Block "+ref.blk,fullRows),
+        ...grp("Absent from more than "+bar+" Morning Meetings of Block "+ref.blk,owedRows),
+        ...grp(fullRows.length||owedRows.length?"Everyone else":"Everyone \u00b7 no full records and no one over "+bar+" absences in Block "+ref.blk,otherRows)
       ),
       el("div",{cls:"modal-footer"},
         el("button",{cls:"sbtn",onClick:close},"Cancel"),
@@ -17538,17 +17584,26 @@ function renderOncall(){
       // "★ Less on-call" is a recorded reward and shows to everyone, exactly like Extra shows a
       // recorded penalty. The dashed form — earned by a full Morning Meeting record in the block
       // before but not yet marked in the list — is the builder's alone, like "Asked off".
+      // The red "⚑ Extra on-call due" is the penalty's twin: one on-call more this block,
+      // earned by more than N Morning Meeting absences. It does not touch the per-shift Extra
+      // flag, which still marks the one shift that is the penalty.
       if(res){
-        const marked=ocLessFor(blk,res.id).length>0;
+        const markedLess=ocLessFor(blk,res.id).length>0,markedExtra=ocExtraDueFor(blk,res.id).length>0;
         const ref=canEditOncall()?ocRewardRef(blk,ocAY()):null,rec=ref?mmBlockRecord(res.id,ref.blk,ref.ay):null;
-        const earned=!!(rec&&rec.full);
-        if(marked||earned){
+        const bar=ref?ocExtraAbsences(ocAY()):0;
+        const earned=!!(rec&&rec.full),owed=!!(rec&&rec.a>bar);
+        if(markedLess||markedExtra||earned||owed){
           const mb=document.createElement("span");
-          mb.className="oc-mm-badge"+(marked?"":" sofar");
-          mb.textContent="\u2605 Less on-call"+(marked?"":(rec.done?" \u00b7 not marked yet":" \u00b7 so far"));
-          mb.title=marked
+          const marked=markedLess||markedExtra,penalty=markedExtra||(!markedLess&&owed);
+          mb.className="oc-mm-badge"+(penalty?" extra":"")+(marked?"":" sofar");
+          const hint=marked?"":(rec.done?" \u00b7 not marked yet":" \u00b7 so far");
+          mb.textContent=(penalty?"\u2691 Extra on-call due":"\u2605 Less on-call")+hint;
+          if(penalty)mb.title=markedExtra
+            ?"One extra on-call due this block (penalty)"+(owed?" \u2014 absent from "+rec.a+" Morning Meetings of Block "+ref.blk:"")
+            :"Due one extra on-call: absent from "+rec.a+" Morning Meetings of Block "+ref.blk+(rec.done?"":" so far")+" (more than "+bar+") \u2014 not marked in the list yet";
+          else mb.title=markedLess
             ?"One less on-call this block (reward)"+(earned?" \u2014 present at every Morning Meeting of Block "+ref.blk+" ("+rec.p+"/"+rec.taken+")":"")
-            :"Due one less on-call: present at every Morning Meeting of Block "+ref.blk+" ("+rec.p+"/"+rec.taken+(rec.done?")":" so far)")+" \u2014 not marked in the Less on-call list yet";
+            :"Due one less on-call: present at every Morning Meeting of Block "+ref.blk+" ("+rec.p+"/"+rec.taken+(rec.done?")":" so far)")+" \u2014 not marked in the list yet";
           cell.appendChild(mb);
         }
       }
@@ -17622,7 +17677,7 @@ function renderOncall(){
       el("div",{st:{marginBottom:"16px",display:"flex",gap:"10px",flexWrap:"wrap"}},
         canEdit?el("button",{cls:"sbtn primary",onClick:()=>set({oncallEditDate:allDates[0]?.date||""})}, " Add / Edit Day"):null,
         canEdit?el("button",{cls:"sbtn",onClick:ocColsOpen,title:"Add, rename, reorder or retire the columns of the grid"},"Columns"):null,
-        canEdit?el("button",{cls:"sbtn",onClick:()=>{_ocLessSel=null;set({oncallLessOpen:true});},title:"Who gets one on-call fewer than average this block"},"Less on-call"+(ocLess().filter(r=>r.block_number===blk).length?" \u00b7 "+ocLess().filter(r=>r.block_number===blk).length:"")):null,
+        canEdit?el("button",{cls:"sbtn",onClick:()=>{_ocLessSel=null;set({oncallLessOpen:true});},title:"Who gets one on-call fewer, or one more, than average this block"},"Less / Extra on-call"+(ocLess().filter(r=>r.block_number===blk).length?" \u00b7 "+ocLess().filter(r=>r.block_number===blk).length:"")):null,
         el("button",{cls:"sbtn",onClick:()=>set({oncallFullscreen:true})},"⛶ Full Screen"),
         hasData?el("button",{cls:"sbtn ghost",st:{fontSize:".78rem"},onClick:()=>exportOncall(blk)},"Export Excel"):null
       ),
@@ -17706,7 +17761,14 @@ function renderOncall(){
       );
     }
     const myLess=ocLessFor(null,u.rid).slice().sort((a,b)=>a.block_number-b.block_number);
+    const myExtra=ocExtraDueFor(null,u.rid).slice().sort((a,b)=>a.block_number-b.block_number);
     return el("div",null,
+      myExtra.length?el("div",{cls:"alert-red",st:{marginBottom:"16px"}},
+        el("div",{st:{fontWeight:"700",marginBottom:myExtra.length>1?"4px":"0"}},"\u2691 "+(myExtra.length===1?"One extra on-call due in Block "+myExtra[0].block_number:"One extra on-call due in "+myExtra.length+" blocks")),
+        ...(myExtra.length===1
+          ?(myExtra[0].reason?[el("div",{st:{fontSize:".8rem",opacity:".85"}},myExtra[0].reason)]:[])
+          :myExtra.map(m=>el("div",{st:{fontSize:".8rem",opacity:".85"}},"Block "+m.block_number+(m.reason?" \u2014 "+m.reason:""))))
+      ):null,
       myLess.length?el("div",{cls:"alert-green",st:{marginBottom:"16px"}},
         el("div",{st:{fontWeight:"700",marginBottom:myLess.length>1?"4px":"0"}},"\u2605 "+(myLess.length===1?"One less on-call in Block "+myLess[0].block_number:"One less on-call in "+myLess.length+" blocks")),
         ...(myLess.length===1
@@ -17945,8 +18007,9 @@ function renderOncall(){
         aReg:aR.length,aWe:weOf(aR),aCv:cvOf(aR),aWd:aR.length-weOf(aR)-cvOf(aR),
         aExtra:allEntries.filter(e=>e.resident_id===r.id&&e.is_extra).length,
         bLess:ocLessFor(blk,r.id).length,aLess:ocLessFor(null,r.id).length,
+        bDue:ocExtraDueFor(blk,r.id).length,aDue:ocExtraDueFor(null,r.id).length,
       };
-    }).filter(s=>s.bReg+s.bExtra+s.aReg+s.aExtra+s.bLess+s.aLess>0)
+    }).filter(s=>s.bReg+s.bExtra+s.aReg+s.aExtra+s.bLess+s.aLess+s.bDue+s.aDue>0)
        .sort((a,b)=>(_LVL_ORD[a.res.level]??9)-(_LVL_ORD[b.res.level]??9)||a.res.name.localeCompare(b.res.name));
     const totBReg=blkEntries.filter(e=>!e.is_extra).length;
     const totBExtra=blkEntries.filter(e=>e.is_extra).length;
@@ -17954,7 +18017,8 @@ function renderOncall(){
     const totAExtra=allEntries.filter(e=>e.is_extra).length;
     const totBWe=weOf(regOf(blkEntries)),totAWe=weOf(regOf(allEntries));
     const totBCv=cvOf(regOf(blkEntries)),totACv=cvOf(regOf(allEntries));
-    const totBLess=ocLess().filter(r=>r.block_number===blk).length,totALess=ocLess().length;
+    const totBLess=ocLess().filter(r=>r.block_number===blk&&ocKind(r)==="less").length,totALess=ocLess().filter(r=>ocKind(r)==="less").length;
+    const totBDue=ocLess().filter(r=>r.block_number===blk&&ocKind(r)==="extra").length,totADue=ocLess().filter(r=>ocKind(r)==="extra").length;
     function statCard(val,label,col){
       return el("div",{cls:"card",st:{flex:"1",minWidth:"150px",textAlign:"center",padding:"18px 12px"}},
         el("div",{st:{fontSize:"2rem",fontWeight:"800",color:col}},val),
@@ -17968,7 +18032,8 @@ function renderOncall(){
         statCard(totBWe,"Weekend — Block "+blk,"#1a4a7a"),
         statCard(totBCv,"CTU Daycover — Block "+blk,"#1a4a7a"),
         statCard(totBExtra,"Extra (Penalty) — Block "+blk,"#b91c1c"),
-        statCard(totBLess,"Less (Reward) — Block "+blk,"#26523A")
+        statCard(totBLess,"Less (Reward) — Block "+blk,"#26523A"),
+        statCard(totBDue,"Extra due — Block "+blk,"#8f1832")
       ),
       el("div",{st:{display:"flex",gap:"14px",flexWrap:"wrap",marginBottom:"20px"}},
         statCard(totAReg,"Regular — All Blocks","#1a4a7a"),
@@ -17976,7 +18041,8 @@ function renderOncall(){
         statCard(totAWe,"Weekend — All Blocks","#1a4a7a"),
         statCard(totACv,"CTU Daycover — All Blocks","#1a4a7a"),
         statCard(totAExtra,"Extra — All Blocks","#b91c1c"),
-        statCard(totALess,"Less — All Blocks","#26523A")
+        statCard(totALess,"Less — All Blocks","#26523A"),
+        statCard(totADue,"Extra due — All Blocks","#8f1832")
       ),
       !resStats.length?el("p",{cls:"sh"},"No on-call data to analyze yet."):
       el("div",{cls:"card"},
@@ -17986,8 +18052,8 @@ function renderOncall(){
             el("thead",null,
               el("tr",null,
                 el("th",null,"Resident"),el("th",null,"Level"),
-                el("th",{st:{textAlign:"center"}},"Blk "+blk+" Regular"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Weekday"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Weekend"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" CTU Daycover"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Extra"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Less"),
-                el("th",{st:{textAlign:"center"}},"All Regular"),el("th",{st:{textAlign:"center"}},"All Weekday"),el("th",{st:{textAlign:"center"}},"All Weekend"),el("th",{st:{textAlign:"center"}},"All CTU Daycover"),el("th",{st:{textAlign:"center"}},"All Extra"),el("th",{st:{textAlign:"center"}},"All Less")
+                el("th",{st:{textAlign:"center"}},"Blk "+blk+" Regular"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Weekday"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Weekend"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" CTU Daycover"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Extra"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Less"),el("th",{st:{textAlign:"center"}},"Blk "+blk+" Extra due"),
+                el("th",{st:{textAlign:"center"}},"All Regular"),el("th",{st:{textAlign:"center"}},"All Weekday"),el("th",{st:{textAlign:"center"}},"All Weekend"),el("th",{st:{textAlign:"center"}},"All CTU Daycover"),el("th",{st:{textAlign:"center"}},"All Extra"),el("th",{st:{textAlign:"center"}},"All Less"),el("th",{st:{textAlign:"center"}},"All Extra due")
               )
             ),
             el("tbody",null,
@@ -18000,12 +18066,14 @@ function renderOncall(){
                 el("td",{st:{textAlign:"center"}},s.bCv||"—"),
                 el("td",{st:{textAlign:"center",fontWeight:"700",color:s.bExtra?"#b91c1c":""}},s.bExtra||"—"),
                 el("td",{st:{textAlign:"center",fontWeight:"700",color:s.bLess?"#26523A":""}},s.bLess||"—"),
+                el("td",{st:{textAlign:"center",fontWeight:"700",color:s.bDue?"#8f1832":""}},s.bDue||"—"),
                 el("td",{st:{textAlign:"center",fontWeight:"700"}},s.aReg||"—"),
                 el("td",{st:{textAlign:"center"}},s.aWd||"—"),
                 el("td",{st:{textAlign:"center"}},s.aWe||"—"),
                 el("td",{st:{textAlign:"center"}},s.aCv||"—"),
                 el("td",{st:{textAlign:"center",color:s.aExtra?"#b91c1c":""}},s.aExtra||"—"),
-                el("td",{st:{textAlign:"center",color:s.aLess?"#26523A":""}},s.aLess||"—")
+                el("td",{st:{textAlign:"center",color:s.aLess?"#26523A":""}},s.aLess||"—"),
+                el("td",{st:{textAlign:"center",color:s.aDue?"#8f1832":""}},s.aDue||"—")
               ))
             )
           )
