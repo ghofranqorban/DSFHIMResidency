@@ -3911,17 +3911,27 @@ async function loadOncallLess(ay){
 async function saveOncallLess(blk,rows){
   if(ocIsPast()){showToast("This year is closed and cannot be changed.");return false;}
   const yr=ocAY();
-  const{error:de}=await sb.from("oncall_less").delete().eq("academic_year",yr).eq("block_number",blk);
-  if(de){showToast("Could not save: "+de.message);return false;}
+  // Write first, clear second: an upsert of the new marks, then removal of the block's rows
+  // that are no longer in the list. A refused write therefore leaves the saved marks as they
+  // were, where "delete everything, then insert" would have wiped them.
+  const refused=e=>/row-level security/i.test(e.message)
+    ?"Your account is not allowed to change the on-call marks. The PD, deputy PD, chief and holders of the on-call privilege can; nothing was changed."
+    :"Could not save: "+e.message;
+  const ids=rows.map(r=>r.resident_id);
   if(rows.length){
     const payload=rows.map(r=>({academic_year:yr,block_number:blk,resident_id:r.resident_id,kind:r.kind==="extra"?"extra":"less",reason:r.reason||null,created_by:STATE.user?.profileId||null}));
-    let{error:ie}=await sb.from("oncall_less").insert(payload);
+    const up=o=>sb.from("oncall_less").upsert(o,{onConflict:"academic_year,block_number,resident_id"});
+    let{error:ie}=await up(payload);
     if(ie&&/kind/.test(ie.message)){
       if(payload.some(p=>p.kind==="extra")){showToast("Extra on-call marks need supabase/add_oncall_extra_due.sql to be run first. Nothing was saved.");await loadOncallLess(yr);return false;}
-      ({error:ie}=await sb.from("oncall_less").insert(payload.map(p=>{const q=Object.assign({},p);delete q.kind;return q;})));
+      ({error:ie}=await up(payload.map(p=>{const q=Object.assign({},p);delete q.kind;return q;})));
     }
-    if(ie){showToast("Could not save: "+ie.message);return false;}
+    if(ie){showToast(refused(ie));await loadOncallLess(yr);return false;}
   }
+  let q=sb.from("oncall_less").delete().eq("academic_year",yr).eq("block_number",blk);
+  if(ids.length)q=q.not("resident_id","in","("+ids.join(",")+")");
+  const{error:de}=await q;
+  if(de){showToast(refused(de));await loadOncallLess(yr);return false;}
   await loadOncallLess(yr);
   return true;
 }
