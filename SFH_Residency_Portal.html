@@ -17681,25 +17681,23 @@ function renderOncall(){
         e.is_extra?el("span",{st:{fontSize:".7rem",background:"#fde8e8",color:"#b91c1c",border:"1px solid #fca5a5",borderRadius:"6px",padding:"2px 8px",whiteSpace:"nowrap"}},"Extra Penalty \u2691"):null
       );
     }
-    // A mentor: one card per mentee, their published on-calls from today on, with the count for
-    // the block on screen. Reads only what the resident themself can see (published rows).
+    // A mentor: one card per mentee with every published on-call of the block on screen, past
+    // ones dimmed, the way the resident's own tab dims them. Follows the block pills, so the
+    // mentor reads one block at a time like the Schedule tab.
     if(!u.rid&&mentees.length){
       return el("div",null,
-        el("p",{cls:"sh",st:{marginBottom:"16px"}},"Your mentees' published on-calls, from today on. Their names are highlighted in the Schedule tab too."),
+        el("p",{cls:"sh",st:{marginBottom:"16px"}},"Your mentees' published on-calls in Block "+blk+". Their names are highlighted in the Schedule tab too."),
         ...mentees.map(r=>{
-          const ent=ocData().filter(e=>e.resident_id===r.id&&e.published).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date));
-          const up=ent.filter(e=>e.schedule_date>=todayStr);
-          const inBlk=ent.filter(e=>e.block_number===blk).length;
-          const shown=up.slice(0,6);
+          const ent=ocData().filter(e=>e.resident_id===r.id&&e.published&&e.block_number===blk).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date));
+          const up=ent.filter(e=>e.schedule_date>=todayStr).length;
           return el("div",{cls:"card",st:{marginBottom:"16px"}},
             el("div",{cls:"flex-gap",st:{marginBottom:"10px"}},
               avEl(r),
               el("div",{st:{flex:"1"}},
                 el("div",{cls:"name"},dname(r.name)),
-                el("div",{cls:"sub"},inBlk+" on-call"+(inBlk===1?"":"s")+" in Block "+blk+" \u00b7 "+up.length+" upcoming")),
+                el("div",{cls:"sub"},ent.length+" on-call"+(ent.length===1?"":"s")+" in Block "+blk+(ent.length&&!ocIsPast()?" \u00b7 "+up+" still to come":""))),
               levelBadge(r.level)),
-            shown.length?el("div",null,...shown.map(entryRow)):el("p",{cls:"sh",st:{margin:"0"}},"No upcoming on-calls published."),
-            up.length>shown.length?el("div",{cls:"sh",st:{fontSize:".76rem",marginTop:"8px"}},"and "+(up.length-shown.length)+" more this year"):null
+            ent.length?el("div",null,...ent.map(e=>{const row=entryRow(e);if(e.schedule_date<todayStr)row.style.opacity=".6";return row;})):el("p",{cls:"sh",st:{margin:"0"}},"No on-calls published for this block.")
           );
         })
       );
