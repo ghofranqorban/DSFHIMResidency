@@ -17394,14 +17394,12 @@ function renderOncallEditModal(){
             chk.style.cssText="width:16px;height:16px;cursor:pointer;accent-color:#c00;flex-shrink:0;";
             const selWrap=document.createElement("div");selWrap.style.cssText="flex:1;";
             selWrap.appendChild(sel);selWrap.appendChild(nameTxt);
-            // The per-shift Extra box names WHICH shift is the penalty, so it is offered only
-            // where a penalty exists: the chosen resident owes an extra on-call this block
-            // (the "Extra on-call" mark), or the shift is already flagged and may need unticking.
-            const xl=el("label",{title:"This shift is the extra on-call this resident owes",st:{display:"none",alignItems:"center",gap:"5px",cursor:"pointer",fontSize:".78rem",color:"#b91c1c",whiteSpace:"nowrap",paddingTop:"6px"}},
+            // Two independent ways to show a penalty, the PD's choice (30 Oct 2026): the
+            // per-block "Extra on-call" mark in the Less / Extra list, which reddens every
+            // on-call of that resident; or this box, which flags just this one shift as the
+            // extra one. The box is on every row, whether or not a mark exists.
+            const xl=el("label",{title:"Flag this one shift as an extra (penalty) on-call",st:{display:"flex",alignItems:"center",gap:"5px",cursor:"pointer",fontSize:".78rem",color:"#b91c1c",whiteSpace:"nowrap",paddingTop:"6px"}},
               chk,"Extra \u2691");
-            const showX=()=>{const rid=nameTxt.value.trim()?null:parseInt(sel.value,10);const owed=!!(rid&&ocExtraDueFor(blk,rid).length);xl.style.display=(owed||chk.checked)?"flex":"none";if(!owed&&!cur.isExtra)chk.checked=false;};
-            sel.addEventListener("change",showX);nameTxt.addEventListener("input",showX);chk.addEventListener("change",showX);
-            setTimeout(showX,0);
             return el("div",{st:{display:"flex",alignItems:"flex-start",gap:"10px",padding:"10px 12px",background:"#F6EFE2",borderRadius:"8px",border:"1px solid #e5e7eb"}},
               el("div",{st:{minWidth:"110px",fontWeight:"600",fontSize:".83rem",color:"#1F1A12",paddingTop:"6px"}},ocSlotFullLabel(s)),
               selWrap,
