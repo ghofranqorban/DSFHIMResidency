@@ -152,8 +152,8 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .oc-dp-less{color:#1d7a4f;font-weight:600;} .oc-hover-tip .oc-dp-less{color:#a7e3c0;}
 .oc-mm-badge{font-size:.63rem;font-weight:700;color:#1d5c43;background:rgba(42,122,90,.12);border:1px solid rgba(42,122,90,.35);border-radius:4px;padding:1px 5px;display:inline-block;margin-top:2px;white-space:nowrap;}
 .oc-mm-badge.sofar{background:transparent;color:#2a7a5a;font-weight:600;border-style:dashed;}
-.oc-mm-badge.extra{color:#8f1832;background:rgba(181,32,64,.1);border-color:rgba(181,32,64,.4);}
-.oc-mm-badge.extra.sofar{background:transparent;color:#a94e2c;}
+.oc-mm-badge.extra{color:#b91c1c;background:#fde8e8;border-color:#fca5a5;font-weight:600;}
+.oc-mm-badge.extra.sofar{background:transparent;color:#b91c1c;border-style:dashed;}
 .oc-less-rec.bad{color:#8f1832;background:rgba(181,32,64,.08);border:1px solid rgba(181,32,64,.3);border-radius:999px;padding:2px 9px;}
 .oc-mark{display:inline-flex;border:1px solid rgba(31,26,18,.15);border-radius:999px;overflow:hidden;flex-shrink:0;}
 .oc-mark button{border:0;background:transparent;padding:4px 10px;font-size:.72rem;font-weight:700;cursor:pointer;color:rgba(31,26,18,.45);}
@@ -3742,7 +3742,7 @@ function oncallSpotlight(blk,targetDate,rid,rname,blockStart,blockEnd,anchorEl){
   html+="<div class='oc-dp-line' style='color:rgba(254,251,243,.78);margin-bottom:4px;'>"+c.block.wd+" weekday \u00b7 "+c.block.we+" weekend"+(c.block.ctu?" \u00b7 "+c.block.ctu+" CTU daycover":"")+"</div>";
   if(rid){
     if(ocLessFor(blk,rid).length)html+="<div class='oc-dp-line oc-dp-less'>\u2605 One less on-call this block (reward)</div>";
-    if(ocExtraDueFor(blk,rid).length)html+="<div class='oc-dp-line oc-dp-warn'>\u2691 One extra on-call due this block (penalty)</div>";
+    if(ocExtraDueFor(blk,rid).length)html+="<div class='oc-dp-line oc-dp-warn'>One extra on-call this block \u2691 (penalty)</div>";
     // The attendance line is the scheduler's: it is what earns the reward. A resident
     // hovering their own name gets their counts and reward, not the record behind it.
     if(isOncallEditor()){
@@ -17065,7 +17065,7 @@ function renderOncallLessModal(){
   function row(r){
     const cur=_ocLessSel[r.id]||null;
     const bl=el("button",{type:"button",cls:cur==="less"?"on-less":"",title:"One less on-call this block"},"\u2605 Less");
-    const bx=el("button",{type:"button",cls:cur==="extra"?"on-extra":"",title:"One extra on-call due this block"},"\u2691 Extra");
+    const bx=el("button",{type:"button",cls:cur==="extra"?"on-extra":"",title:"One extra on-call due this block"},"Extra \u2691");
     const pick=k=>{if(_ocLessSel[r.id]===k)delete _ocLessSel[r.id];else _ocLessSel[r.id]=k;bl.className=_ocLessSel[r.id]==="less"?"on-less":"";bx.className=_ocLessSel[r.id]==="extra"?"on-extra":"";updateCount();};
     bl.onclick=()=>pick("less");bx.onclick=()=>pick("extra");
     return el("div",{cls:"oc-less-row"},el("span",{cls:"oc-mark"},bl,bx),el("span",{cls:"nm"},dname(r.name),el("small",null,r.level)),recEl(r));
@@ -17597,7 +17597,7 @@ function renderOncall(){
           const marked=markedLess||markedExtra,penalty=markedExtra||(!markedLess&&owed);
           mb.className="oc-mm-badge"+(penalty?" extra":"")+(marked?"":" sofar");
           const hint=marked?"":(rec.done?" \u00b7 not marked yet":" \u00b7 so far");
-          mb.textContent=(penalty?"\u2691 Extra on-call due":"\u2605 Less on-call")+hint;
+          mb.textContent=(penalty?"Extra on-call \u2691":"\u2605 Less on-call")+hint;
           if(penalty)mb.title=markedExtra
             ?"One extra on-call due this block (penalty)"+(owed?" \u2014 absent from "+rec.a+" Morning Meetings of Block "+ref.blk:"")
             :"Due one extra on-call: absent from "+rec.a+" Morning Meetings of Block "+ref.blk+(rec.done?"":" so far")+" (more than "+bar+") \u2014 not marked in the list yet";
@@ -17764,7 +17764,7 @@ function renderOncall(){
     const myExtra=ocExtraDueFor(null,u.rid).slice().sort((a,b)=>a.block_number-b.block_number);
     return el("div",null,
       myExtra.length?el("div",{cls:"alert-red",st:{marginBottom:"16px"}},
-        el("div",{st:{fontWeight:"700",marginBottom:myExtra.length>1?"4px":"0"}},"\u2691 "+(myExtra.length===1?"One extra on-call due in Block "+myExtra[0].block_number:"One extra on-call due in "+myExtra.length+" blocks")),
+        el("div",{st:{fontWeight:"700",marginBottom:myExtra.length>1?"4px":"0"}},(myExtra.length===1?"One extra on-call in Block "+myExtra[0].block_number:"One extra on-call in "+myExtra.length+" blocks")+" \u2691"),
         ...(myExtra.length===1
           ?(myExtra[0].reason?[el("div",{st:{fontSize:".8rem",opacity:".85"}},myExtra[0].reason)]:[])
           :myExtra.map(m=>el("div",{st:{fontSize:".8rem",opacity:".85"}},"Block "+m.block_number+(m.reason?" \u2014 "+m.reason:""))))
