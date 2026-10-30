@@ -5806,7 +5806,12 @@ function renderRotaBlock(resOverride){
 function renderRotaTimeline(){
   const u=STATE.user;
   const own=u&&u.role==="resident"&&!hasPriv(u.profileId,"edit_mm_attendance")&&!hasPriv(u.profileId,"edit_teach_attendance");
-  const vr=own?rotaRoster().filter(r=>r.id===u.rid):sortByLevel(rotaRoster());
+  // A mentor's picker holds their own mentees, as everywhere else a consultant picks a resident
+  // (visRes). The Block View and Full Table stay programme-wide: a consultant on service needs
+  // to see who is rotating with them. A consultant with no mentees keeps the whole list.
+  const mine=u&&u.role==="consultant"?getAccess(u.cid):null;
+  const vr=own?rotaRoster().filter(r=>r.id===u.rid)
+    :(mine&&mine.length?sortByLevel(rotaRoster().filter(r=>mine.includes(r.id))):sortByLevel(rotaRoster()));
   const rid=STATE.rotaTimeRes||(vr[0]?.id);
   const res=vr.find(r=>r.id==rid)||vr[0];
   if(!res)return el("div",null,"No residents available");
@@ -6272,8 +6277,19 @@ function personLabelEl(residentId,label){
   wrap.textContent=name;
   const myName=u?.rid?dname(resById(u.rid)?.name||""):"";
   const isSelf=(residentId&&u?.rid&&residentId===u.rid)||(myName&&label&&(label.toLowerCase().includes(myName.toLowerCase())||myName.toLowerCase().includes(label.toLowerCase())));
-  if(isSelf){wrap.style.cssText="color:#b45309;font-weight:700;background:#fde68a;padding:2px 10px;border-radius:20px;display:inline-block;";}
+  // A mentor sees their mentees the way a resident sees themself. Free-text labels (Academic
+  // Day has no resident id) are matched on the mentee's name.
+  const isMentee=!isSelf&&isMenteeRef(residentId,label);
+  if(isSelf||isMentee){wrap.style.cssText="color:#b45309;font-weight:700;background:#fde68a;padding:2px 10px;border-radius:20px;display:inline-block;";if(isMentee)wrap.title="Your mentee";}
   return wrap;
+}
+// Is this resident id, or this free-text name, one of the signed-in consultant's mentees?
+function isMenteeRef(residentId,label){
+  const u=STATE.user;if(!u||u.role!=="consultant")return false;
+  if(residentId)return MENTORS[residentId]===u.cid;
+  if(!label)return false;
+  const l=label.toLowerCase();
+  return getAccess(u.cid).some(id=>{const n=dname(resById(id)?.name||"").toLowerCase();return n&&n.length>2&&l.includes(n);});
 }
 function renderScheduleTable(sessions,blk,cols){
   const byWeek={};
@@ -7118,7 +7134,7 @@ function renderTeachSchedule(){
     {label:"Date",render:s=>canEditSched?schedInlineText(s.id,"session_date",s.session_date,v=>{if(!v)return;sb.from("teaching_sessions").update({session_date:v}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"teach"):fmtDate(s.session_date)},
     {label:"Specialty",render:s=>canEditSched?schedInlineText(s.id,"specialty_label",s.specialty_label||"",v=>{sb.from("teaching_sessions").update({specialty_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"teach"):s.specialty_label||"—"},
     {label:"Topic",render:s=>canEditSched?schedInlineText(s.id,"topic",s.topic||"",v=>{sb.from("teaching_sessions").update({topic:v}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"teach"):s.topic},
-    {label:"Presenter",render:s=>canEditSched?schedInlineText(s.id,"presenter_label",s.presenter_label||"",v=>{sb.from("teaching_sessions").update({presenter_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"teach"):s.presenter_label+(s.role_label?" ("+s.role_label+")":"")}
+    {label:"Presenter",render:s=>canEditSched?schedInlineText(s.id,"presenter_label",s.presenter_label||"",v=>{sb.from("teaching_sessions").update({presenter_label:v||null}).eq("id",s.id).then(({error:e})=>{if(e)showToast(e.message);else loadSchedules();});},"teach"):(()=>{const w=document.createElement("span");w.appendChild(personLabelEl(null,s.presenter_label||"\u2014"));if(s.role_label){const r=document.createElement("span");r.textContent=" ("+s.role_label+")";w.appendChild(r);}return w;})()}
   ];
   if(canEditSched)cols.push({label:"",render:s=>{
     const wrap=el("div",{cls:"flex-gap"});
@@ -17483,16 +17499,18 @@ function renderOncall(){
     }else{
       const res=anyResById(entry.resident_id);
       const isSelfCell=!!(res&&u.rid&&res.id===u.rid);
+      const isMenteeCell=!!(res&&isMenteeRef(res.id,null));
       const nm=document.createElement("span");
       nm.className="oc-name";
-      nm.style.cssText="font-weight:700;font-size:.83rem;display:inline-block;"+(isSelfCell?"color:#b45309;background:#fde68a;padding:2px 10px;border-radius:20px;":"");
+      nm.style.cssText="font-weight:700;font-size:.83rem;display:inline-block;"+(isSelfCell||isMenteeCell?"color:#b45309;background:#fde68a;padding:2px 10px;border-radius:20px;":"");
+      if(isMenteeCell)nm.title="Your mentee";
       nm.textContent=res?dname(res.name):(entry.resident_name||"?");
       nm.dataset.ocDate=date;
       nm.style.cursor="default";
       // The hover card totals a colleague's on-calls for the block. That is for whoever
       // builds the schedule (PD, deputy, chief, the on-call committee); a resident gets it
       // on their own name only, never on a colleague's.
-      const seesCard=isOncallEditor()||isSelfCell;
+      const seesCard=isOncallEditor()||isSelfCell||isMenteeCell;
       if(res){
         nm.dataset.ocRid=res.id;
         if(seesCard){
@@ -17633,9 +17651,12 @@ function renderOncall(){
   }
   // ── My On-Calls tab ───────────────────────────────────────────
   function renderMineTab(){
-    if(!u.rid){
+    const mentees=u.role==="consultant"?sortByLevel(ocRoster().filter(r=>MENTORS[r.id]===u.cid)):[];
+    if(!u.rid&&!mentees.length){
       return el("div",{cls:"card"},
-        el("p",{cls:"sh"},"This tab shows a resident's personal on-call schedule. It is visible when logged in as a resident.")
+        el("p",{cls:"sh"},u.role==="consultant"
+          ?"This tab lists your mentees' on-calls. No residents are assigned to you as mentor yet; ask the Program Director."
+          :"This tab shows a resident's personal on-call schedule. It is visible when logged in as a resident.")
       );
     }
     const past=myEntries.filter(e=>e.schedule_date<todayStr);
@@ -17658,6 +17679,29 @@ function renderOncall(){
           el("div",{st:{fontSize:".76rem",color:"rgba(31,26,18,.42)"}},hrs)
         ),
         e.is_extra?el("span",{st:{fontSize:".7rem",background:"#fde8e8",color:"#b91c1c",border:"1px solid #fca5a5",borderRadius:"6px",padding:"2px 8px",whiteSpace:"nowrap"}},"Extra Penalty \u2691"):null
+      );
+    }
+    // A mentor: one card per mentee, their published on-calls from today on, with the count for
+    // the block on screen. Reads only what the resident themself can see (published rows).
+    if(!u.rid&&mentees.length){
+      return el("div",null,
+        el("p",{cls:"sh",st:{marginBottom:"16px"}},"Your mentees' published on-calls, from today on. Their names are highlighted in the Schedule tab too."),
+        ...mentees.map(r=>{
+          const ent=ocData().filter(e=>e.resident_id===r.id&&e.published).sort((a,b)=>a.schedule_date.localeCompare(b.schedule_date));
+          const up=ent.filter(e=>e.schedule_date>=todayStr);
+          const inBlk=ent.filter(e=>e.block_number===blk).length;
+          const shown=up.slice(0,6);
+          return el("div",{cls:"card",st:{marginBottom:"16px"}},
+            el("div",{cls:"flex-gap",st:{marginBottom:"10px"}},
+              avEl(r),
+              el("div",{st:{flex:"1"}},
+                el("div",{cls:"name"},dname(r.name)),
+                el("div",{cls:"sub"},inBlk+" on-call"+(inBlk===1?"":"s")+" in Block "+blk+" \u00b7 "+up.length+" upcoming")),
+              levelBadge(r.level)),
+            shown.length?el("div",null,...shown.map(entryRow)):el("p",{cls:"sh",st:{margin:"0"}},"No upcoming on-calls published."),
+            up.length>shown.length?el("div",{cls:"sh",st:{fontSize:".76rem",marginTop:"8px"}},"and "+(up.length-shown.length)+" more this year"):null
+          );
+        })
       );
     }
     const myLess=ocLessFor(null,u.rid).slice().sort((a,b)=>a.block_number-b.block_number);
@@ -17981,7 +18025,7 @@ function renderOncall(){
       {years:ocYears(),pastNote:ocIsPast()&&!(ocPast()&&ocPast().data)?("Loading "+ocAYLabel(ocAY())+"\u2026"):null}),
     renderBlockPills(blk,n=>set({oncallBlock:n,oncallTab:tab}),{st:{marginBottom:"20px"},cur:ocAY()===CURRENT_ACADEMIC_YEAR,inactiveBg:"#F6EFE2"}),
     el("div",{cls:"oc-tabs",st:{display:"flex",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"24px"}},
-      ...["schedule","mine","prefs","stats"].map(t=>{const lbs={schedule:"Schedule",mine:"My On-Calls",prefs:"Preferences",stats:"Statistics"};const active=tab===t;return el("div",{cls:"oc-tab",st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({oncallTab:t})},lbs[t]);})),
+      ...["schedule","mine","prefs","stats"].map(t=>{const lbs={schedule:"Schedule",mine:(u.role==="consultant"?"My Mentees' On-Calls":"My On-Calls"),prefs:"Preferences",stats:"Statistics"};const active=tab===t;return el("div",{cls:"oc-tab",st:{padding:"10px 20px",fontSize:".84rem",fontWeight:active?"600":"500",color:active?"#c96a4a":"rgba(31,26,18,.45)",cursor:"pointer",borderBottom:"2px solid "+(active?"#c96a4a":"transparent"),marginBottom:"-1px",transition:"all .15s"},onClick:()=>set({oncallTab:t})},lbs[t]);})),
     tab==="schedule"?renderScheduleTab():tab==="mine"?renderMineTab():tab==="prefs"?renderPrefsTab():renderStatsTab()
   );
 }
