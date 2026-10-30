@@ -5352,6 +5352,7 @@ function renderLogin(){
       return;
     }
     STATE.user=mapProfileToUser(profile);STATE.mod=null;
+    logVisit();
     await loadAcademicYears();
     await loadCoreData();
     checkPromotionNeeded();
@@ -18607,8 +18608,18 @@ async function logActivity(actionType,entityType,entityId,details){
   const u=STATE.user;if(!u)return;
   sb.from("activity_log").insert({profile_id:u.profileId,display_name:u.name,action_type:actionType,entity_type:entityType||null,entity_id:entityId?String(entityId):null,details:details||{}}).then(({error:e})=>{if(e)console.warn("logActivity error",e.message);});
 }
+// One "visit" row per signed-in browser session (a closed tab or a new browser counts again; a
+// reload does not). Counts live in activity_log; the log tab leaves them out so they never push
+// real actions off its 200 rows.
+function logVisit(){
+  try{
+    if(sessionStorage.getItem("visitLogged")===STATE.user.profileId)return;
+    sessionStorage.setItem("visitLogged",STATE.user.profileId);
+  }catch(_){}
+  logActivity("visit",null,null,{role:STATE.user&&STATE.user.role||null});
+}
 async function loadActivityLog(){
-  const{data,error}=await sb.from("activity_log").select("*").order("created_at",{ascending:false}).limit(200);
+  const{data,error}=await sb.from("activity_log").select("*").neq("action_type","visit").order("created_at",{ascending:false}).limit(200);
   if(error){console.warn("loadActivityLog error",error.message);return;}
   ACTIVITY_LOG_DATA=data||[];render();
 }
@@ -20170,6 +20181,7 @@ function renderCalModal(){
       if(profile&&profile.login_disabled_at){await sb.auth.signOut();}
       else if(profile){
         STATE.user=mapProfileToUser(profile);
+        logVisit();
         STATE.calToken=profile.calendar_token||null;
         STATE.calPrefs=profile.calendar_prefs||{rota:true,oncall:true,mm:true,teach:false,deadlines:true};
         await loadAcademicYears();
