@@ -3119,6 +3119,24 @@ const AUTH_EMAIL_DOMAIN="dsfh.local";
 // in Supabase Dashboard > Edge Functions.
 const CREATE_LOGIN_FN="bright-processor";
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+// The browser keeps ONE sign-in per site. Signing in as someone else in another tab (the PD
+// checking a resident's or a mentor's view) swaps the token under every open tab, while each
+// tab keeps showing the account it opened with. Its next write then runs as the other account
+// and the database refuses it ("violates row-level security policy"), with nothing on screen
+// to say why. So: when the account under this tab changes, the tab reloads and shows who it
+// really is; when the sign-in is ended elsewhere, this tab goes to the sign-in screen too.
+sb.auth.onAuthStateChange((ev,session)=>{
+  const uid=session&&session.user&&session.user.id;
+  if(!STATE.user)return;
+  if(ev==="SIGNED_OUT"||(uid===undefined&&ev!=="INITIAL_SESSION")){if(!uid){STATE.user=null;STATE.mod=null;render();}return;}
+  if(uid&&uid!==STATE.user.profileId)location.reload();
+});
+// Older browsers do not relay auth events across tabs; the storage event does.
+window.addEventListener("storage",e=>{
+  if(!STATE.user||!e.key||!/^sb-.*-auth-token$/.test(e.key))return;
+  let uid=null;try{const v=e.newValue&&JSON.parse(e.newValue);uid=v&&v.user&&v.user.id||null;}catch(_){}
+  if(uid&&uid!==STATE.user.profileId)location.reload();
+});
 function mapProfileToUser(profile){
   return{user:profile.username,role:profile.role,name:profile.display_name,rid:profile.resident_id||null,cid:profile.consultant_id||null,contactEmail:profile.contact_email||"",profileId:profile.id};
 }
