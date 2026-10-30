@@ -16099,7 +16099,10 @@ function renderKPIExecutive(){
   // attendance averages above already get.
   const qScored=scored.filter(r=>r.k.qAvg!=null);
   const avgQuiz=qScored.length?Math.round(qScored.reduce((s,r)=>s+r.k.qAvg,0)/qScored.length):0;
-  const avgComm=Math.round(scored.reduce((s,r)=>{const ks=KPI_SCORES[r.id]||{};return s+(ks.commScore||0);},0)/total);
+  // Committee used to average KPI_SCORES.commScore, a per-resident points field the committee
+  // module no longer writes, so it read 0% while 33 of 46 residents sat on a committee. It is
+  // now the share holding a seat, the same rule as the programme KPI column above it.
+  const avgComm=total?Math.round(active.filter(r=>!!r.chiefRole||(COMMITTEES[r.id]||[]).length>0).length/total*100):0;
   function achCount(field){
     return active.filter(r=>{
       const af=getApprovedFields(r.id);const ks=KPI_SCORES[r.id]||{};
@@ -16487,8 +16490,7 @@ function renderKPIExecutive(){
     {key:"qi",label:"QI Projects",score:Math.round(achCount("qi")/total*100),color:"#7FB89C"},
     {key:"comm",label:"Committee",score:avgComm,color:"#CBA155"},
     {key:"quiz",label:"Quiz Average",score:avgQuiz,color:"#A47A28"},
-    {key:"awards",label:"Awards",score:Math.round(achCount("awards")/total*100),color:"#CD7F32"},
-    {key:"oral",label:"Presentations",score:Math.round(achCount("oral")/total*100),color:"#6b7280"}
+    {key:"awards",label:"Awards",score:Math.round(achCount("awards")/total*100),color:"#CD7F32"}
   ];
   var hzSorted=hzMetrics.slice().sort(function(a,b){return b.score-a.score;});
   var HW=860,HH=460,hzGroundY=HH-48,hzSkyTop=30,hzPeakZone=hzGroundY-hzSkyTop;
