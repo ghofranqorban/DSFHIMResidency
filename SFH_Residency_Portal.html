@@ -3731,11 +3731,13 @@ async function brIssueOne(row,p,cat,rid,existing,signed){
   const path=rid+"/best_"+cat+"_resident_"+p.ay+"_q"+p.q+".pdf",fileName="Certificate - "+title+" - "+brAwardLabel(p)+".pdf";
   let bucket=(signed&&existing&&existing.file&&existing.file.fileBucket)||BR_CERT_BUCKET;
   if(signed){await sb.storage.from(bucket).remove([path]);if(bucket===BR_CERT_BUCKET)await sb.from("resident_documents").delete().eq("file_path",path);}
-  let up=await sb.storage.from(bucket).upload(path,blob,{contentType:"application/pdf",upsert:false});
+  // a signed copy overwrites (kpi-evidence allows update but not delete); a drawn one never
+  // replaces a file already there
+  let up=await sb.storage.from(bucket).upload(path,blob,{contentType:"application/pdf",upsert:!!signed});
   if(up.error&&/bucket not found/i.test(up.error.message)){
     bucket=BR_CERT_BUCKET_FALLBACK;up=await sb.storage.from(bucket).upload(path,blob,{contentType:"application/pdf",upsert:true});
   }
-  if(up.error&&!/already exists|duplicate/i.test(up.error.message))throw new Error("could not store the certificate: "+up.error.message);
+  if(up.error&&!(!signed&&/already exists|duplicate/i.test(up.error.message)))throw new Error("could not store the certificate: "+up.error.message);
   let shelf=false;
   if(bucket===BR_CERT_BUCKET){
     const ex=await sb.from("resident_documents").select("id").eq("file_path",path).maybeSingle();
