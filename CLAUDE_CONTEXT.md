@@ -301,6 +301,23 @@ path not yet written — comment in place at the Scholar leg).
 - **R4 Rotation Preferences (6 Aug 2026):** Current R3s (upcoming R4s) pick 2 Elective blocks (with subspecialty + location text fields) + 2 Clinic blocks (just block pick). All 4 must be different blocks. PD/chief/plan_rota open/close window (`r4_prefs_status`), see submission matrix. Save Draft / Submit flow. Tables: `r4_rota_prefs`, `r4_prefs_status`. State: `R4_PREFS`, `R4_PREFS_STATUS`, `STATE.r4e1Block/r4e1Sub/r4e1Loc/r4e2Block/r4e2Sub/r4e2Loc/r4c1Block/r4c2Block`. Functions: `r4PrefsIsOpen()`, `loadR4Prefs()`, `loadR4PrefsStatus()`, `r4PrefsOpenWindow()`, `r4PrefsCloseWindow()`, `saveR4Prefs()`. UI: `r4PrefsSection()` inside `renderLeavePlan()`.
 - **"All Residents" tab:** PD matrix with leave dots + GIM tint + control panels for GIM/leave deadline/R4 prefs
 
+### Best Resident → certificate, shelf, Awards & Honours (30 Oct 2026)
+When a quarter's winners are **revealed** (never at the lock, so a sealed result cannot leak), the PD's or
+deputy's browser issues each winner's certificate: `brCertificatePdf` draws it with **jsPDF 2.5.1 (cdnjs,
+loaded on demand)** — logos in `assets/` — uploads it to bucket `resident-documents` at
+`<rid>/best_<senior|junior>_resident_<ay>_q<q>.pdf` with a `resident_documents` row (falls back to
+`kpi-evidence` while `add_resident_documents.sql` is not run), and inserts an **approved `kpi_proposals`
+row, field `awards`**, academic_year = year of the announcement date, whose note JSON carries the marker
+`source:"best_resident", ay, q, cat` plus `fileUrl`/`fileBucket`/`signed`. That row is what the KPI page
+lists under Scholar › Award / honour; `kpi_scores.awards_honors` is not written. Idempotent on the marker
+(`brAwardIs`); `brIssueDueAwards()` runs after every `loadBestResident()` for rows revealed ≤120 days ago;
+PD footer on every Hall of Fame card (`brAwardStatusEl`: status, "Issue certificates now", "upload /
+replace with signed copy" → `brUploadSignedCert`, which replaces the file under the same path and is never
+overwritten by auto-issue); `brUnlockFlow` asks before withdrawing (`brWithdrawAwards` → proposal
+`rejected`, re-lock revives it). `openStoredFile(bucket,path)` opens stored evidence through a signed URL.
+There is still **no document-shelf page**; residents reach the certificate from the KPI page and the home
+banner ("Your certificate").
+
 ### Admin Panel
 - Residents: add/edit/archive/login · Mentors: add/edit/assign/login
 - Accounts + privilege grid · Deadlines · Import Rota (Excel wizard)

@@ -3499,6 +3499,7 @@ async function loadBestResident(){
     :brTallyFromRows(seen,p);
   brSync();
   render();
+  brIssueDueAwards();
 }
 async function brCastVote(seniorId,juniorId){
   if(!brVotingIsOpen()){showToast("Voting is currently closed","warning");return;}
@@ -3554,6 +3555,335 @@ async function brAnnounceWinners(seniorId,juniorId,seniorScore,juniorScore,annou
 }
 async function brRevealNow(){return brSaveRow({announced:true,announced_at:brNow().toISOString()});}
 async function brUnlockWinners(){return brSaveRow({announced:false});}
+// ═══ Best Resident → certificate, document shelf, Awards & Honours ══════════════════════════
+// When a quarter's winners appear (the announcement moment, never the lock, so a sealed result
+// cannot leak through a KPI page or a shelf), the portal makes each winner's certificate as a
+// PDF, files it on their document shelf (resident_documents / bucket resident-documents, or the
+// kpi-evidence bucket where the shelf is not installed yet) and records the award as an approved
+// kpi_proposals row of field "awards" — the row the KPI page lists under Awards & Honours — with
+// the certificate attached. The row carries a marker (source/ay/q/cat in its note) so issuing is
+// idempotent: lock, unlock and lock again never duplicate a certificate or an award.
+const BR_CERT_SIGNERS=[
+  {who:"Dr. Arwa Jamal",role:"Designated Institutional Official"},
+  {who:"Dr. Ghofran Qorban",role:"Program Director, Internal Medicine Residency"}];
+const BR_CERT_ASSETS=window.__BR_CERT_ASSETS||"assets/";   // the two logos, next to index.html
+const BR_CERT_BUCKET="resident-documents",BR_CERT_BUCKET_FALLBACK="kpi-evidence";
+const BR_AWARD_AUTO_DAYS=120;   // winners revealed longer ago than this are issued by hand only
+let BR_AWARDS={};               // "ay-q" → {senior:{prop,approved,file}|null, junior:…, err}
+let _brIssuing={},_brAutoRan={},_brAwardQueue=null;
+function brAwardKey(row){return row.academic_year+"-"+row.quarter;}
+function brAwardTitle(cat){return"Best "+(cat==="senior"?"Senior":"Junior")+" Resident";}
+function brAwardLabel(p){return"Q"+p.q+" AY "+p.ay+"-"+String((p.ay+1)%100).padStart(2,"0");}
+function brQuarterMonths(q){return["","October–December","January–March","April–June","July–September"][q]||"";}
+// The award belongs to the academic year it was given in (Q4 is announced in October, in the
+// next year), so it sits on the KPI page the resident is looking at now.
+function brAwardAY(row){return brCalPeriod(new Date(row.announced_at||row.created_at||brNow())).ay;}
+function brAwardIs(prop,p,cat){const d=parseProposalNote(prop.note);return d.source==="best_resident"&&Number(d.ay)===p.ay&&Number(d.q)===p.q&&d.cat===cat;}
+function brAwardComplete(row,st){
+  if(!st||st.err)return false;
+  return["senior","junior"].every(c=>row[c+"_resident_id"]==null||(st[c]&&st[c].approved));
+}
+function brAwardAnyIssued(st){return!!(st&&!st.err&&["senior","junior"].some(c=>st[c]&&st[c].approved));}
+// One read for any number of quarters: every "awards" row of the people concerned.
+async function brAwardLookupMany(rows,force){
+  const todo=rows.filter(r=>r&&(force||!BR_AWARDS[brAwardKey(r)]));
+  if(!todo.length)return;
+  const ids=[];todo.forEach(r=>["senior_resident_id","junior_resident_id"].forEach(k=>{if(r[k]!=null&&ids.indexOf(r[k])<0)ids.push(r[k]);}));
+  let data=[],err=null;
+  if(ids.length){
+    const res=await sb.from("kpi_proposals").select("*").eq("field_key","awards").in("resident_id",ids);
+    if(res.error)err=res.error.message;else data=res.data||[];
+  }
+  todo.forEach(r=>{
+    const p={ay:r.academic_year,q:r.quarter},st={senior:null,junior:null,err:err};
+    if(!err)["senior","junior"].forEach(cat=>{
+      const rid=r[cat+"_resident_id"];if(rid==null)return;
+      const prop=data.filter(x=>x.resident_id===rid&&brAwardIs(x,p,cat))
+        .sort((a,b)=>(a.status==="approved"?0:1)-(b.status==="approved"?0:1))[0]||null;
+      st[cat]=prop?{prop:prop,approved:prop.status==="approved",file:parseProposalNote(prop.note)}:null;
+    });
+    BR_AWARDS[brAwardKey(r)]=st;
+  });
+}
+async function brAwardLookup(row,force){await brAwardLookupMany([row],force);return BR_AWARDS[brAwardKey(row)];}
+// Called from inside render: rows asked for in one paint are read together, then painted once.
+function brAwardEnsure(row){
+  if(BR_AWARDS[brAwardKey(row)])return;
+  if(!_brAwardQueue){_brAwardQueue=[];setTimeout(async()=>{const q=_brAwardQueue;_brAwardQueue=null;await brAwardLookupMany(q);render();},0);}
+  if(_brAwardQueue.indexOf(row)<0)_brAwardQueue.push(row);
+}
+// ── The PDF ──
+let _jsPdfLoad=null,_brLogoCache={};
+function brLoadJsPdf(){
+  if(window.jspdf&&window.jspdf.jsPDF)return Promise.resolve(window.jspdf.jsPDF);
+  if(!_jsPdfLoad)_jsPdfLoad=new Promise((res,rej)=>{
+    const s=document.createElement("script");
+    s.src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+    s.onload=()=>window.jspdf&&window.jspdf.jsPDF?res(window.jspdf.jsPDF):rej(new Error("The PDF library did not load"));
+    s.onerror=()=>{_jsPdfLoad=null;rej(new Error("Could not load the PDF library (no internet?)"));};
+    document.head.appendChild(s);});
+  return _jsPdfLoad;
+}
+// A logo as a PNG data URL at a print resolution; the SVG one is drawn through a canvas.
+function brLogoPng(file,widthPx){
+  if(_brLogoCache[file])return _brLogoCache[file];
+  _brLogoCache[file]=new Promise((res,rej)=>{
+    const im=new Image();im.crossOrigin="anonymous";
+    im.onload=()=>{try{const w=widthPx,h=Math.round(w*im.naturalHeight/im.naturalWidth);
+      const cv=document.createElement("canvas");cv.width=w;cv.height=h;cv.getContext("2d").drawImage(im,0,0,w,h);
+      res({data:cv.toDataURL("image/png"),w:w,h:h});}catch(e){delete _brLogoCache[file];rej(e);}};
+    im.onerror=()=>{delete _brLogoCache[file];rej(new Error("Logo not found: "+BR_CERT_ASSETS+file));};
+    im.src=BR_CERT_ASSETS+file;});
+  return _brLogoCache[file];
+}
+// Same page as make_cert.py: A4 landscape, teal frame, both logos, title, name, three lines,
+// the date, two signature lines and the contact strip.
+async function brCertificatePdf(o){
+  const jsPDF=await brLoadJsPdf();
+  const[lj,la]=await Promise.all([brLogoPng("fakeeh_jeddah_logo.svg",1200),brLogoPng("fakeeh_care_academy_logo.png",1000)]);
+  const doc=new jsPDF({orientation:"landscape",unit:"mm",format:[297,210],compress:true});
+  doc.setProperties({title:o.title+" — "+o.name,subject:o.quarterText,author:"DSFH Internal Medicine Residency Programme",creator:"DSFH IM Residency Portal"});
+  const W=297,H=210,pt=mm=>mm*72/25.4;
+  const TEAL=[74,143,156],TEAL2=[63,130,144],INK=[44,58,65],BLUE=[31,95,156];
+  // faint diagonal stripes behind everything: the template's teal at 7% over white, drawn as that
+  // solid tint so every viewer shows the same thing
+  doc.setDrawColor(242,247,248);doc.setLineWidth(0.4);
+  const a=65*Math.PI/180,dx=Math.cos(a),dy=-Math.sin(a),nx=-dy,ny=dx;
+  for(let t=-320;t<=320;t+=9){const cx=W/2+nx*t,cy=H/2+ny*t;doc.line(cx-dx*400,cy-dy*400,cx+dx*400,cy+dy*400);}
+  // frame: 2.2 mm teal, 11 mm in, 9 mm corners (the stroke sits on the path, so inset by half)
+  doc.setDrawColor(TEAL[0],TEAL[1],TEAL[2]);doc.setLineWidth(2.2);doc.roundedRect(12.1,12.1,W-24.2,H-24.2,7.9,7.9,"S");
+  doc.addImage(lj.data,"PNG",W-24-52,17,52,52*lj.h/lj.w);
+  doc.addImage(la.data,"PNG",26,19,44,44*la.h/la.w);
+  doc.setTextColor(TEAL2[0],TEAL2[1],TEAL2[2]);doc.setFont("helvetica","normal");doc.setFontSize(pt(15.5));
+  doc.text("Certificate Of",W/2,56,{align:"center"});
+  doc.setFont("helvetica","bold");doc.setFontSize(pt(14.5));
+  doc.text(o.title.toUpperCase(),W/2,74,{align:"center",charSpace:0.35});
+  doc.setTextColor(INK[0],INK[1],INK[2]);doc.setFontSize(pt(3.3));
+  doc.text("PRESENTED TO",W/2+0.9,86,{align:"center",charSpace:1.8});
+  doc.setTextColor(BLUE[0],BLUE[1],BLUE[2]);doc.setFontSize(pt(9.2));
+  const nameW=doc.getTextWidth(o.name);doc.text(o.name,W/2,104.5,{align:"center"});
+  const uw=Math.max(150,nameW+6);doc.setDrawColor(INK[0],INK[1],INK[2]);doc.setLineWidth(0.35);doc.line(W/2-uw/2,108.6,W/2+uw/2,108.6);
+  doc.setTextColor(INK[0],INK[1],INK[2]);doc.setFontSize(pt(3.8));
+  const l1a="In recognition of being named ",l1c=" of the Internal Medicine Residency Programme";
+  doc.setFont("helvetica","normal");const wa=doc.getTextWidth(l1a),wc=doc.getTextWidth(l1c);
+  doc.setFont("helvetica","bold");const wb=doc.getTextWidth(o.title);
+  let x=W/2-(wa+wb+wc)/2;
+  doc.setFont("helvetica","normal");doc.text(l1a,x,117.3);x+=wa;
+  doc.setFont("helvetica","bold");doc.text(o.title,x,117.3);x+=wb;
+  doc.setFont("helvetica","normal");doc.text(l1c,x,117.3);
+  doc.text("for "+o.quarterText+", for outstanding clinical performance,",W/2,122.9,{align:"center"});
+  doc.text("academic engagement and professionalism. Your dedication has truly made a difference.",W/2,128.5,{align:"center"});
+  doc.setFont("helvetica","bold");doc.setFontSize(pt(4));
+  doc.text("Awarded on  "+o.dateText,W/2,138.4,{align:"center"});
+  // signatures
+  let sx=32;doc.setLineWidth(0.3);
+  BR_CERT_SIGNERS.forEach(s=>{
+    doc.setFontSize(pt(4));const ww=doc.getTextWidth(s.who);doc.setFontSize(pt(3.1));const wr=doc.getTextWidth(s.role);
+    const bw=Math.max(52,ww,wr),cx=sx+bw/2;
+    doc.line(sx,162.8,sx+bw,162.8);
+    doc.setFontSize(pt(4));doc.text(s.who,cx,168.4,{align:"center"});
+    doc.setFontSize(pt(3.1));doc.text(s.role,cx,173.6,{align:"center"});
+    sx+=bw+16;});
+  // contact strip, with small drawn marks in place of the template's emoji
+  doc.setFillColor(223,230,233);doc.roundedRect(34,183,W-68,8,4,4,"F");
+  doc.setTextColor(59,74,81);doc.setDrawColor(59,74,81);doc.setLineWidth(0.3);doc.setFontSize(pt(3));
+  let fx=41;
+  doc.circle(fx+1.5,187,1.5,"S");doc.ellipse(fx+1.5,187,0.65,1.5,"S");doc.line(fx,187,fx+3,187);
+  doc.text("Fakeeh.Care",fx+4.5,188.1);fx+=4.5+doc.getTextWidth("Fakeeh.Care")+7;
+  doc.roundedRect(fx+0.6,185.3,1.9,3.4,0.5,0.5,"S");doc.line(fx+1.3,188.1,fx+1.8,188.1);
+  doc.text("9200 12 777",fx+4.3,188.1);
+  const addr="Al Hamra, Palestine Rd, Jeddah",aw=doc.getTextWidth(addr),ax=W-41-aw;
+  doc.text(addr,ax,188.1);doc.circle(ax-3.2,186.5,1.3,"S");doc.circle(ax-3.2,186.5,0.4,"F");doc.triangle(ax-4.2,187.3,ax-2.2,187.3,ax-3.2,189.2,"F");
+  return doc.output("blob");
+}
+function brRiyadhDate(iso){return new Date(iso).toLocaleDateString("en-GB",{timeZone:"Asia/Riyadh",day:"2-digit",month:"2-digit",year:"numeric"}).split("/").join(" / ");}
+function brRiyadhMonth(iso){return new Date(iso).toLocaleDateString("en-GB",{timeZone:"Asia/Riyadh",month:"long",year:"numeric"});}
+// ── Issuing ──
+async function brIssueAwards(row){
+  const key=brAwardKey(row);
+  if(_brIssuing[key])return _brIssuing[key];
+  _brIssuing[key]=(async()=>{
+    const p={ay:row.academic_year,q:row.quarter},results=[];
+    try{
+      const st=await brAwardLookup(row,true);
+      if(st.err)throw new Error(st.err);
+      for(const cat of["senior","junior"]){
+        const rid=row[cat+"_resident_id"];if(rid==null)continue;
+        if(st[cat]&&st[cat].approved){results.push({cat:cat,rid:rid,skipped:true});continue;}
+        try{results.push(await brIssueOne(row,p,cat,rid,st[cat]));}
+        catch(e){results.push({cat:cat,rid:rid,error:e.message||String(e)});}
+      }
+    }catch(e){results.push({cat:"all",error:e.message||String(e)});}
+    await brAwardLookup(row,true);
+    delete _brIssuing[key];
+    return results;
+  })();
+  return _brIssuing[key];
+}
+// `signed` is a PDF the PD chose (the certificate with the real signatures): it is filed in place
+// of the drawn one, replacing whatever is there under the same name.
+async function brIssueOne(row,p,cat,rid,existing,signed){
+  const res=brPerson(rid,p.ay);if(!res)throw new Error("resident "+rid+" not found");
+  const u=STATE.user,title=brAwardTitle(cat),when=row.announced_at||brNow().toISOString();
+  const blob=signed||await brCertificatePdf({title:title,name:res.name,dateText:brRiyadhDate(when),
+    quarterText:"Q"+p.q+" ("+brQuarterMonths(p.q)+") · Academic Year "+p.ay+"–"+(p.ay+1)});
+  // the file: the shelf's bucket first, kpi-evidence where the shelf is not installed
+  const path=rid+"/best_"+cat+"_resident_"+p.ay+"_q"+p.q+".pdf",fileName="Certificate - "+title+" - "+brAwardLabel(p)+".pdf";
+  let bucket=(signed&&existing&&existing.file&&existing.file.fileBucket)||BR_CERT_BUCKET;
+  if(signed){await sb.storage.from(bucket).remove([path]);if(bucket===BR_CERT_BUCKET)await sb.from("resident_documents").delete().eq("file_path",path);}
+  let up=await sb.storage.from(bucket).upload(path,blob,{contentType:"application/pdf",upsert:false});
+  if(up.error&&/bucket not found/i.test(up.error.message)){
+    bucket=BR_CERT_BUCKET_FALLBACK;up=await sb.storage.from(bucket).upload(path,blob,{contentType:"application/pdf",upsert:true});
+  }
+  if(up.error&&!/already exists|duplicate/i.test(up.error.message))throw new Error("could not store the certificate: "+up.error.message);
+  let shelf=false;
+  if(bucket===BR_CERT_BUCKET){
+    const ex=await sb.from("resident_documents").select("id").eq("file_path",path).maybeSingle();
+    if(ex.error)console.warn("resident_documents",ex.error.message);
+    else if(ex.data)shelf=true;
+    else{const ins=await sb.from("resident_documents").insert({resident_id:rid,title:title+" — "+brAwardLabel(p),category:"certificate",
+        note:signed?"Signed copy uploaded by the Program Director.":"Issued by the portal when the quarter's winners were announced.",file_path:path,file_name:fileName,mime_type:"application/pdf",
+        size_bytes:blob.size,uploaded_by:u.profileId,uploaded_by_role:u.role});
+      if(ins.error)console.warn("resident_documents insert",ins.error.message);else shelf=true;}
+  }
+  // the award, as the KPI page reads it
+  const note=JSON.stringify({title:title+", "+brAwardLabel(p),issuer:"Internal Medicine Residency Programme, DSFH Jeddah",date:brRiyadhMonth(when),
+    fileUrl:path,fileBucket:bucket,source:"best_resident",ay:p.ay,q:p.q,cat:cat,signed:!!signed});
+  const stamp={status:"approved",reviewed_by:u.profileId,reviewed_at:new Date().toISOString(),note:note};
+  let prop;
+  if(existing&&existing.prop){
+    const r=await sb.from("kpi_proposals").update(stamp).eq("id",existing.prop.id).select().single();
+    if(r.error)throw new Error("could not record the award: "+r.error.message);prop=r.data;
+  }else{
+    const r=await sb.from("kpi_proposals").insert(Object.assign({resident_id:rid,academic_year:brAwardAY(row),field_key:"awards",quarter:null,
+      proposed_by:u.profileId,proposed_by_role:u.role,proposed_at:new Date().toISOString()},stamp)).select().single();
+    if(r.error)throw new Error("could not record the award: "+r.error.message);prop=r.data;
+  }
+  if(prop&&prop.academic_year===kpiAY()){const i=KPI_PROPOSALS.findIndex(x=>x.id===prop.id);if(i>=0)KPI_PROPOSALS[i]=prop;else KPI_PROPOSALS.unshift(prop);}
+  const prof=Object.values(PROFILE_BY_ID||{}).find(pr=>pr.resident_id===rid);
+  if(prof&&!(signed&&existing&&existing.approved))createNotification(prof.id,"kpi_approved","Congratulations — your "+title+" certificate ("+brAwardLabel(p)+") is on your KPI page under Awards & Honours.","kpi",String(rid));
+  logActivity(signed?"award_signed_copy":"award_issued","kpi_proposals",rid,{resident_name:res.name,title:title,ay:p.ay,q:p.q,bucket:bucket,path:path});
+  return{cat:cat,rid:rid,issued:true,bucket:bucket,shelf:shelf,signed:!!signed};
+}
+// The PD picks the signed PDF for one winner; it becomes that winner's certificate (issuing the
+// award too if that has not happened yet).
+async function brUploadSignedCert(row,cat,file){
+  if(!file)return;
+  if(!/pdf$/i.test(file.type||"")&&!/\.pdf$/i.test(file.name||"")){showToast("Choose a PDF file.","warning");return;}
+  const key=brAwardKey(row);if(_brIssuing[key]){showToast("Still issuing, try again in a moment.","warning");return;}
+  const p={ay:row.academic_year,q:row.quarter},rid=row[cat+"_resident_id"];
+  _brIssuing[key]=true;render();
+  try{
+    const st=await brAwardLookup(row,true);
+    await brIssueOne(row,p,cat,rid,st[cat],file);
+    const res=brPerson(rid,p.ay);
+    showToast("Signed certificate filed for "+dname(res?res.name:String(rid))+".","success");
+  }catch(e){showToast("Could not file the signed copy: "+(e.message||e));}
+  delete _brIssuing[key];await brAwardLookup(row,true);render();
+}
+function brPickSignedCert(row,cat){
+  const inp=document.createElement("input");inp.type="file";inp.accept="application/pdf,.pdf";inp.style.display="none";
+  inp.onchange=()=>{const f=inp.files&&inp.files[0];inp.remove();brUploadSignedCert(row,cat,f);};
+  document.body.appendChild(inp);inp.click();
+}
+function brReportIssue(row,results){
+  const nm=x=>{const r=brPerson(x.rid,row.academic_year);return dname(r?r.name:String(x.rid));};
+  const done=results.filter(x=>x.issued),fail=results.filter(x=>x.error);
+  if(fail.length)showToast("Certificate not issued"+(fail[0].rid?" for "+fail.map(x=>nm(x)+" ("+x.error+")").join(", "):": "+fail[0].error),"error");
+  else if(done.length)showToast("Certificates issued and the award recorded under Awards & Honours for "+done.map(nm).join(" and ")+".","success");
+  else showToast("Certificates were already issued for this quarter.","info");
+}
+// Winners revealed recently and not yet issued: done by the PD's or deputy's browser as soon as
+// it sees them, which is the reveal itself when the page is open at the announcement time.
+function brDueRows(){
+  return BEST_ROWS.filter(r=>brRevealed(r)&&r.senior_resident_id&&(brNow()-new Date(r.announced_at||r.created_at||0))/86400000<=BR_AWARD_AUTO_DAYS);
+}
+async function brIssueDueAwards(){
+  if(!brIsLead()||window.__BR_NO_AUTO_ISSUE)return;
+  for(const row of brDueRows()){
+    const key=brAwardKey(row);
+    if(_brAutoRan[key])continue;_brAutoRan[key]=true;
+    const st=await brAwardLookup(row);
+    if(st.err||brAwardComplete(row,st))continue;
+    showToast("Issuing the Best Resident certificates for "+brAwardLabel({ay:row.academic_year,q:row.quarter})+"…","info");
+    brReportIssue(row,await brIssueAwards(row));render();
+  }
+}
+// Withdraw what was issued (unlock, when the PD asks): the award row is set to "not approved"
+// so a later lock can revive it instead of making a second one, and the file goes.
+async function brWithdrawAwards(row){
+  const st=await brAwardLookup(row,true),u=STATE.user,errs=[];
+  for(const cat of["senior","junior"]){
+    const s=st[cat];if(!s||!s.prop)continue;const f=s.file||{};
+    if(f.fileUrl){
+      if((f.fileBucket||BR_CERT_BUCKET)===BR_CERT_BUCKET)await sb.from("resident_documents").delete().eq("file_path",f.fileUrl);
+      const rm=await sb.storage.from(f.fileBucket||BR_CERT_BUCKET).remove([f.fileUrl]);if(rm.error)console.warn("remove",rm.error.message);
+    }
+    const r=await sb.from("kpi_proposals").update({status:"rejected",reviewed_by:u.profileId,reviewed_at:new Date().toISOString()}).eq("id",s.prop.id);
+    if(r.error)errs.push(r.error.message);
+    else{const i=KPI_PROPOSALS.findIndex(x=>x.id===s.prop.id);if(i>=0)KPI_PROPOSALS[i].status="rejected";}
+  }
+  delete BR_AWARDS[brAwardKey(row)];
+  return errs;
+}
+async function brUnlockFlow(){
+  const row=BEST_STATUS;if(!row)return;
+  const st=await brAwardLookup(row),issued=brAwardAnyIssued(st);
+  const names=issued?["senior","junior"].filter(c=>st[c]&&st[c].approved).map(c=>{const r=brPerson(row[c+"_resident_id"],row.academic_year);return dname(r?r.name:"");}).join(" and "):"";
+  showConfirm("Unlock the winners? They go back to being undecided and nothing will be revealed until you lock them again."
+    +(issued?" Certificates and Awards & Honours records were already issued to "+names+"; you will be asked next whether to withdraw them.":""),
+    async()=>{
+      if(!await brUnlockWinners())return;
+      if(issued)showConfirm("Withdraw the certificates and the Awards & Honours records issued to "+names+"? Keep them if the same winners will be locked again.",
+        async()=>{const errs=await brWithdrawAwards(row);showToast(errs.length?"Could not withdraw: "+errs.join("; "):"Withdrawn.",errs.length?"error":"success");render();},"Withdraw","warn");
+    },"Unlock","warn");
+}
+// A file kept in a private bucket: a short-lived link, opened in the tab that was opened on the
+// click itself, so the browser does not treat it as a pop-up.
+async function openStoredFile(bucket,path){
+  if(!path)return;
+  if(/^https?:/i.test(path)){window.open(path,"_blank","noopener");return;}
+  const w=window.open("","_blank");
+  const{data,error}=await sb.storage.from(bucket||BR_CERT_BUCKET_FALLBACK).createSignedUrl(path,3600);
+  if(error||!data){if(w)w.close();showToast("Could not open the file: "+(error?error.message:"no link"));return;}
+  if(w)w.location=data.signedUrl;else window.open(data.signedUrl,"_blank","noopener");
+}
+// PD / deputy: where the two certificates stand for a quarter, and the button when something is
+// still to issue. Shown on the Hall of Fame card and the PD's announced card.
+function brAwardStatusEl(row){
+  if(!brIsLead()||!row||!row.senior_resident_id)return null;
+  const key=brAwardKey(row),st=BR_AWARDS[key],busy=!!_brIssuing[key];
+  const line=(...k)=>el("div",{st:{fontSize:".76rem",color:"#5C5345",lineHeight:"1.5"}},...k);
+  const LB={background:"none",border:"0",padding:"0",font:"inherit",fontSize:".76rem"};   // a button that reads as a link, outside #cm-wrap
+  const wrap=el("div",{cls:"br-award-st",st:{marginTop:"12px",paddingTop:"10px",borderTop:"1px solid rgba(31,26,18,.1)"}},
+    el("div",{st:{fontSize:".62rem",fontWeight:"700",letterSpacing:".1em",textTransform:"uppercase",color:"#6E6455",marginBottom:"4px"}},"Certificates · Awards & Honours"));
+  if(!st){brAwardEnsure(row);wrap.appendChild(line("Checking…"));return wrap;}
+  if(st.err){wrap.appendChild(line("Could not check: "+st.err+" "));
+    wrap.appendChild(el("button",{cls:"lnk",st:LB,onClick:async()=>{await brAwardLookup(row,true);render();}},"Retry"));return wrap;}
+  ["senior","junior"].forEach(cat=>{
+    const rid=row[cat+"_resident_id"];if(rid==null)return;
+    const r=brPerson(rid,row.academic_year),s=st[cat];
+    wrap.appendChild(line(el("b",{st:{color:"#1F1A12",fontWeight:"600"}},dname(r?r.name:String(rid))),
+      " · ",s&&s.approved
+        ?el("a",{href:"#",cls:"lnk",onClick:e=>{e.preventDefault();openStoredFile(s.file.fileBucket,s.file.fileUrl);}},s.file.signed?"signed certificate":"certificate")
+        :el("span",{st:{color:"#9d4a2a"}},"not issued"),
+      " · ",el("button",{cls:"lnk",st:LB,disabled:busy,onClick:()=>brPickSignedCert(row,cat)},s&&s.approved&&!s.file.signed?"replace with signed copy":"upload signed copy")));
+  });
+  if(brAwardComplete(row,st))wrap.appendChild(line("Filed on each KPI page under Awards & Honours"+(st.senior&&st.senior.file&&st.senior.file.fileBucket===BR_CERT_BUCKET?" and on the document shelf.":".")));
+  else wrap.appendChild(el("button",{cls:"sbtn ghost",st:{marginTop:"6px",fontSize:".74rem",padding:"4px 12px"},disabled:busy,
+    onClick:async()=>{render();brReportIssue(row,await brIssueAwards(row));render();}},busy?"Issuing…":"Issue certificates now"));
+  return wrap;
+}
+function brAwardFooter(row,card){const s=brAwardStatusEl(row);if(s)card.appendChild(s);return card;}
+// The winner's own certificate, on the home banner while their quarter is up.
+function brMyCertButton(W){
+  const me=STATE.user;if(!me||me.role!=="resident"||!me.rid||!W)return null;
+  const cat=W.senior_resident_id==me.rid?"senior":W.junior_resident_id==me.rid?"junior":null;if(!cat)return null;
+  const p={ay:W.academic_year,q:W.quarter};
+  const prop=KPI_PROPOSALS.find(x=>x.resident_id==me.rid&&x.field_key==="awards"&&x.status==="approved"&&brAwardIs(x,p,cat));
+  if(!prop)return null;const d=parseProposalNote(prop.note);
+  return el("button",{cls:"stars-more",st:{marginLeft:"10px",background:"#A47A28"},onClick:()=>openStoredFile(d.fileBucket,d.fileUrl)},"Your certificate ",el("span",null,"→"));
+}
 // Every year: a Hall of Fame that forgot last year's winners each October is not one.
 async function loadBestResidentAll(){
   const{data,error}=await sb.from("best_resident_winners").select("*")
@@ -8509,7 +8839,7 @@ function kpiApprovedCount(resId,fieldKey){return kpiProposalsFor(resId,fieldKey)
 function kpiProposalLine(p){
   const d=parseProposalNote(p.note);
   const bits=[d.journal||d.event||d.issuer||d.organization||d.supervisor,d.year||d.date].filter(Boolean);
-  return{title:d.title||d.raw||KPI_FIELD_LABEL[p.field_key]||p.field_key,sub:bits.join(" · "),url:d.fileUrl||d.link||null};
+  return{title:d.title||d.raw||KPI_FIELD_LABEL[p.field_key]||p.field_key,sub:bits.join(" · "),url:d.fileUrl||d.link||null,bucket:d.fileBucket||null,cert:d.source==="best_resident"};
 }
 async function kpiApproveProposal(p){
   await reviewProposal(p.id,true);
@@ -8573,7 +8903,8 @@ function kpiSubmitLines(resId,roleKey,ctx){
       const row=el("div",{cls:"subrow"},
         el("span",{cls:"mini",st:tone},st==="approved"?"Verified":st==="pending"?"Pending review":"Not approved"),
         el("span",{cls:"subt"},L.title,L.sub?el("small",null," · "+L.sub):null),
-        L.url?el("a",{href:L.url,target:"_blank",rel:"noopener",cls:"lnk"},"evidence"):null);
+        L.url?el("a",{href:/^https?:/i.test(L.url)?L.url:"#",target:"_blank",rel:"noopener",cls:"lnk",
+          onClick:e=>{if(!/^https?:/i.test(L.url)){e.preventDefault();openStoredFile(L.bucket,L.url);}}},L.cert?"certificate":"evidence"):null);
       if(kpiPdEdit()&&st==="pending"){
         row.appendChild(el("button",{cls:"lnk",onClick:()=>kpiApproveProposal(p)},KPI_FIELD_RECORD[f]?"Approve → record":"Approve"));
         row.appendChild(el("button",{cls:"lnk del",onClick:()=>reviewProposal(p.id,false)},"Reject"));
@@ -11768,11 +12099,12 @@ function renderBestResidentBanner(){
 
   const isWon=announced&&!!W.senior_resident_id;
   const moreBtn=isWon?el("button",{cls:"stars-more",onClick:()=>set({mod:"best_resident",brTab:"hof",brHofLoaded:false})},"See the full podium ",el("span",null,"→")):null;
+  const certBtn=isWon?brMyCertButton(W):null;
   return el("div",{cls:"stars-banner"+(isWon?" won":"")},
     ...(isWon?[brBandStars(44)]:[
       spark({left:"12%",top:"30%"}),spark({left:"27%",top:"65%",width:"4px",height:"4px",background:"#e8a000",animationDelay:".8s"}),
       spark({left:"45%",top:"20%",animationDelay:"1.5s"}),spark({right:"18%",top:"40%",animationDelay:".3s"})]),
-    header,cardsEl,moreBtn,votingStrip
+    header,cardsEl,moreBtn,certBtn,votingStrip
   );
 }
 
@@ -14941,7 +15273,7 @@ function renderBestResident(){
       if(announced){
         pdControls=el("div",green,
           el("div",{st:{fontWeight:"800",fontSize:".95rem",color:"#2a6020"}},"Winners Announced — "+quarterLabel(q)),
-          el("div",{cls:"sh",st:{fontSize:".8rem"}},"Announced on "+brWhen(st.announced_at)));
+          el("div",{cls:"sh",st:{fontSize:".8rem"}},"Announced on "+brWhen(st.announced_at)),brAwardStatusEl(st));
       }else if(sealed){
         const sr=brPerson(st.senior_resident_id,ay),jr=brPerson(st.junior_resident_id,ay);
         pdControls=el("div",green,
@@ -14962,8 +15294,8 @@ function renderBestResident(){
           noteField(true),
           el("div",{st:{display:"flex",gap:"12px",flexWrap:"wrap",marginTop:"14px"}},
             el("button",{cls:"sbtn ghost",onClick(){showConfirm("Show the winners to everyone now, instead of waiting for "+annWhen+"?",async()=>{await brRevealNow();},"Reveal now","primary");}},"Reveal now"),
-            el("button",{cls:"sbtn ghost",onClick(){showConfirm("Unlock the winners? They go back to being undecided and nothing will be revealed until you lock them again.",async()=>{await brUnlockWinners();},"Unlock","warn");}},"Unlock")),
-          note("Only you can see these names. Everyone else sees a countdown, and the winners appear by themselves at the announcement time."));
+            el("button",{cls:"sbtn ghost",onClick(){brUnlockFlow();}},"Unlock")),
+          note("Only you can see these names. Everyone else sees a countdown, and the winners appear by themselves at the announcement time. At that moment their certificates are made and filed under Awards & Honours on their KPI pages."));
       }else if(isOpen){
         pdControls=el("div",yellow,
           el("div",{cls:"card-title",st:{color:"#B8860B"}},"Voting is Open — "+quarterLabel(q)),
@@ -14993,7 +15325,7 @@ function renderBestResident(){
               if(!topSr||!topJr){showToast("There is nobody to rank yet.","warning");return;}
               const at=annVal(),later=at&&new Date(at)>brNow();
               showConfirm("Lock "+dname(topSr.res.name)+" (Senior) and "+dname(topJr.res.name)+" (Junior) as the winners? "
-                +(later?"They stay hidden until "+brWhen(brIso(at))+".":"No future announcement time is set, so they will be shown to everyone immediately."),
+                +(later?"They stay hidden until "+brWhen(brIso(at))+".":"No future announcement time is set, so they will be shown to everyone immediately.")+" Their certificates and Awards & Honours records follow automatically when they appear.",
                 async()=>{if(await brAnnounceWinners(topSr.res.id,topJr.res.id,topSr.final,topJr.final,at,brPodiumSnapshot()))clear();},
                 later?"Lock winners":"Announce now","primary");
             }},"Lock winners"),
@@ -15290,10 +15622,10 @@ function renderBestResident(){
     }
     return el("div",{st:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"16px"}},
       ...withWinners.map(w=>{
-        if(w.podium&&w.podium.senior&&w.podium.senior.length)return brPodiumCard(w);
+        if(w.podium&&w.podium.senior&&w.podium.senior.length)return brAwardFooter(w,brPodiumCard(w));
         const sr=brPerson(w.senior_resident_id,w.academic_year);
         const jr=brPerson(w.junior_resident_id,w.academic_year);
-        return el("div",{cls:"hof-card"},
+        return brAwardFooter(w,el("div",{cls:"hof-card"},
           el("div",{cls:"hof-q-label"}," "+quarterLabel(w.quarter)+" · AY "+w.academic_year+"–"+(w.academic_year+1)),
           el("div",{st:{marginBottom:"10px"}},
             el("div",{cls:"hof-winner-type"}," Best Senior"),
@@ -15306,7 +15638,7 @@ function renderBestResident(){
             el("div",{cls:"hof-winner-name"},jr?dname(jr.name):"—"),
             w.junior_score!=null?el("div",{cls:"hof-winner-score"},"Final score: "+Math.round(w.junior_score)+"/100"):null
           )
-        );
+        ));
       })
     );
   }
