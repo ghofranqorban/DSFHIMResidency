@@ -197,6 +197,17 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .oc-fs-tbl-wrap{flex:1 1 auto;min-width:0;overflow-y:auto;overflow-x:hidden;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);border:1px solid #ddd6cc;}
 .oc-fs-tbl-wrap .oncall-tbl{width:100%;table-layout:fixed;}
 .oc-fs-tbl-wrap thead th{position:sticky;top:0;background:#1F1A12;z-index:2;}
+#oc-fullscreen .oc-edit-col{display:none;}
+#oc-fullscreen .oncall-tbl td>div,#oc-fullscreen .oc-stack-item>div{display:flex!important;align-items:center;gap:4px;min-width:0;white-space:nowrap;overflow:hidden;}
+#oc-fullscreen .oncall-tbl td .oc-name{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;}
+#oc-fullscreen .oncall-tbl td>div>span:not(.oc-name),#oc-fullscreen .oc-stack-item span:not(.oc-name){flex:0 0 auto;margin:0!important;line-height:1.2;}
+#oc-fullscreen .oc-stack{flex-direction:row!important;gap:12px!important;}
+#oc-fullscreen .oc-stack-item{border-top:none!important;padding-top:0!important;flex:1 1 0;min-width:0;align-items:center!important;gap:5px!important;}
+#oc-fullscreen .oc-stack-item>span:first-child{padding-top:0!important;}
+#oc-fullscreen .oncall-tbl td>div>span[data-ico],#oc-fullscreen .oc-stack-item span[data-ico]{font-size:0!important;padding:0 4px!important;line-height:1!important;}
+#oc-fullscreen .oncall-tbl td>div>span[data-ico]::before,#oc-fullscreen .oc-stack-item span[data-ico]::before{content:attr(data-ico);line-height:1.2;}
+#oc-fullscreen .oc-sticky-date div div{display:none;}
+#oc-fullscreen .oncall-tbl td.oc-sticky-date{white-space:nowrap;padding-left:6px!important;padding-right:4px!important;}
 .oc-dock-panel{flex:0 0 280px;background:#1F1A12;color:#FEFBF3;border-radius:12px;padding:18px;font-size:.8rem;line-height:1.6;overflow-y:auto;}
 .oc-dock-empty{color:rgba(254,251,243,.4);font-style:italic;}
 .oc-dock-panel .oc-dp-name{font-weight:700;font-size:.88rem;color:#fff;margin-bottom:8px;}
@@ -3786,14 +3797,17 @@ function fitOncallFullscreen(){
   const availH=wrap.getBoundingClientRect().height;
   const theadH=thead.getBoundingClientRect().height;
   const rows=tbody.children.length;
-  const rowH=Math.max(18,(availH-theadH)/rows);
-  const fontPx=Math.max(9,Math.min(13,Math.floor(rowH*0.32)));
+  // One line per day (names truncate instead of wrapping, badges sit beside the name, the
+  // day-cover pair shares a line), so the row height is what the font has to fit into: 28
+  // rows on a laptop give ~28px each, a five-week block ~22px. The 4px slack covers borders.
+  const rowH=Math.max(16,(availH-theadH)/rows);
   const padV=Math.max(1,Math.floor(rowH*0.1));
-  const btnFontPx=Math.max(8,fontPx-2);
-  const cellMinH=Math.max(10,Math.floor(rowH-padV*2-2));
+  const fontPx=Math.max(9,Math.min(15,Math.floor((rowH-padV*2-4)/1.25)));
+  const btnFontPx=Math.max(8,fontPx-3);
+  const cellMinH=Math.max(10,Math.floor(rowH-padV*2-3));
   let style=document.getElementById("oc-fs-dyn-style");
   if(!style){style=document.createElement("style");style.id="oc-fs-dyn-style";document.head.appendChild(style);}
-  style.textContent="#oc-fullscreen .oncall-tbl td{padding:"+padV+"px 12px;font-size:"+fontPx+"px;} #oc-fullscreen .oncall-tbl thead th{padding:5px 12px;font-size:.6rem;} #oc-fullscreen .oc-day-pill{font-size:"+btnFontPx+"px!important;padding:1px 7px!important;} #oc-fullscreen .oncall-tbl td button.sbtn{font-size:"+btnFontPx+"px!important;padding:1px 6px!important;} #oc-fullscreen .oc-sticky-date div{font-size:"+fontPx+"px!important;line-height:1.15!important;} #oc-fullscreen .oncall-tbl td>div{min-height:"+cellMinH+"px!important;}";
+  style.textContent="#oc-fullscreen .oncall-tbl td{padding:"+padV+"px 8px;font-size:"+fontPx+"px;} #oc-fullscreen .oncall-tbl thead th{padding:5px 12px;font-size:.6rem;} #oc-fullscreen .oc-day-pill{font-size:"+btnFontPx+"px!important;padding:1px 7px!important;} #oc-fullscreen .oncall-tbl td button.sbtn{font-size:"+btnFontPx+"px!important;padding:1px 6px!important;} #oc-fullscreen .oc-sticky-date div{font-size:"+fontPx+"px!important;line-height:1.15!important;} #oc-fullscreen .oncall-tbl td>div{min-height:"+cellMinH+"px!important;line-height:1.2;} #oc-fullscreen .oc-stack-item>div{min-height:0!important;} #oc-fullscreen .oncall-tbl td>div>span:not(.oc-name),#oc-fullscreen .oc-stack-item span:not(.oc-name){font-size:"+btnFontPx+"px!important;padding:0 4px!important;} #oc-fullscreen .oncall-tbl td>div>span[data-ico],#oc-fullscreen .oc-stack-item span[data-ico]{font-size:0!important;} #oc-fullscreen .oncall-tbl td>div>span[data-ico]::before,#oc-fullscreen .oc-stack-item span[data-ico]::before{font-size:"+(btnFontPx+3)+"px;} #oc-fullscreen .oc-sticky-date div{font-size:"+Math.max(9,fontPx-2)+"px!important;}";
 }
 window.addEventListener("resize",()=>{if(STATE.oncallFullscreen)fitOncallFullscreen();});
 async function loadOncallData(ay){
@@ -16747,9 +16761,9 @@ function renderKPIExecutive(){
 // so cannot be reached from module scope; it is passed in rather than lifted out.
 function ocColumnCell(cellFn,sl,date,col,interactive){
   if(col.slots.length===1)return cellFn(sl[col.slots[0].slot_key],date,col.slots[0].slot_key,interactive);
-  const wrap=el("div",{st:{display:"flex",flexDirection:"column",gap:"5px"}});
+  const wrap=el("div",{cls:"oc-stack",st:{display:"flex",flexDirection:"column",gap:"5px"}});
   col.slots.forEach((x,i)=>{
-    wrap.appendChild(el("div",{st:Object.assign({display:"flex",alignItems:"flex-start",gap:"7px"},i?{borderTop:"1px dashed rgba(31,26,18,.13)",paddingTop:"5px"}:{})},
+    wrap.appendChild(el("div",{cls:"oc-stack-item",st:Object.assign({display:"flex",alignItems:"flex-start",gap:"7px"},i?{borderTop:"1px dashed rgba(31,26,18,.13)",paddingTop:"5px"}:{})},
       el("span",{st:{fontSize:".62rem",fontWeight:"800",color:"#5C5345",minWidth:"11px",paddingTop:"3px"}},String(i+1)),
       el("div",{st:{flex:"1",minWidth:"0"}},cellFn(sl[x.slot_key],date,x.slot_key,interactive))));
   });
@@ -17603,6 +17617,7 @@ function renderOncall(){
           const mb=document.createElement("span");
           const marked=markedLess||markedExtra,penalty=markedExtra||(!markedLess&&owed);
           mb.className="oc-mm-badge"+(penalty?" extra":"")+(marked?"":" sofar");
+          mb.dataset.ico=penalty?"\u2691":"\u2605";
           const hint=marked?"":(rec.done?" \u00b7 not marked yet":" \u00b7 so far");
           mb.textContent=(penalty?"Extra on-call \u2691":"\u2605 Less on-call")+hint;
           if(penalty)mb.title=markedExtra
@@ -17629,6 +17644,7 @@ function renderOncall(){
         const badge=document.createElement("span");
         badge.style.cssText="font-size:.63rem;background:#fde8e8;color:#b91c1c;border:1px solid #fca5a5;border-radius:4px;padding:1px 5px;display:inline-block;margin-top:2px;white-space:nowrap;";
         badge.textContent="Extra \u2691";
+        badge.dataset.ico="\u2691";
         cell.appendChild(badge);
       }
     }
@@ -17657,7 +17673,7 @@ function renderOncall(){
             ocColShownOn(col,date)
               ?ocColumnCell(oncallCell,sl,date,col,interactive)
               :el("span",{st:{color:"#d1d5db",fontSize:".78rem"}},"—"))),
-          canEdit?el("td",null,
+          canEdit?el("td",{cls:"oc-edit-col"},
             el("button",{cls:"sbtn",st:{fontSize:".74rem",padding:"3px 9px"},onClick:()=>set({oncallEditDate:date})},"Edit")
           ):null
         );
@@ -17668,7 +17684,7 @@ function renderOncall(){
         el("th",{cls:"oc-sticky-date"},"Date"),
         el("th",{cls:"oc-sticky-day"},"Day"),
         ...ocColumns(blk).map(col=>el("th",col.days_mode==="weekend"?{cls:"ctu-h"}:null,col.label)),
-        canEdit?el("th",null,""):null
+        canEdit?el("th",{cls:"oc-edit-col"},""):null
       );
     }
     const fsOpen=!!STATE.oncallFullscreen;
