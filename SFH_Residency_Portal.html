@@ -119,9 +119,9 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .oncall-tbl thead tr{background:#1F1A12;}
 .oncall-tbl thead th{color:rgba(254,251,243,.6);font-weight:700;padding:10px 10px;text-align:left;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;border-bottom:none;background:#1F1A12;white-space:normal;line-height:1.25;position:sticky;top:0;z-index:4;}
 .oncall-tbl th.oc-sticky-date{position:sticky;left:0;z-index:5;background:#1F1A12;min-width:60px;width:60px;}
-.oncall-tbl th.oc-sticky-day{position:sticky;left:60px;z-index:5;background:#1F1A12;border-right:1px solid rgba(254,251,243,.08);min-width:90px;width:90px;}
+.oncall-tbl th.oc-sticky-day{position:sticky;left:60px;z-index:5;background:#1F1A12;border-right:1px solid rgba(254,251,243,.08);min-width:68px;width:68px;}
 .oncall-tbl td.oc-sticky-date{position:sticky;left:0;z-index:2;background:inherit;border-right:1px solid rgba(31,26,18,.07);min-width:60px;width:60px;padding:10px 8px;}
-.oncall-tbl td.oc-sticky-day{position:sticky;left:60px;z-index:2;background:inherit;border-right:1px solid rgba(31,26,18,.08);min-width:90px;width:90px;}
+.oncall-tbl td.oc-sticky-day{position:sticky;left:60px;z-index:2;background:inherit;border-right:1px solid rgba(31,26,18,.08);min-width:68px;width:68px;}
 .oncall-tbl thead th.ctu-h{color:#CBA155;}
 .oncall-tbl tbody tr{border-bottom:1px solid rgba(31,26,18,.06);transition:background .1s;}
 .oncall-tbl tbody tr:nth-child(even){background:#FEFBF3;}
@@ -134,8 +134,8 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .oncall-tbl td{padding:9px 10px;vertical-align:middle;}
 /* The schedule's columns share the width they are given, so the whole grid fits a laptop; a phone still scrolls it (min-width 820). */
 #oncall-sched-tbl{table-layout:fixed;}
-#oncall-sched-tbl th:empty{width:60px;padding:0;}
-.oncall-tbl th.oc-sticky-day,.oncall-tbl td.oc-sticky-day{min-width:100px;width:100px;}
+#oncall-sched-tbl th:empty{width:52px;padding:0;}
+.oncall-tbl th.oc-sticky-day,.oncall-tbl td.oc-sticky-day{min-width:68px;width:68px;}
 .oc-today-badge{display:inline-block;background:#c96a4a;color:#fff;font-size:.58rem;font-weight:700;padding:2px 7px;border-radius:20px;margin-left:7px;vertical-align:middle;letter-spacing:.05em;}
 .oc-day-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.73rem;font-weight:700;white-space:nowrap;}
 .oc-day-pill.wd{background:rgba(31,26,18,.08);color:rgba(31,26,18,.55);}
@@ -5068,6 +5068,19 @@ function levelInAY(res,y){
 function resById(id){return RESIDENTS.find(r=>r.id==id)||INCOMING.find(r=>r.id==id);}
 function anyResById(id){return resById(id)||_inactiveResById[id]||null;}
 function dname(name){return(name||"").replace(/^Dr\.\s*/i,"");}
+// On-call grid names: the first name alone. Two residents who share a first name get the last
+// initial ("Omar B."); if even that collides, the full name, so no two cells ever read alike.
+function ocShortName(res){
+  const parts=dname(res.name).trim().split(/\s+/),first=parts[0],last=parts.length>1?parts[parts.length-1]:"";
+  if(!last)return first;
+  const pool=new Map();
+  RESIDENTS.concat(ocRoster(),Object.values(_inactiveResById||{})).forEach(r=>{if(r&&r.id!=null)pool.set(r.id,r);});
+  const same=[...pool.values()].filter(r=>r.id!==res.id&&dname(r.name).trim().split(/\s+/)[0].toLowerCase()===first.toLowerCase());
+  if(!same.length)return first;
+  const ini=last[0].toUpperCase();
+  const clash=same.some(r=>{const p=dname(r.name).trim().split(/\s+/);return p.length>1&&p[p.length-1][0].toUpperCase()===ini;});
+  return clash?dname(res.name).trim():first+" "+ini+".";
+}
 // Every resident and mentor is stored as "Dr. Name". A name typed without it gets it; a name
 // that already has it, in any spelling ("Dr.", "dr", "DR  ", even "Dr. Dr."), comes out with
 // exactly one. Only a leading "Dr" followed by a dot or a space counts, so Drake and Driss
@@ -17933,7 +17946,8 @@ function renderOncall(){
       nm.className="oc-name";
       nm.style.cssText="font-weight:700;font-size:.83rem;display:inline-block;"+(isSelfCell||isMenteeCell?"color:#b45309;background:#fde68a;padding:2px 10px;border-radius:20px;":"");
       if(isMenteeCell)nm.title="Your mentee";
-      nm.textContent=res?dname(res.name):(entry.resident_name||"?");
+      nm.textContent=res?ocShortName(res):(entry.resident_name||"?");
+      if(res&&!isMenteeCell)nm.title=dname(res.name);
       nm.dataset.ocDate=date;
       nm.style.cursor="default";
       // The hover card totals a colleague's on-calls for the block. That is for whoever
@@ -18030,7 +18044,7 @@ function renderOncall(){
         if(isToday){const badge=document.createElement("div");badge.style.cssText="font-size:.6rem;font-weight:800;color:#c96a4a;letter-spacing:.04em;margin-top:1px;";badge.textContent="TODAY";dateCellContent.appendChild(badge);}
         return el("tr",{cls:rowCls},
           el("td",{cls:"oc-sticky-date"},dateCellContent),
-          el("td",{cls:"oc-sticky-day"},el("span",{cls:"oc-day-pill "+(isToday?"today":isWe?"we":"wd")},day)),
+          el("td",{cls:"oc-sticky-day"},el("span",{cls:"oc-day-pill "+(isToday?"today":isWe?"we":"wd"),title:day},day.slice(0,3))),
           ...ocColumns(blk).map(col=>el("td",null,
             ocColShownOn(col,date)
               ?ocColumnCell(oncallCell,sl,date,col,interactive)
