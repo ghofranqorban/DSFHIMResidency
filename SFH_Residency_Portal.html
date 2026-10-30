@@ -131,7 +131,7 @@ tr:hover .sticky-col{background:#fdf9f5;}
 .oncall-tbl tbody tr.oc-we:hover td{background:rgba(127,184,156,.08)!important;}
 .oncall-tbl tbody tr.oc-today{background:#fff9f6!important;box-shadow:inset 4px 0 0 #c96a4a;}
 .oncall-tbl tbody tr.oc-today:hover td{background:#fff4ef!important;}
-.oncall-tbl td{padding:9px 10px;vertical-align:middle;}
+.oncall-tbl td{padding:7px 10px;vertical-align:middle;}
 /* The schedule's columns share the width they are given, so the whole grid fits a laptop; a phone still scrolls it (min-width 820). */
 #oncall-sched-tbl{table-layout:fixed;}
 #oncall-sched-tbl th:empty{width:52px;padding:0;}
@@ -17138,10 +17138,9 @@ function renderKPIExecutive(){
 // so cannot be reached from module scope; it is passed in rather than lifted out.
 function ocColumnCell(cellFn,sl,date,col,interactive){
   if(col.slots.length===1)return cellFn(sl[col.slots[0].slot_key],date,col.slots[0].slot_key,interactive);
-  const wrap=el("div",{cls:"oc-stack",st:{display:"flex",flexDirection:"column",gap:"5px"}});
+  const wrap=el("div",{cls:"oc-stack",st:{display:"flex",flexDirection:"row",gap:"8px"}});
   col.slots.forEach((x,i)=>{
-    wrap.appendChild(el("div",{cls:"oc-stack-item",st:Object.assign({display:"flex",alignItems:"flex-start",gap:"7px"},i?{borderTop:"1px dashed rgba(31,26,18,.13)",paddingTop:"5px"}:{})},
-      el("span",{st:{fontSize:".62rem",fontWeight:"800",color:"#5C5345",minWidth:"11px",paddingTop:"3px"}},String(i+1)),
+    wrap.appendChild(el("div",{cls:"oc-stack-item",st:Object.assign({display:"flex",alignItems:"flex-start",gap:"5px",flex:"1 1 0",minWidth:"0"},i?{borderLeft:"1px dashed rgba(31,26,18,.18)",paddingLeft:"8px"}:{})},
       el("div",{st:{flex:"1",minWidth:"0"}},cellFn(sl[x.slot_key],date,x.slot_key,interactive))));
   });
   return wrap;
@@ -17969,15 +17968,6 @@ function renderOncall(){
         }
       }
       cell.appendChild(nm);
-      // The "Asked off" mark is for whoever builds the schedule. On the published grid a
-      // resident sees only who is on call, not which colleagues asked not to be.
-      if(res&&canEditOncall()&&oncallPrefHasPick(blk,res.id,date)){
-        const pf=document.createElement("span");
-        pf.style.cssText="font-size:.63rem;background:rgba(201,106,74,.13);color:#a94e2c;border:1px solid rgba(169,78,44,.35);border-radius:4px;padding:1px 5px;display:inline-block;margin-top:2px;white-space:nowrap;font-weight:700;";
-        pf.textContent="Asked off";
-        pf.title="This resident asked not to be on call on "+fmtDate(date);
-        cell.appendChild(pf);
-      }
       // "★ Less on-call" is a recorded reward and shows to everyone, exactly like Extra shows a
       // recorded penalty. The dashed form — earned by a full Morning Meeting record in the block
       // before but not yet marked in the list — is the builder's alone, like "Asked off".
@@ -17994,8 +17984,7 @@ function renderOncall(){
           const marked=markedLess||markedExtra,penalty=markedExtra||(!markedLess&&owed);
           mb.className="oc-mm-badge"+(penalty?" extra":"")+(marked?"":" sofar");
           mb.dataset.ico=penalty?"\u2691":"\u2605";
-          const hint=marked?"":(rec.done?" \u00b7 not marked yet":" \u00b7 so far");
-          mb.textContent=(penalty?"Extra on-call \u2691":"\u2605 Less on-call")+hint;
+          mb.textContent=marked?(penalty?"Extra on-call \u2691":"\u2605 Less on-call"):(penalty?"\u2691 ":"\u2605 ")+(rec.done?"due":"so far");
           if(penalty)mb.title=markedExtra
             ?"One extra on-call due this block (penalty)"+(owed?" \u2014 absent from "+rec.a+" Morning Meetings of Block "+ref.blk:"")
             :"Due one extra on-call: absent from "+rec.a+" Morning Meetings of Block "+ref.blk+(rec.done?"":" so far")+" (more than "+bar+") \u2014 not marked in the list yet";
@@ -18059,7 +18048,10 @@ function renderOncall(){
       return el("tr",null,
         el("th",{cls:"oc-sticky-date"},"Date"),
         el("th",{cls:"oc-sticky-day"},"Day"),
-        ...ocColumns(blk).map(col=>el("th",col.days_mode==="weekend"?{cls:"ctu-h"}:null,col.label)),
+        ...(()=>{
+          const cols=ocColumns(blk),wt=c=>c.slots.length>1?2:1,tot=cols.reduce((a,c)=>a+wt(c),0);
+          return cols.map(col=>el("th",Object.assign(col.days_mode==="weekend"?{cls:"ctu-h"}:{},{st:{width:(80*wt(col)/tot).toFixed(2)+"%"}}),col.label));
+        })(),
         canEdit?el("th",{cls:"oc-edit-col"},""):null
       );
     }
@@ -18070,7 +18062,7 @@ function renderOncall(){
     return el("div",null,
       renderPublishControls(blkEntriesAll,"oncall_schedule",blk,canEdit,loadOncallData,ocAY()),
       clashes.length?el("div",{cls:"alert-yellow",st:{marginBottom:"16px"}},
-        clashes.length+" assignment"+(clashes.length===1?"":"s")+" in this block fall on a date the resident asked to avoid \u2014 marked \u201cAsked off\u201d below. You can publish anyway."
+        clashes.length+" assignment"+(clashes.length===1?"":"s")+" in this block fall on a date the resident asked to avoid. The day editor flags each one. You can publish anyway."
       ):null,
       renderOncallAvailStrip(blk),
       el("div",{st:{marginBottom:"16px",display:"flex",gap:"10px",flexWrap:"wrap"}},
