@@ -14815,7 +14815,9 @@ function renderControl(){
 // ─── BEST RESIDENT MODULE ─────────────────────────────────────────────────────
 function renderBestResident(){
   const u=STATE.user;
-  const tab=STATE.brTab||"vote";
+  // The page opens on the Hall of Fame (the PD's choice, 30 Oct 2026): the winners are what most
+  // visitors come for, and the home banner already sends voters straight to the Vote tab.
+  const tab=STATE.brTab||"hof";
   brSync();
   const P=brPeriod(),q=P.q,ay=P.ay;
   const isPD_=brIsLead();
