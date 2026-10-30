@@ -15952,7 +15952,7 @@ function renderKPIExecutive(){
 @media(max-width:560px){#kpix-wrap .pp-grid{grid-template-columns:1fr;}#kpix-wrap .kpix-perfpod{padding:70px 16px 0;}#kpix-wrap .pp-hinge{margin-bottom:36px;}}
 #kpix-wrap .kpix-progkpi{padding:96px 0 40px;position:relative;}
 #kpix-wrap .pk-sub{font-size:.82rem;line-height:1.6;color:rgba(31,26,18,.62);max-width:58ch;margin:14px auto 0;text-align:center;}
-#kpix-wrap .pk-chart{display:grid;grid-template-columns:repeat(6,1fr);margin-top:56px;}
+#kpix-wrap .pk-chart{display:grid;grid-template-columns:repeat(5,1fr);margin-top:56px;}
 #kpix-wrap .pk-col{grid-row:1;grid-column:var(--i);position:relative;height:320px;padding:0 12px;}
 #kpix-wrap .pk-bar{position:absolute;left:0;right:0;bottom:0;height:var(--v);width:min(64px,100%);margin:0 auto;background:rgba(201,106,74,.62);border-radius:4px 4px 0 0;transform-origin:50% 100%;}
 #kpix-wrap .pk-col.met .pk-bar{background:var(--green);}
@@ -16114,10 +16114,12 @@ function renderKPIExecutive(){
   }
   const tierLabel=scoreTier(avgKPI);
 
-  // ── Programme KPI: six standards, each plotted against its OWN target ──────────────────────
+  // ── Programme KPI: five standards, each plotted against its OWN target ──────────────────────
   // Five different thresholds (75/60/25/25/50) cannot share a y-axis: 18% published would look
   // catastrophic beside 66% quiz although they are 7 and 6 points from their own targets. So every
-  // standard is drawn as a share of its target and one rule judges all six. The real figure is
+  // standard is drawn as a share of its target and one rule judges all five. "Research in
+  // progress" was dropped from this chart on 30 Oct 2026 (the PD's call); its count stays
+  // computed for the resident pages. The real figure is
   // printed on the axis rather than floating in the plot, so it can never land on the wrong side
   // of that rule.
   //
@@ -16165,8 +16167,6 @@ function renderKPIExecutive(){
      basis:pkQzDen?pkQzN+" of "+pkQzDen+" who sat one":null},
     {name:"Research published",label:"Share of residents published",target:25,op:">=",
      value:pkPubN==null?null:pkShare(pkPubN),basis:pkPubN==null?null:pkPubN+" of "+total},
-    {name:"Research in progress",label:"Draft written or IRB approved",target:25,op:">=",
-     value:pkIrbN==null?null:pkShare(pkIrbN),basis:pkIrbN==null?null:pkIrbN+" of "+total},
     {name:"QI / patient safety",label:"Share involved in a QI project",target:25,op:">=",
      value:pkShare(pkQiN),basis:pkQiN+" of "+total},
     {name:"Committee membership",label:"Share sitting on a committee",target:50,op:">",
@@ -16184,7 +16184,7 @@ function renderKPIExecutive(){
   // not squash the target rule against the top of the plot.
   var pkScale=Math.max(124,Math.max.apply(null,progKpis.map(function(k){return k.ratio;}))+10);
   var pkLine=100/pkScale*100;
-  // Denominator is the standards that HAVE data, so a failed load reads "2 of 3", never "2 of 6".
+  // Denominator is the standards that HAVE data, so a failed load reads "2 of 3", never "2 of 5".
   var pkCap='Target &middot; <b>'+pkMetN+' of '+pkAvailN+'</b> clear this line';
   var pkBody=progKpis.map(function(k,i){
     var h=k.avail?Math.min(k.ratio,pkScale)/pkScale*100:0;
@@ -16218,7 +16218,7 @@ function renderKPIExecutive(){
     '<section class="kpix-progkpi" id="kpix-progkpi">'
     +'<div class="wrap">'
     +'<div class="sec-head reveal"><div class="lbl" style="color:var(--terracotta);">Programme</div><h2>KPI</h2></div>'
-    +'<p class="pk-sub">Six standards, each the share of residents clearing it, plotted against its own target &mdash; so one line judges all of them. Actual and required figures are printed on every column.</p>'
+    +'<p class="pk-sub">Five standards, each the share of residents clearing it, plotted against its own target &mdash; so one line judges all of them. Actual and required figures are printed on every column.</p>'
     +'<p class="pk-mobcap">'+pkCap+'</p>'
     +'<div class="pk-chart" role="img" aria-labelledby="kpix-pk-sum">'+pkBody+'</div>'
     +'<p class="pk-sr" id="kpix-pk-sum">'+pkSum+'</p>'
@@ -16688,7 +16688,7 @@ function renderKPIExecutive(){
     +'<div class="marquee-viewport"><div class="marquee-track" id="kpix-marqueeTrack">'+marqueeCardsHtml+'</div></div>'
     +'</section>'
 
-    // Programme KPI - six standards against their own targets
+    // Programme KPI - five standards against their own targets
     +pkSection
 
     // Horizon Landscape (KPI Summary)
