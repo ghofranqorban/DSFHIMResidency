@@ -658,6 +658,43 @@ th.ov-th{text-align:center;}
 .rb-cnt .mat{color:#701a75;}
 .rb-cnt .elec{color:#166534;}
 .rb-grid tr.rb-cline.rot th{background:#ece4f7;}
+/* ─── Builder: by-rotation view ─── */
+.rb-vt{display:inline-flex;border:1px solid rgba(31,26,18,.12);border-radius:9999px;padding:3px;background:rgba(31,26,18,.02);}
+.rb-vt span{padding:5px 14px;border-radius:9999px;font-size:.74rem;font-weight:500;color:#5C5345;cursor:pointer;white-space:nowrap;transition:all .15s;}
+.rb-vt span.on{background:#c96a4a;color:#FEFBF3;font-weight:600;cursor:default;}
+.rb-bnav{display:inline-flex;align-items:center;gap:4px;margin-left:10px;vertical-align:middle;}
+.rb-bnav span{width:26px;height:26px;border-radius:50%;border:1px solid rgba(31,26,18,.14);display:inline-flex;align-items:center;justify-content:center;font-size:.9rem;color:#5C5345;cursor:pointer;background:#FEFBF3;}
+.rb-bnav span:hover{border-color:#c96a4a;color:#c96a4a;}
+.rb-nm{display:inline-flex;align-items:center;gap:5px;font-size:.78rem;font-weight:600;color:#1F1A12;padding:3px 8px 3px 4px;border-radius:7px;background:#FEFBF3;border:1px solid rgba(31,26,18,.09);cursor:pointer;position:relative;white-space:nowrap;line-height:1.3;}
+.rb-nm:hover{box-shadow:inset 0 0 0 2px #c96a4a;}
+.rb-nm .lv{font-size:.56rem;font-weight:700;color:#FEFBF3;border-radius:9999px;padding:1px 6px;letter-spacing:.02em;}
+.rb-nm .rb-wk{font-size:.58rem;color:#5C5345;opacity:1;background:rgba(31,26,18,.06);padding:1px 5px;border-radius:4px;}
+.rb-nm .rb-wk.lv{background:#fefce8;color:#854d0e;}
+.rb-nm.red::after,.rb-nm.amber::after{content:'';position:absolute;top:-1px;right:-1px;width:0;height:0;border-left:7px solid transparent;border-top:7px solid #b52040;border-top-right-radius:6px;}
+.rb-nm.amber::after{border-top-color:#A47A28;}
+.rb-nm.away{opacity:.6;font-weight:500;}
+.rb-rlab{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:.8rem;white-space:nowrap;}
+.rb-rlab i{width:9px;height:9px;border-radius:2px;flex:none;}
+.rb-rlab small{font-weight:500;font-size:.66rem;color:#6E6455;}
+.rb-heads{font-family:'Playfair Display',serif;font-size:1.15rem;line-height:1;color:#1F1A12;text-align:right;}
+.rb-heads small{display:block;font-family:'Inter',system-ui,sans-serif;font-size:.6rem;font-weight:600;color:#6E6455;letter-spacing:.04em;text-transform:uppercase;margin-top:3px;}
+.rb-heads.nil{color:rgba(31,26,18,.22);}
+/* The sheet: juniors wrap, headcount on the right */
+.rb-ledger{border-collapse:collapse;width:100%;font-size:.8rem;}
+.rb-ledger th{background:#F6EFE2;color:#5C5345;font-size:.64rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:9px 10px;text-align:left;white-space:nowrap;}
+.rb-ledger th:last-child{text-align:right;}
+.rb-ledger td{border-bottom:1px solid rgba(31,26,18,.07);padding:9px 10px;vertical-align:top;}
+.rb-ledger td.rot{width:160px;border-left:4px solid transparent;}
+.rb-ledger td.rot .nm{font-family:'Playfair Display',serif;font-size:.98rem;font-weight:400;color:#1F1A12;display:block;line-height:1.15;}
+.rb-ledger td.rot small{font-size:.64rem;font-weight:600;color:#6E6455;letter-spacing:.04em;text-transform:uppercase;}
+.rb-ledger td.sr{width:190px;}
+.rb-ledger td.sr .rb-nm{display:flex;margin:1px 0;}
+.rb-ledger td.jr{}
+.rb-ledger td.jr .rb-nm{margin:1px 5px 1px 0;}
+.rb-ledger td.hd{width:70px;}
+.rb-ledger tr.empty td{color:#6E6455;font-size:.74rem;font-style:italic;}
+.rb-ledger tr.empty td.rot .nm{color:#6E6455;}
+.rb-ledger tr.away td{background:#FAF6EC;border-top:2px solid rgba(31,26,18,.1);}
 .rb-rotsel{font-family:inherit;font-size:.72rem;font-weight:600;padding:5px 9px;border-radius:8px;border:1px solid rgba(31,26,18,.16);background:#FEFBF3;color:#1F1A12;cursor:pointer;}
 .rb-panel{background:#FEFBF3;border-radius:16px;width:980px;max-width:96vw;max-height:90vh;overflow:hidden;box-shadow:0 24px 60px rgba(31,26,18,.3);display:flex;flex-direction:column;}
 .rb-phead{padding:20px 26px 16px;border-bottom:1px solid rgba(31,26,18,.07);display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
@@ -13525,7 +13562,7 @@ function renderRotaBuilder(){
     pills.appendChild(el("button",{cls:"sbtn small"+(lvlFilter===lv?" primary":" ghost"),
       onClick:()=>set({rbLevel:lv})},lv==="all"?"All":lv));
   });
-  pills.appendChild(el("button",{cls:"sbtn small"+(STATE.rbShort?" primary":" ghost"),
+  if(!STATE.rbView||STATE.rbView==="grid")pills.appendChild(el("button",{cls:"sbtn small"+(STATE.rbShort?" primary":" ghost"),
     onClick:()=>set({rbShort:!STATE.rbShort})},"Shortfalls only"));
   // Dims rather than hides: the point is to watch one rotation across the year without
   // losing sight of who is free to take it.
@@ -13534,18 +13571,36 @@ function renderRotaBuilder(){
     el("option",{value:RB_AWAY},"Away \u2014 leave, maternity & elective"),
     rbRotList().map(r=>el("option",{value:r},r)));
   rotSel.value=rotFilter||"";
-  pills.appendChild(rotSel);
+  if(!STATE.rbView||STATE.rbView==="grid")pills.appendChild(rotSel);
+  // One plan, two readings: the grid by resident, or the same block laid out by service the
+  // way the chief's working sheet does. The block comes from the status strip above.
+  const view=STATE.rbView||"grid";
+  const byRot=view!=="grid";
+  const vBlk=selBlk||CURRENT_PERIOD||1;
+  const toggle=el("div",{cls:"rb-vt"},
+    el("span",{cls:view==="grid"?"on":"",onClick:()=>set({rbView:"grid"})},"By resident"),
+    el("span",{cls:byRot?"on":"",onClick:()=>set({rbView:"rot"})},"By rotation"));
+  const bnav=el("span",{cls:"rb-bnav"},
+    el("span",{onClick:()=>set({rbBlock:Math.max(1,vBlk-1)}),title:"Previous block"},"\u2039"),
+    el("span",{onClick:()=>set({rbBlock:Math.min(blocks.length,vBlk+1)}),title:"Next block"},"\u203a"));
+  const title=byRot?"Block "+vBlk+" by rotation":"The grid";
+  const blurb=view==="grid"
+    ?["Double-click any cell to assign. A corner flag means that rotation is still below its minimum cap — ",
+        el("b",{st:{color:"#A47A28"}},"amber")," for R1, ",el("b",{st:{color:"#b52040"}},"red")," for R2 and above."]
+    :[fmtBlockRange(vBlk,PLAN_AY)+" – "+fmtBlockRange(vBlk,PLAN_AY,true)+" · "+rows.length+" residents. Senior is R3–R4, junior R1–R2. Double-click a name to reassign; a corner flag is a cap shortfall."];
   secB.appendChild(el("div",{st:{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px",flexWrap:"wrap",marginBottom:"14px"}},
     el("div",{st:{maxWidth:"620px"}},
-      el("h2",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.3rem",fontWeight:"400",margin:"0 0 4px"}},"The grid"),
-      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.55)"}},
-        "Double-click any cell to assign. A corner flag means that rotation is still below its minimum cap — ",
-        el("b",{st:{color:"#A47A28"}},"amber")," for R1, ",el("b",{st:{color:"#b52040"}},"red")," for R2 and above.")),
+      el("h2",{st:{fontFamily:"'Playfair Display',serif",fontSize:"1.3rem",fontWeight:"400",margin:"0 0 4px"}},title,byRot?bnav:null),
+      el("div",{st:{fontSize:".82rem",color:"rgba(31,26,18,.55)"}},...blurb)),
     el("div",{st:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"10px"}},
-      canBuildRota()&&PLAN_AY===LP_AY?el("button",{cls:"sbtn ghost",onClick:()=>set({rbPrefill:true})},"Prefill from approved plans"):null,
+      el("div",{st:{display:"flex",gap:"10px",alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}},
+        canBuildRota()&&PLAN_AY===LP_AY?el("button",{cls:"sbtn ghost",onClick:()=>set({rbPrefill:true})},"Prefill from approved plans"):null,
+        toggle),
       pills)));
   if(loading){
     secB.appendChild(el("div",{st:{padding:"40px 0",textAlign:"center",color:"rgba(31,26,18,.4)",fontSize:".85rem"}},"Loading the plan and training history…"));
+  }else if(byRot){
+    secB.appendChild(rbLedger(vBlk,rows,flagsFor));
   }else{
     const tbl=el("table",{cls:"rb-grid"});
     const hr=el("tr",null,el("th",{cls:"rb-res"},"Resident"));
@@ -13628,6 +13683,85 @@ function renderRotaBuilder(){
   if(STATE.rbCell)wrap.appendChild(rbCellPanel());
   if(STATE.rbPrefill)wrap.appendChild(rbPrefillModal());
   return wrap;
+}
+// ─── By-rotation view ─────────────────────────────────────────────────────────
+// The grid answers "where is this resident"; the chief's working sheet answers "who is on
+// this service". This is that sheet, read off the same ROTA_PLAN rows, so it can never
+// disagree with the grid. Senior is R3/R4 and junior is R1/R2 — SCFHS's own split.
+function rbIsSenior(lvl){return lvl==="R3"||lvl==="R4";}
+// Rows in service order: the wards first (CTU, then Night which is CTU by night), the
+// subspecialties as the catalogue lists them, service rotations after, leave never —
+// absence is one footer row, not a service.
+function rbRotRows(){
+  const rots=rbRotList().filter(r=>r!=="Annual Leave"&&r!=="Maternity Leave");
+  const i=rots.indexOf("Night Duty");
+  if(i>0){rots.splice(i,1);rots.splice(1,0,"Night Duty");}
+  return rots;
+}
+// Everyone on each rotation in a block, with the segment that puts them there, so a split
+// block lists the resident under both rotations, each with its week range. Seniors first.
+function rbRotRoster(blk,roster){
+  const by={};
+  roster.forEach(r=>{
+    ((ROTA_PLAN[r.id]||{})[String(blk)]||[]).forEach(s=>{(by[s.rot]=by[s.rot]||[]).push({r,s});});
+  });
+  Object.keys(by).forEach(k=>by[k].sort((x,y)=>(_LVL_ORD[planLevel(x.r)]??9)-(_LVL_ORD[planLevel(y.r)]??9)
+    ||x.s.weekStart-y.s.weekStart||x.r.name.localeCompare(y.r.name)));
+  return by;
+}
+// A name as it sits on a service: level, name, and only when the block is not the plain
+// whole-block case, the weeks it covers and any leave riding on it. Double-click opens the
+// same cell panel the grid does, so the sheet edits exactly what the grid edits.
+function rbNameChip(r,s,blk,flag,extraCls){
+  const lvl=planLevel(r),bw=blockWeeks(blk,PLAN_AY);
+  const rotFrom=s.leavePos==="start"?s.weekStart+s.leaveWeeks:s.weekStart;
+  const partial=s.weeks<bw||s.leaveWeeks>0;
+  const kids=[el("span",{cls:"lv",st:{background:LC[lvl]||"#888"}},lvl),dname(r.name)];
+  if(partial)kids.push(el("i",{cls:"rb-wk"},"w"+rotFrom+"–"+(rotFrom+s.weeks-1)));
+  if(s.leaveWeeks){const lvFrom=s.leavePos==="start"?s.weekStart:s.weekStart+s.weeks;
+    kids.push(el("i",{cls:"rb-wk lv"},"AL w"+lvFrom+"–"+(lvFrom+s.leaveWeeks-1)));}
+  const editable=planBlockEditable(blk);
+  return el("span",{cls:"rb-nm"+(flag?" "+flag:"")+(extraCls?" "+extraCls:""),
+    title:dname(r.name)+" · "+planSegText((ROTA_PLAN[r.id]||{})[String(blk)])+(flag?" · below minimum cap":""),
+    onDblclick:()=>{if(editable)rbOpenCell(r.id,blk);else showToast("Block "+blk+" is "+planBlockState(blk)+" — ask the PD to reopen it.","warning");}},...kids);
+}
+function rbRotLabel(rot){
+  const c=rotColor(rot);
+  return el("span",{cls:"rb-rlab",st:{color:c.tx}},el("i",{st:{background:c.tx}}),ROT_ABBR[rot]||rot,
+    ROT_ABBR[rot]&&ROT_ABBR[rot]!==rot?el("small",null,rot):null);
+}
+function rbAwayList(blk,roster,flagsFor){
+  const out=[];
+  roster.forEach(r=>{
+    ((ROTA_PLAN[r.id]||{})[String(blk)]||[]).forEach(s=>{
+      if(s.rot==="Annual Leave"||s.rot==="Maternity Leave")out.push(rbNameChip(r,s,blk,null,"away"));
+    });
+  });
+  return out;
+}
+// The sheet itself: Service | Senior | Juniors | On service.
+function rbLedger(blk,roster,flagsFor){
+  const by=rbRotRoster(blk,roster),rows=rbRotRows();
+  const tbl=el("table",{cls:"rb-ledger"});
+  tbl.appendChild(el("thead",null,el("tr",null,el("th",null,"Service"),el("th",null,"Senior"),el("th",null,"Juniors"),el("th",null,"On service"))));
+  const tb=el("tbody");
+  rows.forEach(rot=>{
+    const all=by[rot]||[],sr=all.filter(x=>rbIsSenior(planLevel(x.r))),jr=all.filter(x=>!rbIsSenior(planLevel(x.r)));
+    const c=rotColor(rot);
+    const tr=el("tr",{cls:all.length?"":"empty"},
+      el("td",{cls:"rot",st:{borderLeftColor:all.length?c.tx:"rgba(31,26,18,.12)"}},el("span",{cls:"nm"},rot),ROT_ABBR[rot]&&ROT_ABBR[rot]!==rot?el("small",null,ROT_ABBR[rot]):null),
+      el("td",{cls:"sr"},sr.length?sr.map(x=>rbNameChip(x.r,x.s,blk,flagsFor(x.r.id,blk))):(all.length?el("span",{st:{color:"#6E6455",fontSize:".72rem",fontStyle:"italic"}},"no senior"):null)),
+      el("td",{cls:"jr"},jr.length?jr.map(x=>rbNameChip(x.r,x.s,blk,flagsFor(x.r.id,blk))):(all.length?null:"no one assigned")),
+      el("td",{cls:"hd"},el("div",{cls:"rb-heads"+(all.length?"":" nil")},all.length?String(all.length):"—",
+        all.length?el("small",null,sr.length+" sr · "+jr.length+" jr"):null)));
+    tb.appendChild(tr);
+  });
+  const away=rbAwayList(blk,roster,flagsFor);
+  tb.appendChild(el("tr",{cls:"away"},el("td",{cls:"rot",st:{borderLeftColor:"#A47A28"}},el("span",{cls:"nm"},"Away"),el("small",null,"leave")),
+    el("td",{colspan:"2"},away.length?away:el("span",{st:{color:"#6E6455",fontSize:".72rem",fontStyle:"italic"}},"nobody on leave this block")),
+    el("td",{cls:"hd"},el("div",{cls:"rb-heads"+(away.length?"":" nil")},away.length?String(away.length):"—"))));
+  tbl.appendChild(tb);
+  return el("div",{cls:"rb-gwrap"},tbl);
 }
 const RB_MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 // "4 Oct 2026", or with `end`, the block's last day. The end year is taken from the start
