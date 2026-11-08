@@ -679,22 +679,28 @@ th.ov-th{text-align:center;}
 .rb-heads{font-family:'Playfair Display',serif;font-size:1.15rem;line-height:1;color:#1F1A12;text-align:right;}
 .rb-heads small{display:block;font-family:'Inter',system-ui,sans-serif;font-size:.6rem;font-weight:600;color:#6E6455;letter-spacing:.04em;text-transform:uppercase;margin-top:3px;}
 .rb-heads.nil{color:rgba(31,26,18,.22);}
-/* The sheet: juniors wrap, headcount on the right */
-.rb-ledger{border-collapse:collapse;width:100%;font-size:.8rem;}
-.rb-ledger th{background:#F6EFE2;color:#5C5345;font-size:.64rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:9px 10px;text-align:left;white-space:nowrap;}
+/* The sheet: one line per service, so a block fits on one screen */
+.rb-ledger{border-collapse:collapse;width:100%;font-size:.78rem;}
+.rb-ledger th{background:#F6EFE2;color:#5C5345;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:7px 10px;text-align:left;white-space:nowrap;}
 .rb-ledger th:last-child{text-align:right;}
-.rb-ledger td{border-bottom:1px solid rgba(31,26,18,.07);padding:9px 10px;vertical-align:top;}
-.rb-ledger td.rot{width:160px;border-left:4px solid transparent;}
-.rb-ledger td.rot .nm{font-family:'Playfair Display',serif;font-size:.98rem;font-weight:400;color:#1F1A12;display:block;line-height:1.15;}
-.rb-ledger td.rot small{font-size:.64rem;font-weight:600;color:#6E6455;letter-spacing:.04em;text-transform:uppercase;}
-.rb-ledger td.sr{width:190px;}
-.rb-ledger td.sr .rb-nm{display:flex;margin:1px 0;}
-.rb-ledger td.jr{}
-.rb-ledger td.jr .rb-nm{margin:1px 5px 1px 0;}
-.rb-ledger td.hd{width:70px;}
+.rb-ledger td{border-bottom:1px solid rgba(31,26,18,.07);padding:4px 10px;vertical-align:middle;}
+.rb-ledger td.rot{width:190px;border-left:4px solid transparent;white-space:nowrap;}
+.rb-ledger td.rot .nm{font-family:'Playfair Display',serif;font-size:.92rem;font-weight:400;color:#1F1A12;line-height:1.2;}
+.rb-ledger td.rot small{font-size:.6rem;font-weight:600;color:#6E6455;letter-spacing:.04em;text-transform:uppercase;margin-left:6px;}
+.rb-ledger td.sr{width:1%;white-space:nowrap;border-right:1px solid rgba(31,26,18,.06);}
+.rb-ledger td.sr .rb-nm,.rb-ledger td.jr .rb-nm{display:inline-flex;margin:1px 4px 1px 0;}
+.rb-ledger td.sr .rb-nm{background:rgba(164,122,40,.06);}
+.rb-ledger td.jr{line-height:1.2;}
+.rb-ledger td.hd{width:1%;white-space:nowrap;}
+.rb-ledger .rb-nm{font-size:.74rem;padding:2px 7px 2px 3px;}
+.rb-ledger .rb-nm .lv{font-size:.54rem;padding:1px 5px;}
+.rb-ledger .rb-heads{font-size:1rem;display:flex;align-items:baseline;justify-content:flex-end;gap:6px;}
+.rb-ledger .rb-heads small{display:inline;margin:0;font-size:.58rem;}
 .rb-ledger tr.empty td{color:#6E6455;font-size:.74rem;font-style:italic;}
 .rb-ledger tr.empty td.rot .nm{color:#6E6455;}
-.rb-ledger tr.away td{background:#FAF6EC;border-top:2px solid rgba(31,26,18,.1);}
+.rb-ledger tr.away td,.rb-ledger tr.free td{background:#FAF6EC;}
+.rb-ledger tr.away td{border-top:2px solid rgba(31,26,18,.1);}
+.rb-ledger .rb-add{font-size:.66rem;padding:2px 8px;}
 .rb-add{display:inline-flex;align-items:center;font-size:.7rem;font-weight:600;color:#9d4a2a;border:1px dashed rgba(201,106,74,.55);border-radius:7px;padding:3px 9px;cursor:pointer;margin:1px 0;line-height:1.3;background:transparent;transition:background .12s;}
 .rb-add:hover{background:rgba(201,106,74,.08);}
 .rb-add.open{border-style:solid;background:rgba(201,106,74,.1);}
@@ -13728,7 +13734,7 @@ function rbNameChip(r,s,blk,flag,extraCls){
   const lvl=planLevel(r),bw=blockWeeks(blk,PLAN_AY);
   const rotFrom=s.leavePos==="start"?s.weekStart+s.leaveWeeks:s.weekStart;
   const partial=!!s.rot&&(s.weeks<bw||s.leaveWeeks>0);
-  const kids=[el("span",{cls:"lv",st:{background:LC[lvl]||"#888"}},lvl),dname(r.name)];
+  const kids=[el("span",{cls:"lv",st:{background:LC[lvl]||"#888"}},lvl),rbChipName(r)];
   if(partial)kids.push(el("i",{cls:"rb-wk"},"w"+rotFrom+"–"+(rotFrom+s.weeks-1)));
   if(s.leaveWeeks){const lvFrom=s.leavePos==="start"?s.weekStart:s.weekStart+s.weeks;
     kids.push(el("i",{cls:"rb-wk lv"},"AL w"+lvFrom+"–"+(lvFrom+s.leaveWeeks-1)));}
@@ -13737,6 +13743,14 @@ function rbNameChip(r,s,blk,flag,extraCls){
     title:dname(r.name)+" · "+planSegText((ROTA_PLAN[r.id]||{})[String(blk)])+(flag?" · below minimum cap":""),
     onDblclick:()=>{if(editable)rbOpenCell(r.id,blk);else showToast("Block "+blk+" is "+planBlockState(blk)+" — ask the PD to reopen it.","warning");}},...kids);
 }
+// First name only, with a last initial when two residents share it — the on-call grid's rule.
+function rbShortName(r){
+  const n=dname(r.name),parts=n.trim().split(/\s+/),first=parts[0];
+  if(parts.length<2)return n;
+  const shared=rbPlanRoster().some(o=>o.id!==r.id&&dname(o.name).trim().split(/\s+/)[0]===first);
+  return shared?first+" "+parts[parts.length-1][0]:first;
+}
+function rbChipName(r){return rbShortName(r);}
 function rbRotLabel(rot){
   const c=rotColor(rot);
   return el("span",{cls:"rb-rlab",st:{color:c.tx}},el("i",{st:{background:c.tx}}),ROT_ABBR[rot]||rot,
@@ -13768,7 +13782,7 @@ function rbAddControl(blk,rot,roster){
   const pick=el("div",{cls:"rb-pick"},
     el("div",{cls:"t"},free.length?free.length+" without a rotation in Block "+blk+" — pick one for "+(ROT_ABBR[rot]||rot):"Everyone has a rotation in Block "+blk+" — double-click a name to move them here."),
     ...free.map(r=>el("span",{cls:"rb-nm",onClick:()=>rbAssignTo(r.id,blk,rot)},
-      el("span",{cls:"lv",st:{background:LC[planLevel(r)]||"#888"}},planLevel(r)),dname(r.name))));
+      el("span",{cls:"lv",st:{background:LC[planLevel(r)]||"#888"}},planLevel(r)),rbChipName(r))));
   return el("div",{st:{width:"100%"}},btn,pick);
 }
 // The sheet itself: Service | Senior | Juniors | On service.
