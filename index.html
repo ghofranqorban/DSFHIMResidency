@@ -695,6 +695,18 @@ th.ov-th{text-align:center;}
 .rb-ledger tr.empty td{color:#6E6455;font-size:.74rem;font-style:italic;}
 .rb-ledger tr.empty td.rot .nm{color:#6E6455;}
 .rb-ledger tr.away td{background:#FAF6EC;border-top:2px solid rgba(31,26,18,.1);}
+.rb-add{display:inline-flex;align-items:center;font-size:.7rem;font-weight:600;color:#9d4a2a;border:1px dashed rgba(201,106,74,.55);border-radius:7px;padding:3px 9px;cursor:pointer;margin:1px 0;line-height:1.3;background:transparent;transition:background .12s;}
+.rb-add:hover{background:rgba(201,106,74,.08);}
+.rb-add.open{border-style:solid;background:rgba(201,106,74,.1);}
+.rb-pick{margin-top:6px;padding:8px 10px;background:#F6EFE2;border-radius:10px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+.rb-pick .t{font-size:.64rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#5C5345;width:100%;margin-bottom:3px;}
+.rb-pick .rb-nm:hover{box-shadow:inset 0 0 0 2px #c96a4a;background:#fff;}
+.rb-ledger tr.free td{background:#FAF6EC;}
+.rb-nm.free{border-style:dashed;border-color:rgba(181,32,64,.45);}
+.rb-heads.bad{color:#b52040;}
+.rb-ledger tr.empty .rb-pick,.rb-ledger tr.empty .rb-add,.rb-ledger tr.empty .rb-nm{font-style:normal;color:#1F1A12;}
+.rb-ledger tr.empty .rb-add{color:#9d4a2a;}
+.rb-ledger tr.empty .rb-pick .t{color:#5C5345;}
 .rb-rotsel{font-family:inherit;font-size:.72rem;font-weight:600;padding:5px 9px;border-radius:8px;border:1px solid rgba(31,26,18,.16);background:#FEFBF3;color:#1F1A12;cursor:pointer;}
 .rb-panel{background:#FEFBF3;border-radius:16px;width:980px;max-width:96vw;max-height:90vh;overflow:hidden;box-shadow:0 24px 60px rgba(31,26,18,.3);display:flex;flex-direction:column;}
 .rb-phead{padding:20px 26px 16px;border-bottom:1px solid rgba(31,26,18,.07);display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
@@ -13715,7 +13727,7 @@ function rbRotRoster(blk,roster){
 function rbNameChip(r,s,blk,flag,extraCls){
   const lvl=planLevel(r),bw=blockWeeks(blk,PLAN_AY);
   const rotFrom=s.leavePos==="start"?s.weekStart+s.leaveWeeks:s.weekStart;
-  const partial=s.weeks<bw||s.leaveWeeks>0;
+  const partial=!!s.rot&&(s.weeks<bw||s.leaveWeeks>0);
   const kids=[el("span",{cls:"lv",st:{background:LC[lvl]||"#888"}},lvl),dname(r.name)];
   if(partial)kids.push(el("i",{cls:"rb-wk"},"w"+rotFrom+"–"+(rotFrom+s.weeks-1)));
   if(s.leaveWeeks){const lvFrom=s.leavePos==="start"?s.weekStart:s.weekStart+s.weeks;
@@ -13739,6 +13751,26 @@ function rbAwayList(blk,roster,flagsFor){
   });
   return out;
 }
+// Residents with nothing in this block yet. They are the people a service can still take,
+// and the view has no empty cells to double-click, so they get a row and a picker of their own.
+function rbUnassigned(blk,roster){return roster.filter(r=>!((ROTA_PLAN[r.id]||{})[String(blk)]||[]).length);}
+// Open the cell panel with the service already chosen, so picking a name under Neurology
+// lands on a panel that only needs Save. rbOpenCell sets the panel up for an empty cell;
+// the rotation is laid over it afterwards.
+function rbAssignTo(rid,blk,rot){rbOpenCell(rid,blk);set({rbRots:[rot,""],rbAddRot:null});}
+// The "+ Assign" control on a service row and, while it is open, the picker of free residents.
+function rbAddControl(blk,rot,roster){
+  if(!planBlockEditable(blk))return null;
+  const open=STATE.rbAddRot===rot;
+  const btn=el("span",{cls:"rb-add"+(open?" open":""),onClick:()=>set({rbAddRot:open?null:rot})},open?"× Cancel":"+ Assign");
+  if(!open)return btn;
+  const free=rbUnassigned(blk,roster);
+  const pick=el("div",{cls:"rb-pick"},
+    el("div",{cls:"t"},free.length?free.length+" without a rotation in Block "+blk+" — pick one for "+(ROT_ABBR[rot]||rot):"Everyone has a rotation in Block "+blk+" — double-click a name to move them here."),
+    ...free.map(r=>el("span",{cls:"rb-nm",onClick:()=>rbAssignTo(r.id,blk,rot)},
+      el("span",{cls:"lv",st:{background:LC[planLevel(r)]||"#888"}},planLevel(r)),dname(r.name))));
+  return el("div",{st:{width:"100%"}},btn,pick);
+}
 // The sheet itself: Service | Senior | Juniors | On service.
 function rbLedger(blk,roster,flagsFor){
   const by=rbRotRoster(blk,roster),rows=rbRotRows();
@@ -13751,7 +13783,8 @@ function rbLedger(blk,roster,flagsFor){
     const tr=el("tr",{cls:all.length?"":"empty"},
       el("td",{cls:"rot",st:{borderLeftColor:all.length?c.tx:"rgba(31,26,18,.12)"}},el("span",{cls:"nm"},rot),ROT_ABBR[rot]&&ROT_ABBR[rot]!==rot?el("small",null,ROT_ABBR[rot]):null),
       el("td",{cls:"sr"},sr.length?sr.map(x=>rbNameChip(x.r,x.s,blk,flagsFor(x.r.id,blk))):(all.length?el("span",{st:{color:"#6E6455",fontSize:".72rem",fontStyle:"italic"}},"no senior"):null)),
-      el("td",{cls:"jr"},jr.length?jr.map(x=>rbNameChip(x.r,x.s,blk,flagsFor(x.r.id,blk))):(all.length?null:"no one assigned")),
+      el("td",{cls:"jr"},jr.map(x=>rbNameChip(x.r,x.s,blk,flagsFor(x.r.id,blk))),
+        (!all.length&&!planBlockEditable(blk))?"no one assigned":null,rbAddControl(blk,rot,roster)),
       el("td",{cls:"hd"},el("div",{cls:"rb-heads"+(all.length?"":" nil")},all.length?String(all.length):"—",
         all.length?el("small",null,sr.length+" sr · "+jr.length+" jr"):null)));
     tb.appendChild(tr);
@@ -13760,6 +13793,12 @@ function rbLedger(blk,roster,flagsFor){
   tb.appendChild(el("tr",{cls:"away"},el("td",{cls:"rot",st:{borderLeftColor:"#A47A28"}},el("span",{cls:"nm"},"Away"),el("small",null,"leave")),
     el("td",{colspan:"2"},away.length?away:el("span",{st:{color:"#6E6455",fontSize:".72rem",fontStyle:"italic"}},"nobody on leave this block")),
     el("td",{cls:"hd"},el("div",{cls:"rb-heads"+(away.length?"":" nil")},away.length?String(away.length):"—"))));
+  // Whoever is still free. Double-click opens the panel with no service chosen, like an
+  // empty grid cell; the picker on a service row is the quicker route.
+  const free=rbUnassigned(blk,roster),empty={weekStart:1,weeks:blockWeeks(blk,PLAN_AY),leaveWeeks:0,leavePos:"none",rot:""};
+  tb.appendChild(el("tr",{cls:"free"},el("td",{cls:"rot",st:{borderLeftColor:free.length?"#b52040":"rgba(31,26,18,.12)"}},el("span",{cls:"nm"},"Unassigned"),el("small",null,"no rotation yet")),
+    el("td",{colspan:"2"},free.length?free.map(r=>rbNameChip(r,empty,blk,null,"free")):el("span",{st:{color:"#26523A",fontSize:".72rem",fontWeight:"600"}},"Everyone has a rotation in Block "+blk+".")),
+    el("td",{cls:"hd"},el("div",{cls:"rb-heads"+(free.length?" bad":" nil")},free.length?String(free.length):"—"))));
   tbl.appendChild(tb);
   return el("div",{cls:"rb-gwrap"},tbl);
 }
