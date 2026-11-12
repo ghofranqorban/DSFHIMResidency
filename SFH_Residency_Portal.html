@@ -2721,7 +2721,7 @@ async function loadCumulativeKpi(resId){
 }
 function getApprovedFields(resId){
   const s=new Set();
-  KPI_PROPOSALS.filter(p=>p.resident_id===resId&&p.status==="approved").forEach(p=>s.add((p.quarter?p.quarter+"_":"")+p.field_key));
+  KPI_PROPOSALS.filter(p=>p.resident_id===resId&&p.status==="approved").forEach(p=>s.add((p.quarter?p.quarter+"_":"")+propFieldKey(p)));
   return s;
 }
 async function saveKpiScore(resId,patch){
@@ -2799,6 +2799,13 @@ function parseProposalNote(note){
   if(!note)return{};
   try{return JSON.parse(note);}catch(e){return{raw:note};}
 }
+// A research submission carries its stage in the note. Submissions made before the stage
+// existed have none and were all published articles, so no stage reads as "published".
+const KPI_PUB_STAGES=[["irb_approved","IRB approved"],["submitted","Submitted to a journal"],["published","Published"]];
+function pubStage(p){const d=parseProposalNote(p&&p.note);return d.stage||"published";}
+// An approved research submission that is not yet published must never count as a publication:
+// it is filed under its own key so every "publication" reader (KPI, report, wall) skips it.
+function propFieldKey(p){return p.field_key==="publication"&&pubStage(p)!=="published"?"research_progress":p.field_key;}
 async function uploadKpiFile(file,resId,fieldKey){
   const ext=file.name.split(".").pop();
   const path=resId+"/"+fieldKey+"_"+Date.now()+"."+ext;
@@ -2845,8 +2852,24 @@ function renderKpiProposalModal(){
   let formFields=[];
   let requiredKeys=["title"];
   if(fieldKey==="publication"){
-    requiredKeys=["title","authors","year"];
-    formFields=[inp("Title *","title","e.g. Efficacy of X in Y"),inp("Authors *","authors","e.g. Al-Harbi M, Smith J, ..."),inp("Year *","year","e.g. 2024","number"),inp("Journal / Publisher","journal","e.g. NEJM, BMJ"),inp("Link (DOI or URL)","link","https://..."),fileInp("Upload PDF (optional)","file")];
+    if(!_kpiPropLive.stage)_kpiPropLive.stage="irb_approved";
+    const stage=_kpiPropLive.stage;
+    const stagePick=el("div",{st:{marginBottom:"14px"}},
+      el("label",{st:{fontSize:".8rem",fontWeight:"600",display:"block",marginBottom:"5px"}},"Where is the project now? *"),
+      el("div",{st:{display:"flex",gap:"6px",flexWrap:"wrap"}},...KPI_PUB_STAGES.map(([k,l])=>el("button",{type:"button",
+        st:{padding:"6px 12px",borderRadius:"9999px",fontSize:".78rem",fontWeight:"600",cursor:"pointer",
+          border:"1px solid "+(stage===k?"#c96a4a":"#d1d5db"),background:stage===k?"#c96a4a":"#fff",color:stage===k?"#FEFBF3":"#5C5345"},
+        onClick:()=>{_kpiPropLive.stage=k;render();}},l))));
+    if(stage==="irb_approved"){
+      requiredKeys=["title","irbNumber","irbDate"];
+      formFields=[stagePick,inp("Project title *","title","e.g. Sepsis bundle compliance in the medical ward"),inp("IRB number *","irbNumber","e.g. DSFH-IRB-2026-041"),inp("IRB approval date *","irbDate","","date"),inp("Your role","role","principal investigator, co-investigator..."),inp("Supervisor","supervisor","e.g. Dr. Ahmed Al-Zahrani"),fileInp("Upload IRB approval letter (optional)","file")];
+    }else if(stage==="submitted"){
+      requiredKeys=["title","journal","subDate"];
+      formFields=[stagePick,inp("Title *","title","e.g. Efficacy of X in Y"),inp("Journal submitted to *","journal","e.g. Cureus, Saudi Med J"),inp("Submission date *","subDate","","date"),inp("Authors","authors","e.g. Al-Harbi M, Smith J, ..."),inp("IRB number","irbNumber","if the study needed one"),fileInp("Upload submission confirmation (optional)","file")];
+    }else{
+      requiredKeys=["title","authors","year"];
+      formFields=[stagePick,inp("Title *","title","e.g. Efficacy of X in Y"),inp("Authors *","authors","e.g. Al-Harbi M, Smith J, ..."),inp("Year *","year","e.g. 2024","number"),inp("Journal / Publisher","journal","e.g. NEJM, BMJ"),inp("Link (DOI or URL)","link","https://..."),fileInp("Upload PDF (optional)","file")];
+    }
   }else if(fieldKey==="oral"){
     requiredKeys=["title","event","date"];
     formFields=[inp("Presentation Title *","title","Title of your talk"),inp("Conference / Event *","event","e.g. Saudi IM Congress 2024"),inp("Date (Month/Year) *","date","e.g. March 2024"),fileInp("Upload Abstract / Certificate (optional)","file")];
@@ -2868,7 +2891,7 @@ function renderKpiProposalModal(){
     requiredKeys=["title","organization","date"];
   }
 
-  const fieldLabels={publication:"Research Publication",oral:"Oral Presentation",poster:"Poster Presentation",qi:"QI Project",awards:"Awards & Honors",volunteering:"Volunteering",campaign:"Awareness Campaign"};
+  const fieldLabels={publication:"Research",oral:"Oral Presentation",poster:"Poster Presentation",qi:"QI Project",awards:"Awards & Honors",volunteering:"Volunteering",campaign:"Awareness Campaign"};
 
   async function handleSubmit(){
     const missing=requiredKeys.filter(k=>!(_kpiPropLive[k]||"").trim());
@@ -2881,6 +2904,8 @@ function renderKpiProposalModal(){
     }
     const meta={..._kpiPropLive};
     delete meta.file_file;delete meta.file_name;
+    if(fieldKey==="publication"){const keep={irb_approved:["title","irbNumber","irbDate","role","supervisor"],submitted:["title","journal","subDate","authors","irbNumber"],published:["title","authors","year","journal","link"]}[meta.stage]||[];
+      Object.keys(meta).forEach(k=>{if(k!=="stage"&&keep.indexOf(k)<0)delete meta[k];});}
     if(fileUrl)meta.fileUrl=fileUrl;
     const noteJson=JSON.stringify(meta);
     await submitKpiProposal(resId,fieldKey,null,noteJson);
@@ -8666,7 +8691,7 @@ function renderCumulativeKPI(){
     const isExpanded=expandedYear===year;
     const lvl=levelForYear(year);
     const lvlColor={R1:"#c96a4a",R2:"#A47A28",R3:"#26523A",R4:"#2a4a7a"}[lvl]||"#888";
-    const approved=new Set(yd.proposals.filter(p=>p.status==="approved"&&p.quarter==null).map(p=>p.field_key));
+    const approved=new Set(yd.proposals.filter(p=>p.status==="approved"&&p.quarter==null).map(propFieldKey));
     if(sc){
       if(sc.bonus_published)approved.add("publication");
       if(sc.qi_participated)approved.add("qi");
@@ -8937,14 +8962,18 @@ function cmTone(v,threshold){
 // where the standard reads it. QI, oral, poster and awards have no table, so the approved
 // submission is the record and is listed as such.
 const KPI_SUBMIT_FIELDS={manager:["qi"],advocate:["campaign","volunteering"],scholar:["publication","oral","poster","awards"]};
-const KPI_FIELD_LABEL={publication:"Publication",oral:"Oral presentation",poster:"Poster",awards:"Award / honour",qi:"QI project",campaign:"Awareness campaign",volunteering:"Volunteering"};
+const KPI_FIELD_LABEL={publication:"Research",oral:"Oral presentation",poster:"Poster",awards:"Award / honour",qi:"QI project",campaign:"Awareness campaign",volunteering:"Volunteering"};
 const KPI_FIELD_RECORD={publication:"research",campaign:"advocacy",volunteering:"advocacy"};
 const KPI_PRES_TARGET_Q=2;   // Morning Meeting presentations expected per quarter (PD, 23 Aug 2026)
 function kpiProposalsFor(resId,fieldKey){return KPI_PROPOSALS.filter(p=>p.resident_id===resId&&p.field_key===fieldKey&&p.quarter==null);}
 function kpiApprovedCount(resId,fieldKey){return kpiProposalsFor(resId,fieldKey).filter(p=>p.status==="approved").length;}
 function kpiProposalLine(p){
   const d=parseProposalNote(p.note);
-  const bits=[d.journal||d.event||d.issuer||d.organization||d.supervisor,d.year||d.date].filter(Boolean);
+  let bits=[d.journal||d.event||d.issuer||d.organization||d.supervisor,d.year||d.date].filter(Boolean);
+  if(p.field_key==="publication"&&d.stage&&d.stage!=="published"){
+    const lab=(KPI_PUB_STAGES.find(x=>x[0]===d.stage)||[0,d.stage])[1];
+    bits=d.stage==="irb_approved"?[lab,d.irbNumber,d.irbDate]:[lab,d.journal,d.subDate];bits=bits.filter(Boolean);
+  }
   return{title:d.title||d.raw||KPI_FIELD_LABEL[p.field_key]||p.field_key,sub:bits.join(" · "),url:d.fileUrl||d.link||null,bucket:d.fileBucket||null,cert:d.source==="best_resident"};
 }
 async function kpiApproveProposal(p){
@@ -8955,9 +8984,26 @@ async function kpiApproveProposal(p){
   const spec=CANMEDS_FORMS[kind];const draft=spec.blank();
   const put=(k,v)=>{if(spec.fields.some(f=>f.k===k)&&v!=null&&v!=="")draft[k]=String(v);};
   if(kind==="research"){
-    put("title",d.title);put("status","published");put("journal",d.journal);put("citation",d.authors);put("evidence_url",d.link||d.fileUrl);
-    if(d.year&&/^\d{4}$/.test(String(d.year))){put("published_at",d.year+"-01-01");put("started_year",String(Number(d.year)-1));}
-    put("notes","From the resident's submission. Check the publication date and the year registered.");
+    const stage=d.stage||"published";
+    // the same project moving on (IRB -> submitted -> published) updates its record, not a second one
+    const norm=t=>String(t||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+    const prior=(RESEARCH_PROJECTS[p.resident_id]||[]).find(r=>d.title&&norm(r.title)===norm(d.title));
+    if(prior){
+      openCanmedsModal("research",p.resident_id,prior);
+      const dr=_canmedsDraft,set2=(k,v)=>{if(v!=null&&v!=="")dr[k]=String(v);};
+      set2("status",stage);set2("journal",d.journal);set2("citation",d.authors);set2("irb_number",d.irbNumber);
+      set2("irb_approved_at",d.irbDate);set2("submitted_at",d.subDate);set2("evidence_url",d.link||d.fileUrl);
+      if(stage==="published"&&d.year&&/^\d{4}$/.test(String(d.year))&&!dr.published_at)dr.published_at=d.year+"-01-01";
+      render();return;
+    }
+    const ayOf=ds=>{const m=/^(\d{4})-(\d{2})/.exec(ds||"");return m?String(Number(m[2])>=10?Number(m[1]):Number(m[1])-1):null;};
+    put("title",d.title);put("status",stage);put("journal",d.journal);put("citation",d.authors);put("evidence_url",d.link||d.fileUrl);
+    put("irb_number",d.irbNumber);put("irb_approved_at",d.irbDate);put("submitted_at",d.subDate);
+    if(stage==="irb_approved")put("started_year",ayOf(d.irbDate));
+    else if(stage==="submitted")put("started_year",ayOf(d.subDate));
+    else if(d.year&&/^\d{4}$/.test(String(d.year))){put("published_at",d.year+"-01-01");put("started_year",String(Number(d.year)-1));}
+    put("role",d.role);
+    put("notes",["From the resident's submission. Check the dates and the year registered.",d.supervisor?"Supervisor: "+d.supervisor:""].filter(Boolean).join(" "));
   }else{
     put("kind",p.field_key==="campaign"?"awareness_campaign":"volunteering");put("title",d.title);put("role",d.role);
     put("evidence_url",d.fileUrl);put("notes",[d.organization,d.date,d.description].filter(Boolean).join(" · ")||"From the resident's submission.");
@@ -16705,7 +16751,7 @@ function renderKPIExecutive(){
         type:"Publication",authors:""});
     });
   });
-  KPI_PROPOSALS.filter(function(p){return p.status==="approved"&&p.field_key==="publication";}).forEach(function(p){
+  KPI_PROPOSALS.filter(function(p){return p.status==="approved"&&p.field_key==="publication"&&pubStage(p)==="published";}).forEach(function(p){
     var d=parseNoteL(p.note);
     var res=scored.find(function(r){return r.id===p.resident_id;});
     var title=d.title||d.raw||"Research Publication";
@@ -16813,7 +16859,7 @@ function renderKPIExecutive(){
       var k=res5.k;
       var ks=KPI_SCORES[selResId]||{};
       var approvedProps=KPI_PROPOSALS.filter(function(p){return p.resident_id===selResId&&p.status==="approved";});
-      var FIELD_LABELS={publication:"Research Publication",qi:"QI Project",oral:"Oral Presentation",poster:"Poster Presentation",awards:"Award / Honor",volunteering:"Volunteering"};
+      var FIELD_LABELS={publication:"Research",qi:"QI Project",oral:"Oral Presentation",poster:"Poster Presentation",awards:"Award / Honor",volunteering:"Volunteering"};
       var FIELD_CLR={publication:"#c96a4a",qi:"#7FB89C",oral:"#A47A28",poster:"rgba(31,26,18,.5)",awards:"#CBA155",volunteering:"#7FB89C"};
       var kRowDefs=[
         {label:"MM Attendance",val:k.mmPct,sub:k.mmAtt+"/"+k.mmTotal+" sessions",w:KPI_W.mm,iconKey:"mm"},
