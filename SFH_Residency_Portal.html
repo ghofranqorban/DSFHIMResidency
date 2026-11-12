@@ -713,6 +713,14 @@ th.ov-th{text-align:center;}
 .rb-ledger tr.empty .rb-pick,.rb-ledger tr.empty .rb-add,.rb-ledger tr.empty .rb-nm{font-style:normal;color:#1F1A12;}
 .rb-ledger tr.empty .rb-add{color:#9d4a2a;}
 .rb-ledger tr.empty .rb-pick .t{color:#5C5345;}
+.rb-grid tr.rb-outhd td{background:#F6EFE2;padding:14px 10px 8px;font-size:.66rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#6B6152;text-align:left;border-top:1px solid rgba(31,26,18,.1);}
+.rb-grid tr.rb-outhd td.rb-note{font-size:.72rem;font-weight:500;letter-spacing:0;text-transform:none;color:#5C5345;}
+.rb-grid td.rb-res small.rb-spec{display:block;font-size:.66rem;font-weight:500;color:#5C5345;margin:2px 0 0 33px;white-space:nowrap;}
+.rb-outadd{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;font-size:.76rem;color:#5C5345;}
+.rb-outform{margin-top:14px;}
+.rb-outform .row{display:grid;grid-template-columns:2fr 90px 2fr;gap:12px;margin-bottom:10px;}
+.rb-outform .row.y4{grid-template-columns:2fr 90px 2fr 140px;}
+@media(max-width:700px){.rb-outform .row{grid-template-columns:1fr;}}
 .rb-rotdd{position:relative;display:inline-block;}
 .rb-rotdd>.rb-rotsel{display:inline-flex;align-items:center;gap:9px;}
 .rb-rotdd>.rb-rotsel::after{content:"";width:5px;height:5px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);opacity:.55;}
@@ -982,6 +990,14 @@ let RESIDENTS=[];
 // RESIDENTS — and so out of every current-year list — until 1 October of its start year.
 // Only the rota builder and the admin panel look at it; use allRoster() to see both.
 let INCOMING=[];
+// Outside rotators: residents of other programmes who spend a few blocks with us. Loaded from
+// `residents` like everyone else, but held out of RESIDENTS and INCOMING so no programme list
+// (KPI, Best Resident, quizzes, attendance, mentorship, promotion) ever sees them. They join
+// only the rota builder, the rota and the on-call pickers, and only in their own rotator_ay.
+let OUTSIDE=[];
+function outsideFor(ay){return OUTSIDE.filter(r=>r.rotatorAY===ay);}
+const OUT_GROUP="Outside rotators";
+const OUT_SPECS=["Family Medicine","Emergency Medicine","General Surgery","Anesthesia","Obstetrics & Gynecology","Pediatrics","Psychiatry","Neurology","Dermatology","Radiology"];
 // Newest year in promotion_log, i.e. the last year residents were promoted INTO. Only used to
 // spot a promotion that ran before the rota year opened; see levelsAY().
 let LEVELS_AY=null;
@@ -1506,9 +1522,9 @@ function rotaBlockOpen(blk){return !rotaIsNext()||NEXT_BLOCKS.indexOf(blk)>=0;}
 // Who is on the rota in the year on screen, at the level they hold in it: next year drops
 // this year's graduates, brings in the new intake, and moves everyone else up one.
 function rotaRoster(){
-  if(!rotaIsNext())return RESIDENTS;
+  if(!rotaIsNext())return RESIDENTS.concat(outsideFor(rotaAY()));
   const out=[];
-  allRoster().forEach(r=>{const lv=levelInAY(r,rotaAY());if(lv)out.push({...r,level:lv});});
+  allRoster().concat(OUTSIDE).forEach(r=>{const lv=levelInAY(r,rotaAY());if(lv)out.push({...r,level:lv});});
   return out;
 }
 function rotaRes(id){return rotaRoster().find(r=>r.id==id)||null;}
@@ -3276,9 +3292,12 @@ async function loadCoreData(){
   if(pverr)console.warn("account_privileges load error (non-critical)",pverr.message);
   if(kpierr)console.warn("kpi_scores load error (table may not exist yet)",kpierr.message);
   CONSULTANTS=(cons||[]).map(c=>({id:c.id,name:c.name,user:c.username}));
-  const mapped=(res||[]).map(r=>({id:r.id,name:r.name,user:r.username,level:r.level,ph:r.photo_initials||initialsFromName(r.name),yearStarted:r.year_started,chiefRole:r.chief_role||null}));
-  RESIDENTS=mapped.filter(cohortVisible);
-  INCOMING=mapped.filter(r=>!cohortVisible(r));
+  const mapped=(res||[]).map(r=>({id:r.id,name:r.name,user:r.username,level:r.level,ph:r.photo_initials||initialsFromName(r.name),yearStarted:r.year_started,chiefRole:r.chief_role||null,
+    outside:!!r.outside_rotator,specialty:r.primary_specialty||"",rotatorAY:r.rotator_ay??null}));
+  const own=mapped.filter(r=>!r.outside);
+  OUTSIDE=mapped.filter(r=>r.outside);
+  RESIDENTS=own.filter(cohortVisible);
+  INCOMING=own.filter(r=>!cohortVisible(r));
   CHIEF_RES_ID=RESIDENTS.find(r=>r.chiefRole==="chief")?.id||null;
   sb.from("residents").select("id,name,level,year_started").eq("active",false).then(({data:ir})=>{_inactiveResById={};(ir||[]).forEach(r=>{_inactiveResById[r.id]=r;});render();});
   CO_CHIEF_RES_ID=RESIDENTS.find(r=>r.chiefRole==="cochief")?.id||null;
@@ -4125,7 +4144,13 @@ function ocAYLabel(y){return ayLabel(y);}
 // roster, untouched. On the plan year the graduating R4s drop out and the incoming cohort
 // joins at R1 — otherwise Block 1 gets built around residents who have left and surveys never
 // reach the residents who have arrived.
-function ocRoster(){
+// With a block, the outside rotators the rota has in that block join the list, so they can be
+// put on call there. Without one (stats, surveys, rewards) they stay out of the counts.
+function ocRoster(blk){
+  const base=ocRosterBase();
+  return blk?base.concat(outsideFor(ocAY()).filter(r=>ocRotationOf(r.id,blk).status!=="none")):base;
+}
+function ocRosterBase(){
   // A closed year: that year's cohort at the levels they held, graduates included.
   if(ocIsPast())return brRoster(ocAY());
   if(!ocIsPlanYear())return RESIDENTS;
@@ -4446,7 +4471,7 @@ function ocRotNote(a){
   if(a.leaveWeeks)bits.push(a.leaveWeeks+" wk leave");
   return bits.join(" \u00b7 ");
 }
-function ocAvailability(blk){return sortByLevel(ocRoster()).map(r=>Object.assign({res:r},ocRotationOf(r.id,blk)));}
+function ocAvailability(blk){return sortByLevel(ocRoster(blk)).map(r=>Object.assign({res:r},ocRotationOf(r.id,blk)));}
 // The strip above the builder grid. Schedulers only; it folds away with one click and stays
 // folded for the session.
 function renderOncallAvailStrip(blk){
@@ -5154,6 +5179,8 @@ function rosterLevelsAY(){
 // anyone held back in a promotion review has a level that no longer matches their start year.
 function levelInAY(res,y){
   if(!res||!res.level)return null;
+  // An outside rotator holds the level they were entered at, for their one year only.
+  if(res.outside)return res.rotatorAY===y?res.level:null;
   const n=4-_LVL_ORD[res.level];
   if(!(n>=1&&n<=4))return null;
   // A cohort created before its year opens already sits at the level it will START on, so its
@@ -5162,7 +5189,7 @@ function levelInAY(res,y){
   const t=n+(y-base);
   return t>=1&&t<=4?"R"+t:null;
 }
-function resById(id){return RESIDENTS.find(r=>r.id==id)||INCOMING.find(r=>r.id==id);}
+function resById(id){return RESIDENTS.find(r=>r.id==id)||INCOMING.find(r=>r.id==id)||OUTSIDE.find(r=>r.id==id);}
 function anyResById(id){return resById(id)||_inactiveResById[id]||null;}
 function dname(name){return(name||"").replace(/^Dr\.\s*/i,"");}
 // On-call grid names: the first name alone. Two residents who share a first name get the last
@@ -6237,6 +6264,8 @@ function renderRotaBlock(resOverride){
   const groups={},wkOf={};
   vr.forEach(r=>{
     const info=rotCellInfo(r.id,p);
+    // An outside rotator is only listed in the blocks they rotate with us.
+    if(r.outside&&!info.rot&&!(info.lines&&info.lines.length))return;
     const parts=(info.lines&&!STATE.rotaEdit)?info.lines:[{rot:info.rot||"—",wk:""}];
     parts.forEach(l=>{
       if(!groups[l.rot])groups[l.rot]=[];
@@ -6404,8 +6433,8 @@ function renderRotaTable(resOverride){
           )
         ),
         el("tbody",null,
-          ...levels.flatMap(lv=>{
-            const lvRes=vr.filter(r=>r.level===lv);
+          ...levels.concat(OUT_GROUP).flatMap(lv=>{
+            const lvRes=lv===OUT_GROUP?vr.filter(r=>r.outside):vr.filter(r=>r.level===lv&&!r.outside);
             if(!lvRes.length)return[];
             return[
               el("tr",null,el("td",{colspan:"14",cls:"lvl-hdr-cell",st:{fontWeight:"700",fontSize:".75rem",color:"#94a3b8",letterSpacing:".05em",textTransform:"uppercase",padding:"8px 10px"}},lv+" — "+lvRes.length+" residents")),
@@ -6415,7 +6444,7 @@ function renderRotaTable(resOverride){
                     avEl(r),
                     el("div",null,
                       el("div",{cls:"name",st:{fontSize:".82rem"}},isSelf?el("span",{st:{color:"#b45309",fontWeight:"700",background:"#fde68a",padding:"2px 10px",borderRadius:"20px",display:"inline-block"}},r.name):r.name),
-                      el("div",{st:{fontSize:".7rem",color:"#64748b"}},r.level)
+                      el("div",{st:{fontSize:".7rem",color:"#64748b"}},r.outside?r.level+" \u00b7 "+(r.specialty||"outside rotator"):r.level)
                     )
                   )
                 ),
@@ -7973,15 +8002,15 @@ function exportRota(){
   const levels=["R4","R3","R2","R1"];
   const headers=["Resident","Level",...ROTA_PERIODS.map((_,i)=>"B"+(i+1))];
   const rows=[];
-  levels.forEach(lv=>{
-    rotaRoster().filter(r=>r.level===lv).forEach(r=>{
+  levels.concat(OUT_GROUP).forEach(lv=>{
+    rotaRoster().filter(r=>lv===OUT_GROUP?r.outside:r.level===lv&&!r.outside).forEach(r=>{
       const cols=ROTA_PERIODS.map((_,i)=>{
         if(!rotaBlockOpen(i+1))return "";
         const info=rotCellInfo(r.id,i+1);
         if(info.lines)return info.lines.map(l=>l.rot+" ("+l.wk+")").join(" / ");
         return info.rot+(info.split?" (½ AL)":"");
       });
-      rows.push([r.name,r.level,...cols]);
+      rows.push([r.name+(r.outside?" (outside rotator"+(r.specialty?", "+r.specialty:"")+")":""),r.level,...cols]);
     });
   });
   const ws=XLSX.utils.aoa_to_sheet([headers,...rows]);
@@ -11375,8 +11404,89 @@ function renderAdminResidents(){
           )
         )
       )
-    )
+    ),
+    renderAdminOutside()
   );
+}
+// One insert for both the builder and the admin panel. The username is made up, since most
+// outside rotators never sign in; Create Login can still be used on it later.
+async function addOutsideRotator({name,level,specialty,ay}){
+  name=drName(name);
+  if(!name)return "Name is required.";
+  if(!level)return "Pick a level.";
+  const base=loginName("out."+name.replace(/^Dr\.\s*/,"")+"."+ay);
+  for(let i=0;i<4;i++){
+    const username=i?base+"."+(i+1):base;
+    const{error}=await sb.from("residents").insert({name,username,level,year_started:ay,active:true,
+      outside_rotator:true,primary_specialty:specialty||null,rotator_ay:ay});
+    if(!error){await loadCoreData();return null;}
+    if(/outside_rotator|primary_specialty|rotator_ay/.test(error.message||""))
+      return "The database is not ready for outside rotators yet. Run supabase/add_outside_rotators.sql in the Supabase SQL editor first.";
+    if(error.code!=="23505")return "Could not add: "+error.message;
+  }
+  return "Could not find a free username for "+name+".";
+}
+function outsideFields(pre,withYear){
+  const years=[CURRENT_ACADEMIC_YEAR,CURRENT_ACADEMIC_YEAR+1];
+  return el("div",{cls:withYear?"row y4":"row"},
+    el("div",null,el("label",null,"Name"),el("input",{id:pre+"_name",placeholder:"Dr. Name"})),
+    el("div",null,el("label",null,"Level"),el("select",{id:pre+"_level"},["R1","R2","R3","R4"].map(l=>el("option",{value:l},l)))),
+    el("div",null,el("label",null,"Primary specialty"),el("input",{id:pre+"_spec",placeholder:"e.g. Family Medicine",list:pre+"_specs"}),
+      el("datalist",{id:pre+"_specs"},OUT_SPECS.map(s=>el("option",{value:s})))),
+    withYear?el("div",null,el("label",null,"Rotating in"),el("select",{id:pre+"_ay"},years.map(y=>el("option",{value:String(y)},ayLabel(y))))):null);
+}
+async function saveOutsideFrom(pre,ay,after){
+  const v=id=>(document.getElementById(pre+"_"+id)||{}).value||"";
+  const err=document.getElementById(pre+"_err");
+  const msg=await addOutsideRotator({name:v("name"),level:v("level"),specialty:v("spec").trim(),ay:ay||parseInt(v("ay"))});
+  if(msg){if(err)err.textContent=msg;return;}
+  set(after);
+  showToast("Outside rotator added.","success");
+}
+function rbOutsideForm(){
+  if(!STATE.rbOutForm)return el("div",{cls:"rb-outadd"},
+    el("button",{cls:"sbtn ghost small",onClick:()=>set({rbOutForm:true})},"+ Add outside rotator"),
+    el("span",null,"A resident from another programme, for "+ayLabel(PLAN_AY)+" only. They get a row at the foot of the grid."));
+  return el("div",{cls:"inline-form rb-outform"},
+    el("div",{cls:"card-title",st:{margin:"0 0 10px"}},"Add an outside rotator to "+ayLabel(PLAN_AY)),
+    outsideFields("rbo",false),
+    el("p",{id:"rbo_err",cls:"err"}),
+    el("p",{cls:"sh",st:{marginBottom:"8px"}},"Then double-click their cells to give them the blocks they rotate with us. They can be put on call in those blocks. No login is made; the PD can create one from Admin > Residents if it is ever needed."),
+    el("div",{cls:"flex-gap"},
+      el("button",{cls:"sbtn success",onClick:()=>saveOutsideFrom("rbo",PLAN_AY,{rbOutForm:false})},"Add"),
+      el("button",{cls:"sbtn ghost",onClick:()=>set({rbOutForm:false})},"Cancel")));
+}
+function renderAdminOutside(){
+  const list=OUTSIDE.slice().sort((a,b)=>(b.rotatorAY||0)-(a.rotatorAY||0)||a.name.localeCompare(b.name));
+  return el("div",{cls:"card",st:{marginTop:"18px"}},
+    el("div",{cls:"flex-gap",st:{marginBottom:"6px"}},
+      el("span",{cls:"card-title",st:{margin:"0"}},OUT_GROUP+" ("+list.length+")"),
+      el("button",{cls:"sbtn primary",onClick:()=>set({adminShowAddOut:!STATE.adminShowAddOut})},"+ Add Outside Rotator")),
+    el("p",{cls:"sh",st:{marginBottom:"12px"}},"Residents from other programmes. They appear only in the rota builder, the rota and on-call for the year they rotate in, never in KPI, votes, quizzes or reviews. A login is optional."),
+    STATE.adminShowAddOut?el("div",{cls:"inline-form rb-outform",st:{marginBottom:"14px"}},
+      outsideFields("aro",true),
+      el("p",{id:"aro_err",cls:"err"}),
+      el("div",{cls:"flex-gap"},
+        el("button",{cls:"sbtn success",onClick:()=>saveOutsideFrom("aro",null,{adminShowAddOut:false})},"Add"),
+        el("button",{cls:"sbtn ghost",onClick:()=>set({adminShowAddOut:false})},"Cancel"))):null,
+    list.length?el("div",{cls:"tbl-wrap"},el("table",null,
+      el("thead",null,el("tr",null,el("th",null,"Name"),el("th",null,"Level"),el("th",null,"Primary specialty"),el("th",null,"Year"),el("th",null,"Login"),el("th",null,""))),
+      el("tbody",null,...list.map(r=>{
+        const prof=PROFILE_BY_RESIDENT[r.id];
+        return el("tr",null,
+          el("td",null,el("span",{cls:"name",st:{fontSize:".88rem"}},r.name)),
+          el("td",null,levelBadge(r.level)),
+          el("td",{cls:"sh"},r.specialty||"\u2014"),
+          el("td",{cls:"sh"},r.rotatorAY?ayLabel(r.rotatorAY):"\u2014"),
+          el("td",null,prof?el("span",null,loginBadge(prof),resetLoginBtn("resident",r),loginToggleBtn(prof,r.name))
+            :el("button",{cls:"sbtn ghost",st:{fontSize:".72rem",padding:"3px 8px"},onClick:()=>createLoginFor("resident",r)},"Create Login")),
+          el("td",null,el("button",{cls:"sbtn ghost",st:{fontSize:".72rem",padding:"3px 8px",color:"#b52040"},onClick:()=>
+            showConfirm("Remove "+r.name+"? Their rota and on-call entries stay on record, but they leave every list.",async()=>{
+              const{error}=await sb.from("residents").update({active:false,archived_at:new Date().toISOString()}).eq("id",r.id);
+              if(error){showToast("Could not remove: "+error.message,"error");return;}
+              await loadCoreData();render();
+            },"Remove","danger")},"Remove")));
+      })))):el("div",{cls:"sh",st:{padding:"6px 0"}},"None yet."));
 }
 function renderAdminMentors(){
   async function addMentor(){
@@ -13369,7 +13479,7 @@ function rbPrefillR4(rid,blk){
   if(p.clinic1_block===blk||p.clinic2_block===blk)return{rot:"Outpatient Clinic",src:"clinic"};
   return null;
 }
-function rbPlanRoster(){return allRoster().filter(r=>planLevel(r));}
+function rbPlanRoster(){return allRoster().concat(OUTSIDE).filter(r=>planLevel(r));}
 // A cell the prefill wrote may be replaced on a re-run; one the chief touched may not.
 // The two are otherwise identical rows, which is why rota_plan carries `source`. Every
 // segment must be marked, so a cell the chief split by hand beside a prefilled segment
@@ -13569,10 +13679,13 @@ function renderRotaBuilder(){
   // allRoster, not RESIDENTS: the plan year's incoming cohort is the whole point here, and
   // it stays out of RESIDENTS until 1 October. planLevel() is null for this year's R4s,
   // who graduate before the plan year opens.
-  const roster=allRoster().filter(r=>planLevel(r))
-    .sort((a,b)=>(_LVL_ORD[planLevel(a)]??9)-(_LVL_ORD[planLevel(b)]??9)||a.name.localeCompare(b.name));
+  // Outside rotators for this year sit at the foot of the grid, under their own heading.
+  const roster=allRoster().concat(OUTSIDE).filter(r=>planLevel(r))
+    .sort((a,b)=>(a.outside?1:0)-(b.outside?1:0)||(_LVL_ORD[planLevel(a)]??9)-(_LVL_ORD[planLevel(b)]??9)||a.name.localeCompare(b.name));
   const CUM={};roster.forEach(r=>{CUM[r.id]=projectedWeeksFor(r.id);});
   function flagsFor(rid,blk){
+    // SCFHS caps belong to our own residents; an outside rotator has none to fall short of.
+    const r0=resById(rid);if(r0&&r0.outside)return null;
     const segs=(ROTA_PLAN[rid]||{})[String(blk)]||[];
     let worst=null;
     segs.forEach(s=>{const f=cellShortfall(rid,s.rot,CUM[rid]);if(f==="red")worst="red";else if(f&&!worst)worst=f;});
@@ -13740,10 +13853,14 @@ function renderRotaBuilder(){
     });
     tbl.appendChild(el("thead",null,...headRows));
     const tb=el("tbody");
+    let outHd=false;
     rows.forEach(r=>{
       const lvl=planLevel(r);
+      if(r.outside&&!outHd){outHd=true;tb.appendChild(el("tr",{cls:"rb-outhd"},el("td",{cls:"rb-res"},OUT_GROUP),
+        el("td",{cls:"rb-note",colspan:String(blocks.length)},"From other programmes. Give them only the blocks they rotate with us; they are left out of caps, leave counts and Unassigned.")));}
       const tr=el("tr",null,el("td",{cls:"rb-res"},
-        el("span",{cls:"lv",st:{background:LC[lvl]||"#888"}},lvl),dname(r.name)));
+        el("span",{cls:"lv",st:{background:LC[lvl]||"#888"}},lvl),dname(r.name),
+        r.outside?el("small",{cls:"rb-spec"},r.specialty||"Outside rotator"):null));
       blocks.forEach(b=>{
         const segs=(ROTA_PLAN[r.id]||{})[String(b)]||[];
         const flag=flagsFor(r.id,b);
@@ -13787,6 +13904,7 @@ function renderRotaBuilder(){
     secB.appendChild(el("div",{cls:"rb-gwrap"},tbl));
     if(!rows.length)secB.appendChild(el("div",{st:{padding:"30px 0",textAlign:"center",color:"rgba(31,26,18,.4)",fontSize:".85rem"}},"No residents match this filter."));
   }
+  if(!loading&&isPD())secB.appendChild(rbOutsideForm());
   wrap.appendChild(secB);
   if(STATE.rbCell)wrap.appendChild(rbCellPanel());
   if(STATE.rbPrefill)wrap.appendChild(rbPrefillModal());
@@ -13857,7 +13975,7 @@ function rbAwayList(blk,roster,flagsFor){
 }
 // Residents with nothing in this block yet. They are the people a service can still take,
 // and the view has no empty cells to double-click, so they get a row and a picker of their own.
-function rbUnassigned(blk,roster){return roster.filter(r=>!((ROTA_PLAN[r.id]||{})[String(blk)]||[]).length);}
+function rbUnassigned(blk,roster){return roster.filter(r=>!r.outside&&!((ROTA_PLAN[r.id]||{})[String(blk)]||[]).length);}
 // Open the cell panel with the service already chosen, so picking a name under Neurology
 // lands on a panel that only needs Save. rbOpenCell sets the panel up for an empty cell;
 // the rotation is laid over it afterwards.
@@ -17665,7 +17783,7 @@ function renderOncallEditModal(){
             // ocRoster(), not RESIDENTS: on a plan-year block RESIDENTS still lists the R4s who
             // graduate on 1 Oct and has none of the incoming cohort, so Block 1 gets built around
             // people who have left. The inline cell picker already resolves it this way.
-            const _roster=sortByLevel(ocRoster());
+            const _roster=sortByLevel(ocRoster(blk));
             // Whoever already holds the slot must stay selectable even when they are off that
             // roster — an outside rotator, or an R4 assigned before the year rolled over. Without
             // this their option is absent, the select falls back to "Not assigned", and saving
@@ -18126,7 +18244,7 @@ function renderOncall(){
         // a rotation with its own on-call or away. They stay selectable: an exception is the
         // scheduler's call, the list only says what the rota says.
         const availD={};const rankD=s=>s==="in"||s==="none"?0:1;
-        const sorted=sortByLevel(ocRoster()).map(r=>{availD[r.id]=ocRotationOf(r.id,blk);return r;}).sort((a,b)=>rankD(availD[a.id].status)-rankD(availD[b.id].status));
+        const sorted=sortByLevel(ocRoster(blk)).map(r=>{availD[r.id]=ocRotationOf(r.id,blk);return r;}).sort((a,b)=>rankD(availD[a.id].status)-rankD(availD[b.id].status));
         const matches=q?sorted.filter(r=>dname(r.name).toLowerCase().includes(q.toLowerCase())):sorted;
         const refD=ocRewardRef(blk,ocAY());
         let dividerDone=false;
