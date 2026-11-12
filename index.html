@@ -13629,9 +13629,10 @@ function renderRotaBuilder(){
   });
   if(!STATE.rbView||STATE.rbView==="grid")pills.appendChild(el("button",{cls:"sbtn small"+(STATE.rbShort?" primary":" ghost"),
     onClick:()=>set({rbShort:!STATE.rbShort})},"Shortfalls only"));
-  // Dims rather than hides: the point is to watch one rotation across the year without
-  // losing sight of who is free to take it.
-  if(!STATE.rbView||STATE.rbView==="grid")pills.appendChild(rbRotFilterEl());
+  // The grid dims rather than hides: the point is to watch one rotation across the year
+  // without losing sight of who is free to take it. The by-rotation ledger shows only the
+  // ticked services. One list drives both, so the picks carry over when switching views.
+  pills.appendChild(rbRotFilterEl());
   // One plan, two readings: the grid by resident, or the same block laid out by service the
   // way the chief's working sheet does. The block comes from the status strip above.
   const view=STATE.rbView||"grid";
@@ -13830,7 +13831,12 @@ function rbAddControl(blk,rot,roster){
 }
 // The sheet itself: Service | Senior | Juniors | On service.
 function rbLedger(blk,roster,flagsFor){
-  const by=rbRotRoster(blk,roster),rows=rbRotRows();
+  // The grid's rotation checklist narrows the ledger to the ticked services. Away here is
+  // the leave row plus Elective, the same people the grid's Away filter lights up.
+  // Unassigned always stays: it is who a ticked service can still take.
+  const picks=rbRotPicked(),pAway=picks.indexOf(RB_AWAY)>=0;
+  const by=rbRotRoster(blk,roster),rows=rbRotRows().filter(r=>!picks.length||picks.indexOf(r)>=0||(pAway&&r==="Elective"));
+  const showAway=!picks.length||pAway||picks.indexOf("Annual Leave")>=0||picks.indexOf("Maternity Leave")>=0;
   const tbl=el("table",{cls:"rb-ledger"});
   tbl.appendChild(el("thead",null,el("tr",null,el("th",null,"Service"),el("th",null,"Senior"),el("th",null,"Juniors"),el("th",null,"On service"))));
   const tb=el("tbody");
@@ -13847,7 +13853,7 @@ function rbLedger(blk,roster,flagsFor){
     tb.appendChild(tr);
   });
   const away=rbAwayList(blk,roster,flagsFor);
-  tb.appendChild(el("tr",{cls:"away"},el("td",{cls:"rot",st:{borderLeftColor:"#A47A28"}},el("span",{cls:"nm"},"Away"),el("small",null,"leave")),
+  if(showAway)tb.appendChild(el("tr",{cls:"away"},el("td",{cls:"rot",st:{borderLeftColor:"#A47A28"}},el("span",{cls:"nm"},"Away"),el("small",null,"leave")),
     el("td",{colspan:"2"},away.length?away:el("span",{st:{color:"#6E6455",fontSize:".72rem",fontStyle:"italic"}},"nobody on leave this block")),
     el("td",{cls:"hd"},el("div",{cls:"rb-heads"+(away.length?"":" nil")},away.length?String(away.length):"—"))));
   // Whoever is still free. Double-click opens the panel with no service chosen, like an
