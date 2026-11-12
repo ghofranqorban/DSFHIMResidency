@@ -713,6 +713,23 @@ th.ov-th{text-align:center;}
 .rb-ledger tr.empty .rb-pick,.rb-ledger tr.empty .rb-add,.rb-ledger tr.empty .rb-nm{font-style:normal;color:#1F1A12;}
 .rb-ledger tr.empty .rb-add{color:#9d4a2a;}
 .rb-ledger tr.empty .rb-pick .t{color:#5C5345;}
+.rb-rotdd{position:relative;display:inline-block;}
+.rb-rotdd>.rb-rotsel{display:inline-flex;align-items:center;gap:9px;}
+.rb-rotdd>.rb-rotsel::after{content:"";width:5px;height:5px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);opacity:.55;}
+.rb-rotsel.act{border-color:rgba(201,106,74,.55);color:#8E3F24;background:rgba(201,106,74,.08);}
+.rb-rotpanel{display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:40;width:430px;max-width:calc(100vw - 32px);background:#FEFBF3;border:1px solid rgba(31,26,18,.14);border-radius:12px;box-shadow:0 16px 36px rgba(31,26,18,.14);padding:8px 8px 10px;}
+.rb-rotdd.open .rb-rotpanel{display:block;}
+.rb-rotdd.flip .rb-rotpanel{left:auto;right:0;}
+.rb-rothd{display:flex;justify-content:space-between;align-items:center;font-size:.64rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#6B6152;padding:4px 8px 9px;border-bottom:1px solid rgba(31,26,18,.08);margin-bottom:6px;}
+.rb-rothd button{border:0;background:none;font:inherit;letter-spacing:inherit;color:#8E3F24;cursor:pointer;padding:0;}
+.rb-rotgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 4px;}
+.rb-rotopt{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:7px;font-size:.76rem;color:#1F1A12;cursor:pointer;user-select:none;}
+.rb-rotopt:hover{background:rgba(201,106,74,.07);}
+.rb-rotopt input{appearance:none;-webkit-appearance:none;width:15px;height:15px;border:1.5px solid rgba(31,26,18,.32);border-radius:4px;margin:0;flex:none;display:grid;place-content:center;cursor:pointer;background:#fff;}
+.rb-rotopt input:checked{background:#C96A4A;border-color:#C96A4A;}
+.rb-rotopt input:checked::after{content:"";width:7px;height:3.5px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:translateY(-1px) rotate(-45deg);}
+.rb-rotopt.on{font-weight:600;}
+.rb-rotopt.away{border-bottom:1px solid rgba(31,26,18,.08);border-radius:7px 7px 0 0;margin-bottom:4px;padding-bottom:9px;}
 .rb-rotsel{font-family:inherit;font-size:.72rem;font-weight:600;padding:5px 9px;border-radius:8px;border:1px solid rgba(31,26,18,.16);background:#FEFBF3;color:#1F1A12;cursor:pointer;}
 .rb-panel{background:#FEFBF3;border-radius:16px;width:980px;max-width:96vw;max-height:90vh;overflow:hidden;box-shadow:0 24px 60px rgba(31,26,18,.3);display:flex;flex-direction:column;}
 .rb-phead{padding:20px 26px 16px;border-bottom:1px solid rgba(31,26,18,.07);display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
@@ -13264,6 +13281,36 @@ function rbRotList(){return MANDATORY.concat(RB_EXTRA);}
 // so a resident on Cardiology with two weeks booked still shows — the cell is partly away
 // even though its rotation name is not. Same definition rbAwayHalves counts with.
 const RB_AWAY="__away";
+// Rotation filter as a checklist, so two services (CTU and Nights, say) can be watched at
+// once. The open state lives outside STATE, like the calendar popover, so ticking a box
+// re-renders the grid without closing the list. Older single-string values still read.
+let RB_ROT_OPEN=false;
+function rbRotPicked(){const v=STATE.rbRot;return Array.isArray(v)?v:(v?[v]:[]);}
+function rbRotFilterEl(){
+  const picked=rbRotPicked();
+  const name=f=>f===RB_AWAY?"Away":(ROT_ABBR[f]||f);
+  const summary=!picked.length?"All rotations":picked.length<=3?picked.map(name).join(", "):picked.length+" rotations";
+  const flip=v=>{const s=picked.filter(x=>x!==v);if(s.length===picked.length)s.push(v);set({rbRot:s.length?s:undefined});};
+  const item=(v,text,extra)=>el("label",{cls:"rb-rotopt"+(picked.indexOf(v)>=0?" on":"")+(extra||"")},
+    el("input",{type:"checkbox",checked:picked.indexOf(v)>=0,onChange:()=>flip(v)}),el("span",null,text));
+  const wrap=el("div",{cls:"rb-rotdd"+(RB_ROT_OPEN?" open":"")});
+  // The filter sits at the left on a narrow window and at the right on a wide one, so the
+  // list opens toward whichever side has room.
+  const place=()=>{const r=wrap.getBoundingClientRect();wrap.classList.toggle("flip",r.left+440>window.innerWidth);};
+  wrap.appendChild(el("button",{type:"button",cls:"rb-rotsel"+(picked.length?" act":""),
+    onClick:()=>{RB_ROT_OPEN=!RB_ROT_OPEN;place();wrap.classList.toggle("open",RB_ROT_OPEN);}},summary));
+  if(RB_ROT_OPEN)requestAnimationFrame(place);
+  wrap.appendChild(el("div",{cls:"rb-rotpanel"},
+    el("div",{cls:"rb-rothd"},el("span",null,picked.length?picked.length+" selected":"Tick one or more"),
+      picked.length?el("button",{type:"button",onClick:()=>set({rbRot:undefined})},"Clear"):null),
+    item(RB_AWAY,"Away \u2014 leave, maternity & elective"," away"),
+    el("div",{cls:"rb-rotgrid"},rbRotList().map(r=>item(r,r)))));
+  return wrap;
+}
+document.addEventListener("mousedown",e=>{
+  if(!RB_ROT_OPEN||(e.target.closest&&e.target.closest(".rb-rotdd")))return;
+  RB_ROT_OPEN=false;document.querySelectorAll(".rb-rotdd.open").forEach(n=>n.classList.remove("open"));
+});
 function rbIsAwaySeg(s){return s.leaveWeeks>0||s.rot==="Annual Leave"||s.rot==="Maternity Leave"||s.rot==="Elective";}
 // The R4 picks name a block each, so they map straight onto a cell. Both rotation names
 // already exist in RB_EXTRA; the subspecialty and location stay in the rail as reference,
@@ -13472,7 +13519,7 @@ function renderRotaBuilder(){
   const canApprove=canApproveRota();
   const selBlk=STATE.rbBlock||null;
   const lvlFilter=STATE.rbLevel||"all";
-  const rotFilter=STATE.rbRot||null;
+  const rotFilter=rbRotPicked().length?rbRotPicked():null;
   // allRoster, not RESIDENTS: the plan year's incoming cohort is the whole point here, and
   // it stays out of RESIDENTS until 1 October. planLevel() is null for this year's R4s,
   // who graduate before the plan year opens.
@@ -13584,12 +13631,7 @@ function renderRotaBuilder(){
     onClick:()=>set({rbShort:!STATE.rbShort})},"Shortfalls only"));
   // Dims rather than hides: the point is to watch one rotation across the year without
   // losing sight of who is free to take it.
-  const rotSel=el("select",{cls:"rb-rotsel",onChange:e=>set({rbRot:e.target.value||undefined})},
-    el("option",{value:""},"All rotations"),
-    el("option",{value:RB_AWAY},"Away \u2014 leave, maternity & elective"),
-    rbRotList().map(r=>el("option",{value:r},r)));
-  rotSel.value=rotFilter||"";
-  if(!STATE.rbView||STATE.rbView==="grid")pills.appendChild(rotSel);
+  if(!STATE.rbView||STATE.rbView==="grid")pills.appendChild(rbRotFilterEl());
   // One plan, two readings: the grid by resident, or the same block laid out by service the
   // way the chief's working sheet does. The block comes from the status strip above.
   const view=STATE.rbView||"grid";
@@ -13639,15 +13681,16 @@ function renderRotaBuilder(){
         aw.mat?el("em",{cls:"mat"},"m"):null,aw.elec?el("em",{cls:"elec"},"e"):null)));
     });
     const headRows=[hr,lvRow];
-    if(rotFilter&&rotFilter!==RB_AWAY){
-      const rRow=el("tr",{cls:"rb-cline rot"},el("th",{cls:"rb-res"},(ROT_ABBR[rotFilter]||rotFilter)+" on service"));
+    // One head-count line per ticked service; Away already has its own line above.
+    (rotFilter||[]).filter(f=>f!==RB_AWAY).forEach(rf=>{
+      const rRow=el("tr",{cls:"rb-cline rot"},el("th",{cls:"rb-res"},(ROT_ABBR[rf]||rf)+" on service"));
       blocks.forEach(b=>{
-        const k=rbRotHeads(b,rotFilter);
+        const k=rbRotHeads(b,rf);
         rRow.appendChild(el("th",null,el("div",{cls:"rb-cnt"},
-          el("span",{cls:k?"":"nil",st:k?{color:rotColor(rotFilter).tx}:{}},k?String(k):"—"))));
+          el("span",{cls:k?"":"nil",st:k?{color:rotColor(rf).tx}:{}},k?String(k):"—"))));
       });
       headRows.push(rRow);
-    }
+    });
     tbl.appendChild(el("thead",null,...headRows));
     const tb=el("tbody");
     rows.forEach(r=>{
@@ -13685,7 +13728,7 @@ function renderRotaBuilder(){
         }
         if(flag)kids.push(el("i",{cls:"rb-flag"+(flag==="amber"?" amber":"")}));
         if(drift[b].indexOf(Number(r.id))>=0)kids.push(el("i",{cls:"rb-drift",title:"Edited after publishing \u2014 not live yet"}));
-        const off=rotFilter&&!(rotFilter===RB_AWAY?segs.some(rbIsAwaySeg):segs.some(s=>s.rot===rotFilter));
+        const off=rotFilter&&!rotFilter.some(f=>f===RB_AWAY?segs.some(rbIsAwaySeg):segs.some(s=>s.rot===f));
         const bg=off?"":(plain?rotColor(segs[0].rot).bg:(selBlk===b?"rgba(201,106,74,.05)":""));
         tr.appendChild(el("td",{st:bg?{background:bg}:{}},
           el("div",{cls:"rb-cell"+(off?" off":""),st:editable?{}:(off?{cursor:"not-allowed"}:{cursor:"not-allowed",opacity:".72"}),
