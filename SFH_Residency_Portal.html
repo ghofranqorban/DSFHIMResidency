@@ -11422,6 +11422,8 @@ async function addOutsideRotator({name,level,specialty,ay}){
     if(!error){await loadCoreData();return null;}
     if(/outside_rotator|primary_specialty|rotator_ay/.test(error.message||""))
       return "The database is not ready for outside rotators yet. Run supabase/add_outside_rotators.sql in the Supabase SQL editor first.";
+    if(/row-level security/i.test(error.message||""))
+      return "Your account cannot add outside rotators yet. The PD needs to run supabase/allow_chiefs_add_outside_rotators.sql in Supabase.";
     if(error.code!=="23505")return "Could not add: "+error.message;
   }
   return "Could not find a free username for "+name+".";
@@ -11442,6 +11444,15 @@ async function saveOutsideFrom(pre,ay,after){
   if(msg){if(err)err.textContent=msg;return;}
   set(after);
   showToast("Outside rotator added.","success");
+}
+// Who may add an outside rotator from the builder: the PD roles, the Chief and the Co-Chief.
+// The Co-Chief is usually a resident login carrying chief_role, so both ways are checked.
+// The database has the matching rule (allow_chiefs_add_outside_rotators.sql), limited to
+// rows marked outside_rotator, so this never lets a chief add a programme resident.
+function canAddOutside(){
+  const u=STATE.user;if(!u)return false;
+  if(isPD()||u.role==="chief")return true;
+  return !!u.rid&&(u.rid===CHIEF_RES_ID||u.rid===CO_CHIEF_RES_ID);
 }
 function rbOutsideForm(){
   if(!STATE.rbOutForm)return el("div",{cls:"rb-outadd"},
@@ -13904,7 +13915,7 @@ function renderRotaBuilder(){
     secB.appendChild(el("div",{cls:"rb-gwrap"},tbl));
     if(!rows.length)secB.appendChild(el("div",{st:{padding:"30px 0",textAlign:"center",color:"rgba(31,26,18,.4)",fontSize:".85rem"}},"No residents match this filter."));
   }
-  if(!loading&&isPD())secB.appendChild(rbOutsideForm());
+  if(!loading&&canAddOutside())secB.appendChild(rbOutsideForm());
   wrap.appendChild(secB);
   if(STATE.rbCell)wrap.appendChild(rbCellPanel());
   if(STATE.rbPrefill)wrap.appendChild(rbPrefillModal());
