@@ -2923,6 +2923,7 @@ function renderKpiProposalModal(){
   async function handleSubmit(){
     const missing=requiredKeys.filter(k=>!(_kpiPropLive[k]||"").trim());
     if(missing.length){showToast("Please fill in all required fields (marked with *).","warning");return;}
+    if(!(await sessionAlive()))return;
     set({kpiPropUploading:true});
     let fileUrl=null;
     if(_kpiPropLive.file_file){
@@ -3261,6 +3262,52 @@ window.addEventListener("storage",e=>{
   let uid=null;try{const v=e.newValue&&JSON.parse(e.newValue);uid=v&&v.user&&v.user.id||null;}catch(_){}
   if(uid&&uid!==STATE.user.profileId)location.reload();
 });
+// A phone that keeps the portal open for hours can lose its sign-in in the background while the
+// page still shows the person as signed in. Every write then reaches the database as anonymous and
+// fails with a bare "row-level security" error (Omar H, 14 Nov 2026). sessionAlive() checks before a
+// write and whenever the tab comes back into view; a lost sign-in opens a box that signs the same
+// person in again in place, so the open form and anything typed into it are kept.
+async function sessionAlive(){
+  if(!STATE.user)return true;
+  let session=null;
+  try{session=(await sb.auth.getSession()).data.session;}catch(_){}
+  if(session&&session.user&&session.user.id===STATE.user.profileId)return true;
+  if(!STATE.reauth)set({reauth:{err:"",busy:false}});
+  return false;
+}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")sessionAlive();});
+window.addEventListener("focus",()=>{sessionAlive();});
+function renderReauthModal(){
+  const s=STATE.reauth||{};
+  async function go(){
+    const p=(document.getElementById("rap")||{}).value||"";
+    if(!p){set({reauth:{...s,err:"Enter your password."}});return;}
+    set({reauth:{...s,busy:true,err:""}});
+    const{data,error}=await sb.auth.signInWithPassword({email:STATE.user.user+"@"+AUTH_EMAIL_DOMAIN,password:p});
+    if(error){set({reauth:{busy:false,err:"That password did not work. Try again, or sign out and use the sign-in screen."}});return;}
+    if(!data.user||data.user.id!==STATE.user.profileId){location.reload();return;}
+    set({reauth:null});showToast("Signed in again. You can carry on where you left off.","success");
+  }
+  async function out(){try{await sb.auth.signOut();}catch(_){}location.reload();}
+  return el("div",{cls:"modal-overlay",st:{zIndex:"2000"}},
+    el("div",{cls:"modal-card",st:{width:"400px",maxWidth:"100%"}},
+      el("div",{st:{fontWeight:"800",fontSize:"1.05rem",marginBottom:"6px"}},"Your sign-in has expired"),
+      el("div",{st:{fontSize:".85rem",color:"#5C5345",marginBottom:"14px",lineHeight:"1.5"}},
+        "The portal signed you out in the background. Enter your password to continue — anything you were typing is kept."),
+      el("div",{st:{fontSize:".8rem",fontWeight:"600",marginBottom:"3px"}},"Username"),
+      el("div",{st:{fontSize:".9rem",marginBottom:"10px",padding:"7px 10px",background:"#F6EFE2",borderRadius:"7px"}},STATE.user.user),
+      el("label",{st:{fontSize:".8rem",fontWeight:"600",display:"block",marginBottom:"3px"}},"Password"),
+      el("input",{id:"rap",type:"password",autocomplete:"current-password",
+        st:{width:"100%",padding:"8px 10px",border:"1px solid #d1d5db",borderRadius:"7px",fontSize:".9rem",marginBottom:"8px"},
+        onKeydown:e=>{if(e.key==="Enter")go();}}),
+      s.err?el("div",{st:{color:"#a94e2c",fontSize:".8rem",marginBottom:"8px"}},s.err):null,
+      el("div",{cls:"flex-gap",st:{gap:"8px",marginTop:"6px"}},
+        el("button",{cls:"sbtn primary",st:{flex:"1"},disabled:!!s.busy,onClick:go},s.busy?"Signing in…":"Sign in again"),
+        el("button",{cls:"sbtn ghost",onClick:out},"Sign out")
+      )
+    )
+  );
+}
 function mapProfileToUser(profile){
   return{user:profile.username,role:profile.role,name:profile.display_name,rid:profile.resident_id||null,cid:profile.consultant_id||null,contactEmail:profile.contact_email||"",profileId:profile.id};
 }
@@ -18923,6 +18970,7 @@ function renderLoading(){
   d.appendChild(sp);d.appendChild(t);d.appendChild(s);return d;
 }
 function showToast(msg,type){
+  if(/row-level security|JWT expired|jwt expired/i.test(String(msg||""))&&STATE.user)sessionAlive();
   if(type===undefined)type="error";
   let container=document.getElementById("toast-root");
   if(!container){container=document.createElement("div");container.id="toast-root";container.style.cssText="position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:360px;width:calc(100% - 40px);";document.body.appendChild(container);}
@@ -20401,6 +20449,7 @@ function render(){
   if(_keepWin)window.scrollTo(0,_keepWin);
   if(STATE.showMobileNav)app.appendChild(el("div",{cls:"mob-backdrop mob-open",onClick:()=>set({showMobileNav:false})}));
   if(STATE.kpiPropModal)app.appendChild(renderKpiProposalModal());
+  if(STATE.reauth&&STATE.user)app.appendChild(renderReauthModal());
   if(STATE.cmModal)app.appendChild(renderCanmedsModal());
   if(STATE.oncallEditDate)app.appendChild(renderOncallEditModal());
   if(STATE.oncallColsOpen){const _occ=renderOncallColsModal();if(_occ)app.appendChild(_occ);}
