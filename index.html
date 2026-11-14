@@ -2800,16 +2800,27 @@ async function reviewProposal(proposalId,approve){
   }
   render();
 }
+// Undo puts a verified submission back in review rather than rejecting it. Rejected was a
+// dead end: nothing on the line could act on it, so a PD who undid an approval to correct
+// a field could not get back to the record. From pending, "Approve → record" opens the
+// existing record (matched by title) with the submission's fields laid over it.
+async function kpiSetPending(proposalId){
+  const p=KPI_PROPOSALS.find(x=>x.id===proposalId);
+  if(!p)return false;
+  const{error}=await sb.from("kpi_proposals").update({status:"pending",reviewed_by:null,reviewed_at:null}).eq("id",p.id);
+  if(error){showToast("Error: "+error.message,"error");return false;}
+  p.status="pending";p.reviewed_by=null;p.reviewed_at=null;
+  return true;
+}
 async function revokeKpiApproval(resId,fieldKey,proposalId){
-  showConfirm("Remove verification for this achievement? This action will mark it as unverified.",async()=>{
-    const p=KPI_PROPOSALS.find(x=>x.id===proposalId);
-    if(p){
-      const{error}=await sb.from("kpi_proposals").update({status:"rejected",reviewed_by:STATE.user.profileId,reviewed_at:new Date().toISOString()}).eq("id",p.id);
-      if(error){showToast("Error: "+error.message);return;}
-      p.status="rejected";
-    }
-    render();
-  },"Remove Verification","danger");
+  showConfirm("Move this back to Pending review? It stops counting as verified until it is approved again. Approving opens the record, so any field can be corrected then.",async()=>{
+    if(await kpiSetPending(proposalId))render();
+  },"Move to review","warn");
+}
+async function reopenKpiProposal(proposalId){
+  showConfirm("Reopen this submission? It goes back to Pending review, where it can be approved or rejected again.",async()=>{
+    if(await kpiSetPending(proposalId))render();
+  },"Reopen","primary");
 }
 function parseProposalNote(note){
   if(!note)return{};
@@ -9091,6 +9102,7 @@ function kpiSubmitLines(resId,roleKey,ctx){
         row.appendChild(el("button",{cls:"lnk del",onClick:()=>reviewProposal(p.id,false)},"Reject"));
       }
       if(kpiPdEdit()&&st==="approved")row.appendChild(el("button",{cls:"lnk del",onClick:()=>revokeKpiApproval(resId,f,p.id)},"Undo"));
+      if(kpiPdEdit()&&st==="rejected")row.appendChild(el("button",{cls:"lnk",onClick:()=>reopenKpiProposal(p.id)},"Reopen"));
       wrap.appendChild(row);
     });
   });
