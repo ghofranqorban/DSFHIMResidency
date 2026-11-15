@@ -20813,7 +20813,7 @@ function rsInjectCss(){
   ".rs-det{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 26px;padding:6px 0 10px}"+
   ".rs-det div span{display:block;font-size:.6rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#6E6455;margin-bottom:3px}"+
   ".rs-det div{font-size:.8rem;color:#1F1A12;line-height:1.45;word-break:break-word}.rs-det .wide{grid-column:1/-1}"+
-  ".rs-ifl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 14px}.rs-ifl select{width:auto;font-size:.78rem;padding:6px 30px 6px 12px;border-radius:999px}"+
+  ".rs-ifl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 14px}.rs-ifl select{width:auto;max-width:300px;font-size:.76rem;padding:6px 28px 6px 12px;border-radius:999px}"+
   ".rs-ul{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) 240px auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(31,26,18,.07);font-size:.82rem}"+
   ".rs-ul select{font-size:.8rem;padding:6px 10px;width:260px;max-width:100%}.rs-ul small{display:block;font-size:.7rem;color:#5C5345}"+
 
@@ -20839,11 +20839,31 @@ function rsInjectCss(){
   ".io-m td.io-sep,.io-m th.io-sep{border-left:1px solid rgba(31,26,18,.12)}"+
   ".io-rank{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;font-size:.66rem;font-weight:700;box-sizing:border-box}"+
   ".io-rank.r1{background:#a94e2c;color:#FEFBF3}.io-rank.r2{background:rgba(201,106,74,.3);color:#7a3418}.io-rank.r3{border:1.5px solid rgba(201,106,74,.55);color:#9d4a2a}"+
+  ".io-m td.io-hit{background:rgba(201,106,74,.1)}.io-m tr.row:hover td.io-hit{background:rgba(201,106,74,.16)}.io-m th.io-hit{background:rgba(201,106,74,.1);color:#9d4a2a}"+
+  ".io-fbar{display:flex;gap:8px 10px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-radius:12px;background:#F6EFE2;margin:0 0 14px;font-size:.78rem;color:#1F1A12}"+
+  ".io-fbar b{font-weight:700;margin-right:4px}"+
+  ".io-fchip{display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 12px;border-radius:999px;background:#a94e2c;color:#FEFBF3;font-size:.72rem;font-weight:600}"+
+  ".io-fchip .x{width:18px;height:18px;border-radius:50%;border:none;background:rgba(254,251,243,.22);color:#FEFBF3;font-size:.8rem;line-height:1;cursor:pointer;padding:0;display:inline-flex;align-items:center;justify-content:center}"+
+  ".rs-ifl select.on{border-color:#a94e2c;color:#9d4a2a;font-weight:600}"+
+  ".io-m th.io-sort{cursor:pointer;user-select:none}.io-m th.io-sort:hover{color:#1F1A12}.io-m th.io-sorted{color:#1F1A12;box-shadow:inset 0 -2px 0 #a94e2c}"+
+  ".io-chs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:34px 64px;padding:6px 0 8px}"+
+  ".io-ch h4{margin:0 0 2px;font-family:'Playfair Display',serif;font-weight:400;font-size:1.15rem;color:#1F1A12}"+
+  ".io-ch p{margin:0 0 8px;font-size:.72rem;color:#5C5345}.io-ch h4+.io-br{margin-top:8px}"+
+  ".io-br{display:grid;grid-template-columns:minmax(0,180px) minmax(0,1fr) 54px;gap:12px;align-items:center;padding:5px 6px;margin:0 -6px;border-radius:6px;font-size:.78rem;color:#1F1A12}"+
+  ".io-br.act{cursor:pointer}.io-br.act:hover{background:#F6EFE2}.io-br .lb{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"+
+  ".io-br .tk{position:relative;display:block;height:10px}.io-br .bg{position:absolute;left:0;top:0;height:10px;border-radius:0 4px 4px 0;background:rgba(31,26,18,.08)}"+
+  ".io-br .fl{position:absolute;left:0;right:0;top:0;height:10px;display:flex;gap:2px}"+
+  ".io-br .fl i{display:block;height:10px;min-width:3px;background:#a94e2c}.io-br .fl i:last-child{border-radius:0 4px 4px 0}"+
+  ".io-br .fl i.s2,.io-lg i.s2{background:#cf8a70}.io-br .fl i.s3,.io-lg i.s3{background:#e8c3b3}"+
+  ".io-br .v{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}"+
+  ".io-br.on{background:rgba(201,106,74,.12)}.io-br.on .lb{color:#9d4a2a;font-weight:700}"+
+  ".io-lg{display:flex;gap:16px;margin-top:10px;font-size:.7rem;color:#5C5345}.io-lg span{display:inline-flex;align-items:center;gap:6px}"+
+  ".io-lg i{display:block;width:12px;height:8px;border-radius:2px;background:#a94e2c}"+
   ".io-m tr.tot td{border-bottom:none;border-top:1px solid rgba(31,26,18,.16);font-size:.7rem;color:#5C5345;font-weight:600}"+
   "@media (max-width:760px){.rs-sheet{grid-template-columns:1fr}.rs-figs{grid-template-columns:repeat(2,1fr)}.rs-figs>div{padding-left:0;border-left:none}"+
   ".rs-track{grid-template-columns:1fr!important}.rs-track .c{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;padding:6px 0;border-bottom:1px solid rgba(31,26,18,.05)}"+
   ".rs-track .c .ln:before{display:none}.rs-track .nm{margin-top:0;font-size:.8rem}.rs-track .dt{margin-top:0;font-size:.72rem;padding-right:0;text-align:right}"+
-  ".rs-panel .f{grid-template-columns:1fr}.rs-form .g{grid-template-columns:1fr}.rs-trow{grid-template-columns:1fr 1fr;gap:6px 12px}.rs-trow b{grid-column:1/-1}.rs-det{grid-template-columns:1fr}.rs-ul{grid-template-columns:1fr}.io-row{grid-template-columns:1fr 1fr}.io-lv{grid-template-columns:1fr}}";
+  ".rs-panel .f{grid-template-columns:1fr}.rs-form .g{grid-template-columns:1fr}.rs-trow{grid-template-columns:1fr 1fr;gap:6px 12px}.rs-trow b{grid-column:1/-1}.rs-det{grid-template-columns:1fr}.rs-ul{grid-template-columns:1fr}.io-row{grid-template-columns:1fr 1fr}.io-lv{grid-template-columns:1fr}.io-chs{grid-template-columns:1fr}}";
   document.head.appendChild(s);
 }
 function rsCheck(){const w=document.createElement("span");w.innerHTML='<svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#FEFBF3" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.2 6.4 4.9 9 9.8 3.4"/></svg>';return w.firstChild;}
@@ -21184,60 +21204,156 @@ function rsLoad(rid){return RS_STUDIES.filter(s=>s.status==="active"&&!rsPublish
 // The short form of a long answer for the list: "Maybe — with mentorship" -> "Maybe". The full
 // sentence stays in the detail a click opens.
 function rsShortAns(v){const t=rsTxt(v).trim();if(!t)return"—";const s=t.split(/\s[—–-]\s|[,(.]/)[0].trim();return s.length>22?s.slice(0,20)+"…":s;}
-function rsHrs(v){return rsShortAns(rsTxt(v).replace(/\s*hours?\s*(per|a|\/)\s*week/i," h/wk").replace(/^More than /i,">").replace(/^Less than /i,"<"));}
-function rsCnt(v){return rsShortAns(rsTxt(v).replace(/\s+or more/i,"+"));}
+function rsCnt(v){return rsShortAns(rsTxt(v).replace(/\s*(or more|and above|or above)\b/i,"+").replace(/^more than\s+/i,">"));}
+function rsHrs(v){
+  const t=rsTxt(v).replace(/\s*(or more|and above|or above)\b/i,"+").replace(/^more than\s+/i,">").replace(/^less than\s+/i,"<")
+    .replace(/\s*(hours?|hrs?)(\s*(per|a|\/)\s*(week|wk))?/i," h/wk");
+  return rsShortAns(t);
+}
 function rsTone(v){const t=rsTxt(v).trim();return!rsHas(t)?"io-no":/^maybe/i.test(t)?"io-may":"io-yes";}
-// One key per subspecialty however it was typed: case, spacing and the vowels after the first
-// letter are ignored, so "Gastroentrology" and "gastroenterology" are the same column.
-function rsSpecKey(p){const w=String(p||"").toLowerCase().replace(/[^a-z]/g,"");return w.length<=3?w:(w[0]+w.slice(1).replace(/[aeiouy]/g,"")).replace(/(.)\1+/g,"$1");}
-// Every subspecialty asked for, most wanted first, labelled with its commonest spelling.
+// The same subspecialty is typed many ways ("Endocrine", "Endo", "Endocrinology"; "ICU", "Intensive
+// care"). Each pattern folds its variants into one column. Anything not listed is grouped by its
+// own spelling, ignoring case and vowels, so a plain typo still lands with its neighbour.
+const RS_SPEC_CANON=[
+  [/^(any|all|none|no preference|not sure|n\/?a|open|anything|other|others)\b/,"Any","Any"],
+  [/endocr|diabet|^endo\b/,"Endocrinology","Endo"],[/gastro|hepat|^gi\b|liver/,"Gastroenterology","GI"],
+  [/nephro|renal|kidney/,"Nephrology","Nephro"],[/cardi/,"Cardiology","Cardio"],
+  [/infect|^id\b/,"Infectious diseases","ID"],[/pulmo|respir|chest/,"Pulmonology","Pulm"],
+  [/rheum/,"Rheumatology","Rheum"],[/h(a)?emat|^h(a)?em\b/,"Haematology","Haem"],[/oncol|^onc\b/,"Oncology","Onc"],
+  [/intens|critical|\bicu\b/,"Intensive care","ICU"],[/neuro/,"Neurology","Neuro"],
+  [/geriat|elder/,"Geriatrics","Geri"],[/allerg|immun/,"Allergy and immunology","Immuno"],
+  [/dermat/,"Dermatology","Derm"],[/palliat/,"Palliative care","Pall"],[/general|^gim\b|internal med/,"General medicine","GIM"],
+  [/emerg|^er\b|^ed\b/,"Emergency medicine","EM"],[/educat/,"Medical education","Med Ed"]];
+function rsSpecCanon(p){const l=String(p||"").toLowerCase().trim();return RS_SPEC_CANON.find(c=>c[0].test(l))||null;}
+function rsSpecKey(p){
+  const c=rsSpecCanon(p);if(c)return"c:"+c[1];
+  const w=String(p||"").toLowerCase().replace(/[^a-z]/g,"");
+  return w.length<=3?w:(w[0]+w.slice(1).replace(/[aeiouy]/g,"")).replace(/(.)\1+/g,"$1");
+}
+// Every subspecialty asked for, most wanted first. "Any" (no preference typed) always comes last.
 function rsSpecList(answers){
   const m=new Map();
   answers.forEach(a=>rsPrefs(a).forEach((p,i)=>{const k=rsSpecKey(p);if(!k)return;const e=m.get(k)||{k,names:{},n:0,first:0};e.names[p]=(e.names[p]||0)+1;e.n++;if(i===0)e.first++;m.set(k,e);}));
-  return[...m.values()].map(e=>{const lab=Object.keys(e.names).sort((x,y)=>e.names[y]-e.names[x]||y.length-x.length)[0];
-    return{k:e.k,label:lab.charAt(0).toUpperCase()+lab.slice(1),n:e.n,first:e.first};}).sort((a,b)=>b.n-a.n||a.label.localeCompare(b.label));
+  return[...m.values()].map(e=>{
+    const typed=Object.keys(e.names).sort((x,y)=>e.names[y]-e.names[x]||y.length-x.length)[0],c=rsSpecCanon(typed);
+    const label=c?c[1]:typed.charAt(0).toUpperCase()+typed.slice(1);
+    return{k:e.k,label,abbr:c?c[2]:(label.length>7?label.slice(0,6)+".":label),n:e.n,first:e.first,any:e.k==="c:Any"};
+  }).sort((a,b)=>(a.any?1:0)-(b.any?1:0)||b.n-a.n||a.label.localeCompare(b.label));
 }
-const RS_SPEC_ABBR={gastroenterology:"GI",cardiology:"Cardio",pulmonology:"Pulm",nephrology:"Nephro",endocrinology:"Endo","infectious diseases":"ID",rheumatology:"Rheum",
-  hematology:"Haem",haematology:"Haem",oncology:"Onc",neurology:"Neuro",icu:"ICU","critical care":"ICU","general internal medicine":"GIM",geriatrics:"Geri",dermatology:"Derm",immunology:"Immuno"};
-function rsSpecAbbr(label){
-  const l=label.toLowerCase(),hit=Object.keys(RS_SPEC_ABBR).find(k=>rsSpecKey(k)===rsSpecKey(l));
-  return hit?RS_SPEC_ABBR[hit]:(label.length>7?label.slice(0,6)+".":label);
+// "Not on a project" is the one filter that is not an answer on the form.
+const RS_IFILTERS=[{k:"free",l:"Not on a project",col:"On now",test:(q,x)=>x.n===0}];
+// The questions offered as dropdowns, each listing the answers residents actually gave, and the
+// grid column each one lights up. Every other question filters from the Summary charts.
+const RS_QFILTERS=["prior_projects","publications","stats","lead_group","availability","tasks"];
+const RS_QCOL={prior_projects:"Projects",publications:"Papers",stats:"Statistics",lead_group:"Would lead",availability:"Time"};
+// The short name each dropdown carries, so a chosen answer still says which question it answers.
+const RS_QSHORT={prior_projects:"Projects before",publications:"Publications",stats:"Statistics",lead_group:"Would lead",availability:"Time",tasks:"Has done"};
+// Every question on the form that can be counted, for the Summary charts and the "any answer" filter.
+const RS_QS=[
+  {k:"prior_projects",l:"Research projects before",fmt:"cnt"},{k:"publications",l:"Publications",fmt:"cnt"},
+  {k:"stats",l:"Statistics experience",fmt:"short"},{k:"lead_group",l:"Would lead a group",fmt:"short"},
+  {k:"availability",l:"Time available",fmt:"hrs"},{k:"tasks",l:"Research tasks done before",multi:true},
+  {k:"participate",l:"How they want to take part",fmt:"short"},{k:"outside_ok",l:"Open to other subspecialties",fmt:"short"},
+  {k:"leadership",l:"Leadership experience",fmt:"short"},{k:"lectures",l:"Given research lectures or workshops",fmt:"short"}];
+function rsQDef(k){return RS_QS.find(d=>d.k===k)||(k.indexOf("other:")===0?{k,l:k.slice(6),fmt:"short",other:true}:null);}
+function rsQVals(a,d){
+  const src=a.answers||{},v=d.other?(src.other||{})[d.k.slice(6)]:src[d.k];
+  if(d.multi||Array.isArray(v))return(Array.isArray(v)?v:String(v||"").split(/,\s*/)).map(t=>String(t).trim()).filter(Boolean);
+  const t=rsTxt(v).trim();if(!t)return[];
+  return[d.fmt==="cnt"?rsCnt(t):d.fmt==="hrs"?rsHrs(t):rsShortAns(t)];
+}
+function rsQMatch(a,c){const d=rsQDef(c.k);return!!d&&rsQVals(a,d).indexOf(c.v)>=0;}
+// A sortable weight for an answer: none < maybe < basic < intermediate < advanced < yes, and numbers by size.
+function rsOrd(t){
+  const s=String(t==null?"":t).toLowerCase().trim();
+  if(!s||s==="\u2014")return-1;
+  if(/^(no|none|never)\b/.test(s))return 0;if(/^maybe/.test(s))return 1;if(/^basic/.test(s))return 2;
+  if(/^interm/.test(s))return 3;if(/^adv/.test(s))return 4;if(/^yes/.test(s))return 5;
+  const m=s.match(/\d+/);
+  return m?Number(m[0])+(/[+>]/.test(s)?0.5:0)-(/^</.test(s)?0.5:0):1;
+}
+// Summary: one small chart per question. Clicking a bar filters every view to those residents.
+function rsInterestSummary(rows,all,spec,qs,setF){
+  const n=rows.length;
+  const isOn=(k,v)=>qs.some(c=>c.k===k&&c.v===v);
+  const toggle=(d,v)=>()=>setF({q:isOn(d.k,v)?qs.filter(c=>!(c.k===d.k&&c.v===v)):qs.concat([{k:d.k,v,l:d.l}])});
+  const line=(label,segs,max,value,opts)=>{const o=opts||{};
+    return el("div",{cls:"io-br"+(o.on?" on":"")+(o.onClick?" act":""),title:o.title||"",onClick:o.onClick||null},
+      el("span",{cls:"lb"},label),
+      el("span",{cls:"tk"},o.track?el("span",{cls:"bg",st:{width:Math.max(2,o.track/max*100)+"%"}}):null,
+        el("span",{cls:"fl"},...segs.map((s,i)=>s?el("i",{cls:"s"+(i+1),st:{width:(s/max*100)+"%"}}):null))),
+      el("span",{cls:"v"},value));};
+  const panel=(title,sub,lines,extra)=>el("div",{cls:"io-ch"},el("h4",null,title),sub?el("p",null,sub):null,...lines,extra||null);
+  const out=[];
+  // Who has answered, by level (always the whole programme, whatever the filters).
+  const lv=["R1","R2","R3","R4"].map(l=>({l,t:all.filter(x=>x.r.level===l).length,a:all.filter(x=>x.r.level===l&&x.a).length})).filter(o=>o.t);
+  const maxT=Math.max(1,...lv.map(o=>o.t));
+  out.push(panel("Who has answered","Residents who filled the form, of all residents at that level.",
+    lv.map(o=>line(o.l,[o.a],maxT,o.a+" of "+o.t,{track:o.t,title:o.a+" of "+o.t+" "+o.l+" residents have answered"}))));
+  // Subspecialties, split by first, second and third choice.
+  const sl=rsSpecList(rows.map(x=>x.a)).map(s=>{const c=[0,0,0];rows.forEach(x=>{const i=rsPrefs(x.a).findIndex(p=>rsSpecKey(p)===s.k);if(i>=0&&i<3)c[i]++;});return{s,c};});
+  const maxS=Math.max(1,...sl.map(o=>o.s.n));
+  if(sl.length)out.push(panel("Subspecialties asked for","How many residents chose each one, and how high they ranked it.",
+    sl.map(o=>line(o.s.any?"No particular one":o.s.label,o.c,maxS,String(o.s.n),{on:spec&&spec.k===o.s.k,onClick:()=>setF({spec:spec&&spec.k===o.s.k?"":o.s.k}),
+      title:o.s.label+": "+o.c[0]+" first, "+o.c[1]+" second, "+o.c[2]+" third choice"})),
+    el("div",{cls:"io-lg"},el("span",null,el("i",{cls:"s1"}),"First choice"),el("span",null,el("i",{cls:"s2"}),"Second"),el("span",null,el("i",{cls:"s3"}),"Third"))));
+  // One chart per countable question, including any the committee adds to the form later.
+  const extra=[...new Set(rows.flatMap(x=>Object.keys((x.a.answers||{}).other||{})))].map(t=>rsQDef("other:"+t));
+  RS_QS.concat(extra).forEach(d=>{
+    const tally=new Map();rows.forEach(x=>rsQVals(x.a,d).forEach(v=>tally.set(v,(tally.get(v)||0)+1)));
+    if(!tally.size||(d.other&&tally.size>8))return;   // a free-text question with all-different answers is not a chart
+    const vals=[...tally.entries()].sort((a,b)=>d.multi?b[1]-a[1]||a[0].localeCompare(b[0]):rsOrd(a[0])-rsOrd(b[0])||a[0].localeCompare(b[0]));
+    const max=Math.max(1,...vals.map(v=>v[1]));
+    out.push(panel(d.l,d.multi?"A resident can tick several.":null,
+      vals.map(([v,c])=>line(v,[c],max,String(c),{on:isOn(d.k,v),onClick:toggle(d,v),title:c+" of "+n+(n===1?" resident":" residents")+": "+v}))));
+  });
+  return el("div",null,el("div",{st:{fontSize:".72rem",color:"#5C5345",margin:"0 0 14px"}},"Counts are for the "+n+(n===1?" answer":" answers")+" shown. Click a bar to filter by it; click it again to remove the filter."),
+    el("div",{cls:"io-chs"},out));
 }
 function rsInterestPage(tabs){
-  const f=STATE.rsIF||{},view=STATE.rsIView==="spec"?"spec":"grid",lv={R1:1,R2:2,R3:3,R4:4};
+  const f=STATE.rsIF||{},view=["spec","sum"].indexOf(STATE.rsIView)>=0?STATE.rsIView:"grid",qs=Array.isArray(f.q)?f.q:[],lv={R1:1,R2:2,R3:3,R4:4};
   const all=RESIDENTS.slice().sort((a,b)=>(lv[a.level]||9)-(lv[b.level]||9)||dname(a.name).localeCompare(dname(b.name))).map(r=>({r,a:rsInterestOf(r.id),n:rsLoad(r.id)}));
   const got=all.filter(x=>x.a),none=all.filter(x=>!x.a),loose=RS_INTEREST.filter(a=>a.resident_id==null);
-  const specsAll=rsSpecList(got.map(x=>x.a));
-  const ans=x=>x.a.answers||{};
-  const rows=got.filter(x=>{
-    if(f.spec&&!rsPrefs(x.a).some(p=>rsSpecKey(p)===f.spec))return false;
-    if(f.exp&&!rsHas(ans(x).prior_projects))return false;
-    if(f.pub&&!rsHas(ans(x).publications))return false;
-    if(f.stats&&!rsHas(ans(x).stats))return false;
-    if(f.lead&&!rsHas(ans(x).lead_group))return false;
-    if(f.free&&x.n>0)return false;
-    return true;
-  });
-  const tog=(k,l)=>el("span",{cls:"pill"+(f[k]?" on":""),onClick:()=>set({rsIF:{...f,[k]:!f[k]},rsIOpen:null})},l);
-  const any=f.spec||f.exp||f.pub||f.stats||f.lead||f.free;
+  const specsAll=rsSpecList(got.map(x=>x.a)),spec=specsAll.find(s=>s.k===f.spec)||null;
+  const on=RS_IFILTERS.filter(d=>f[d.k]),lit=on.concat(qs.map(c=>({col:RS_QCOL[c.k]})).filter(o=>o.col));
+  const rankIn=x=>spec?rsPrefs(x.a).findIndex(p=>rsSpecKey(p)===spec.k):0;
+  let rows=got.filter(x=>(!spec||rankIn(x)>=0)&&on.every(d=>d.test(x.a.answers||{},x))&&qs.every(c=>rsQMatch(x.a,c)));
+  // With a subspecialty chosen, those who put it first come first.
+  if(spec)rows=rows.slice().sort((a,b)=>rankIn(a)-rankIn(b));
+  const any=!!spec||on.length>0||qs.length>0;
+  const setF=(patch)=>set({rsIF:{...f,...patch},rsIOpen:null});
   const nm=r=>[dname(r.name),el("i",null,r.level)];
-  const body=!rows.length?el("div",{cls:"rs-empty"},got.length?"No resident matches these filters.":"No resident has answered the form yet."):
-    view==="spec"?rsInterestBySpec(rows,nm):rsInterestGrid(rows,nm);
-  return el("div",{cls:"content"},
+  const x=(fn)=>el("button",{cls:"x",title:"Remove this filter",onClick:fn},"×");
+  const bar=any?el("div",{cls:"io-fbar"},
+    el("b",null,rows.length+" of "+got.length+(got.length===1?" answer matches":" answers match")),
+    spec?el("span",{cls:"io-fchip"},"Chose "+spec.label+" (1st, 2nd or 3rd)",x(()=>setF({spec:""}))):null,
+    ...on.map(d=>el("span",{cls:"io-fchip"},d.l,x(()=>setF({[d.k]:false})))),
+    ...qs.map((c,i)=>el("span",{cls:"io-fchip"},c.l+": "+c.v,x(()=>setF({q:qs.filter((_,j)=>j!==i)})))),
+    el("button",{cls:"rs-lnk",onClick:()=>set({rsIF:{},rsIOpen:null})},"Clear all"),
+    view==="sum"&&rows.length?el("button",{cls:"rs-btn sm",st:{marginLeft:"auto"},onClick:()=>set({rsIView:"grid",rsIOpen:null})},"Show "+(rows.length===1?"this resident":"these "+rows.length+" residents")):null):null;
+  const body=!rows.length?el("div",{cls:"rs-empty"},got.length?"No answer matches these filters. Remove one to see more.":"No resident has answered the form yet."):
+    view==="sum"?rsInterestSummary(rows,all,spec,qs,setF):view==="spec"?rsInterestBySpec(rows,nm,spec):rsInterestGrid(rows,nm,spec,lit);
+  return el("div",{cls:"content",st:{maxWidth:"1320px"}},
     rsHeader("Residents and interests","What each resident told the Research Committee on its form. Use it to decide who goes on which project.",null),
     rsTabs(tabs,"interest"),
     el("div",{cls:"rs-figs",st:{gridTemplateColumns:"repeat(3,1fr)"}},
       el("div",null,el("b",null,String(got.length)),el("span",null,"of "+all.length+" residents have answered the form")),
-      el("div",null,el("b",null,String(specsAll.length)),el("span",null,specsAll.length===1?"subspecialty asked for":"subspecialties asked for")),
+      el("div",null,el("b",null,String(specsAll.filter(s=>!s.any).length)),el("span",null,"subspecialties asked for")),
       el("div",{cls:loose.length?"gold":""},el("b",null,String(loose.length)),el("span",null,loose.length===1?"answer is not linked to a resident yet":"answers are not linked to a resident yet"))),
-    el("div",{st:{display:"flex",gap:"14px",alignItems:"center",flexWrap:"wrap",margin:"0 0 14px"}},
-      el("div",{cls:"io-seg"},el("span",{cls:view==="grid"?"on":"",onClick:()=>set({rsIView:"grid",rsIOpen:null})},"By resident"),el("span",{cls:view==="spec"?"on":"",onClick:()=>set({rsIView:"spec",rsIOpen:null})},"By subspecialty")),
+    el("div",{st:{display:"flex",gap:"14px",alignItems:"center",flexWrap:"wrap",margin:"0 0 12px"}},
+      el("div",{cls:"io-seg"},el("span",{cls:view==="grid"?"on":"",onClick:()=>set({rsIView:"grid",rsIOpen:null})},"By resident"),el("span",{cls:view==="spec"?"on":"",onClick:()=>set({rsIView:"spec",rsIOpen:null})},"By subspecialty"),el("span",{cls:view==="sum"?"on":"",onClick:()=>set({rsIView:"sum",rsIOpen:null})},"Summary")),
       el("div",{cls:"rs-ifl",st:{margin:"0"}},
-        el("select",{onChange:e=>set({rsIF:{...f,spec:e.target.value},rsIOpen:null})},el("option",{value:""},"Any subspecialty"),...specsAll.map(s=>el("option",{value:s.k,selected:f.spec===s.k},s.label))),
-        tog("exp","Has research experience"),tog("pub","Has publications"),tog("stats","Statistics experience"),tog("lead","Would lead a group"),tog("free","Not on a project"),
-        any?el("button",{cls:"rs-lnk",onClick:()=>set({rsIF:{},rsIOpen:null})},"Clear filters"):null)),
-    any?el("div",{st:{fontSize:".72rem",color:"#5C5345",margin:"0 0 8px"}},rows.length+" of "+got.length+" answers shown"):null,
-    body,
+        el("span",{st:{fontSize:".66rem",fontWeight:"700",letterSpacing:".07em",textTransform:"uppercase",color:"#6E6455"}},"Filter"),
+        el("select",{cls:spec?"on":"",onChange:e=>setF({spec:e.target.value})},el("option",{value:""},"Any subspecialty"),...specsAll.map(s=>el("option",{value:s.k,selected:f.spec===s.k},s.label+" ("+s.n+")"))),
+        ...RS_QFILTERS.map(k=>{
+          const d=rsQDef(k),tally=new Map(),cur=(qs.find(c=>c.k===k)||{}).v||"";
+          got.forEach(x=>rsQVals(x.a,d).forEach(v=>tally.set(v,(tally.get(v)||0)+1)));
+          if(!tally.size)return null;
+          const vals=[...tally.entries()].sort((a,b)=>d.multi?b[1]-a[1]||a[0].localeCompare(b[0]):rsOrd(a[0])-rsOrd(b[0])||a[0].localeCompare(b[0]));
+          return el("select",{cls:cur?"on":"",title:d.l,onChange:e=>setF({q:qs.filter(c=>c.k!==k).concat(e.target.value?[{k,v:e.target.value,l:d.l}]:[])})},
+            el("option",{value:""},RS_QSHORT[k]+": any"),...vals.map(([v,c])=>el("option",{value:v,selected:cur===v},RS_QSHORT[k]+": "+v+" ("+c+")")));}),
+        ...RS_IFILTERS.map(d=>el("span",{cls:"pill"+(f[d.k]?" on":""),onClick:()=>setF({[d.k]:!f[d.k]})},d.l)))),
+    bar,body,
     none.length?el("div",{cls:"io-wait"},el("h3",null,"Not answered yet"),
       el("p",null,none.length+(none.length===1?" resident has":" residents have")+" not filled the form.",
         el("button",{cls:"rs-lnk",st:{marginLeft:"12px"},onClick:()=>rsCopyNames(none.map(x=>dname(x.r.name)))},"Copy the names")),
@@ -21250,41 +21366,61 @@ function rsInterestPage(tabs){
         rsLinkSelect(a),
         RS_CAN.manager?el("button",{cls:"rs-lnk",onClick:()=>rsDeleteInterest(a)},"Delete"):el("span",null)))):null);
 }
-// By resident: one line each, the subspecialties across, 1 2 3 marking the choices.
-function rsInterestGrid(rows,nm){
-  const MAX=12,list=rsSpecList(rows.map(x=>x.a)),sp=list.slice(0,MAX),rest=new Set(list.slice(MAX).map(s=>s.k));
-  const cols=sp.length+(rest.size?1:0)+7;
+// By resident: one line each, the subspecialties across, 1 2 3 marking the choices. The column of
+// the chosen subspecialty and the columns the filters read are tinted, so a match explains itself.
+function rsInterestGrid(rows,nm,spec,on){
+  const MAX=11,full=rsSpecList(rows.map(x=>x.a)),named=full.filter(s=>!s.any);
+  let sp=named.slice(0,MAX);
+  if(spec&&!spec.any&&!sp.some(s=>s.k===spec.k)){const s=named.find(s=>s.k===spec.k);if(s)sp=sp.slice(0,MAX-1).concat([s]);}
+  const shown=new Set(sp.map(s=>s.k)),restList=full.filter(s=>!shown.has(s.k)),rest=new Set(restList.map(s=>s.k));
+  const right=["Projects","Papers","Statistics","Would lead","Time","On now"],hitCols=new Set(on.map(d=>d.col));
+  const cols=1+sp.length+(rest.size?1:0)+right.length;
+  const hc=(s)=>spec&&s.k===spec.k?" io-hit":"",rc=h=>hitCols.has(h)?" io-hit":"";
+  // Any column sorts: a click on its heading, a second click to reverse.
+  const so=STATE.rsISort||null,arrow=k=>so&&so.c===k?(so.d>0?" \u2191":" \u2193"):"";
+  const sth=(k,dflt,cls,title,label)=>el("th",{cls:cls+" io-sort"+(so&&so.c===k?" io-sorted":""),title:(title?title+". ":"")+"Click to sort",
+    onClick:()=>set({rsISort:so&&so.c===k?{c:k,d:-so.d}:{c:k,d:dflt},rsIOpen:null})},label+arrow(k));
+  if(so){
+    const val=x=>{const q=x.a.answers||{};
+      if(so.c==="name")return dname(x.r.name).toLowerCase();
+      if(so.c.indexOf("s:")===0){const i=rsPrefs(x.a).map(rsSpecKey).indexOf(so.c.slice(2));return i<0?9:i;}
+      return{Projects:rsOrd(rsCnt(q.prior_projects)),Papers:rsOrd(rsCnt(q.publications)),Statistics:rsOrd(rsShortAns(q.stats)),
+        "Would lead":rsOrd(rsShortAns(q.lead_group)),Time:rsOrd(rsHrs(q.availability)),"On now":x.n}[so.c];};
+    rows=rows.slice().sort((a,b)=>{const u=val(a),v=val(b);return(u<v?-1:u>v?1:0)*so.d;});
+  }
   const t=el("table",{cls:"io-m"},
-    el("thead",null,el("tr",null,el("th",null,"Resident"),
-      ...sp.map((s,i)=>el("th",{cls:i===0?"io-sep":"",title:s.label},rsSpecAbbr(s.label))),rest.size?el("th",{title:list.slice(MAX).map(s=>s.label).join(", ")},"Other"):null,
-      ...["Projects","Papers","Statistics","Would lead","Time","On now"].map((h,i)=>el("th",{cls:i===0?"io-sep":""},h)))));
+    el("thead",null,el("tr",null,sth("name",1,"","","Resident"),
+      ...sp.map((s,i)=>sth("s:"+s.k,1,(i===0?"io-sep":"")+hc(s),s.label,s.abbr)),
+      rest.size?el("th",{cls:spec&&rest.has(spec.k)?"io-hit":"",title:restList.map(s=>s.label).join(", ")},"Other"):null,
+      ...right.map((h,i)=>sth(h,-1,(i===0?"io-sep":"")+rc(h),"",h)))));
   const tb=el("tbody");
   rows.forEach(x=>{
     const q=x.a.answers||{},keys=rsPrefs(x.a).map(rsSpecKey),open=STATE.rsIOpen===x.r.id;
     const others=keys.map((k,i)=>rest.has(k)?i+1:0).filter(Boolean);
+    const cell=(h,cls,title,txt)=>el("td",{cls:(h==="Projects"?"io-sep ":"")+cls+rc(h),title},txt);
     tb.appendChild(el("tr",{cls:"row",title:"Show the full answer",onClick:()=>set({rsIOpen:open?null:x.r.id})},el("td",{cls:"nm"},nm(x.r)),
-      ...sp.map((s,i)=>{const k=keys.indexOf(s.k);return el("td",{cls:i===0?"io-sep":""},k>=0?el("span",{cls:"io-rank r"+(k+1),title:["First","Second","Third"][k]+" choice: "+s.label},String(k+1)):null);}),
-      rest.size?el("td",null,others.map(n=>el("span",{cls:"io-rank r"+n,st:{margin:"0 1px"}},String(n)))):null,
-      el("td",{cls:"io-sep "+rsTone(q.prior_projects),title:rsTxt(q.prior_projects)},rsCnt(q.prior_projects)),el("td",{cls:rsTone(q.publications),title:rsTxt(q.publications)},rsShortAns(q.publications)),
-      el("td",{cls:rsTone(q.stats),title:rsTxt(q.stats)},rsShortAns(q.stats)),el("td",{cls:rsTone(q.lead_group),title:rsTxt(q.lead_group)},rsShortAns(q.lead_group)),
-      el("td",{title:rsTxt(q.availability)},rsHrs(q.availability)),el("td",{cls:x.n?"":"io-no"},x.n?String(x.n):"—")));
+      ...sp.map((s,i)=>{const k=keys.indexOf(s.k);return el("td",{cls:(i===0?"io-sep":"")+hc(s)},k>=0?el("span",{cls:"io-rank r"+(k+1),title:["First","Second","Third"][k]+" choice: "+s.label},String(k+1)):null);}),
+      rest.size?el("td",{cls:spec&&rest.has(spec.k)?"io-hit":""},others.map(n=>el("span",{cls:"io-rank r"+n,st:{margin:"0 1px"}},String(n)))):null,
+      cell("Projects",rsTone(q.prior_projects),rsTxt(q.prior_projects),rsCnt(q.prior_projects)),cell("Papers",rsTone(q.publications),rsTxt(q.publications),rsCnt(q.publications)),
+      cell("Statistics",rsTone(q.stats),rsTxt(q.stats),rsShortAns(q.stats)),cell("Would lead",rsTone(q.lead_group),rsTxt(q.lead_group),rsShortAns(q.lead_group)),
+      cell("Time","",rsTxt(q.availability),rsHrs(q.availability)),cell("On now",x.n?"":"io-no",x.n?"On "+x.n+" project"+(x.n===1?"":"s")+" now":"Not on a project now",x.n?String(x.n):"—")));
     if(open)tb.appendChild(el("tr",null,el("td",{colspan:String(cols),st:{background:"#FAF6EC",padding:"14px 16px",textAlign:"left",whiteSpace:"normal"}},rsInterestDetail(x.a))));
   });
-  tb.appendChild(el("tr",{cls:"tot"},el("td",null,"Residents asking"),...sp.map((s,i)=>el("td",{cls:i===0?"io-sep":""},String(s.n))),rest.size?el("td",null,String(list.slice(MAX).reduce((n,s)=>n+s.n,0))):null,el("td",{cls:"io-sep",colspan:"6"})));
+  tb.appendChild(el("tr",{cls:"tot"},el("td",null,"Residents asking"),...sp.map((s,i)=>el("td",{cls:(i===0?"io-sep":"")+hc(s)},String(s.n))),
+    rest.size?el("td",null,String(restList.reduce((n,s)=>n+s.n,0))):null,el("td",{cls:"io-sep",colspan:String(right.length)})));
   t.appendChild(tb);
-  return el("div",null,el("div",{st:{fontSize:".72rem",color:"#5C5345",margin:"0 0 8px"}},"1, 2, 3 = first, second and third choice. Click a resident for the full answer."),
+  return el("div",null,el("div",{st:{fontSize:".72rem",color:"#5C5345",margin:"0 0 8px"}},"1, 2, 3 = first, second and third choice. Click a column heading to sort by it, or a resident for the full answer."),
     el("div",{st:{overflowX:"auto"}},t));
 }
 // By subspecialty: who asked for each one, most wanted first. A resident appears under each choice.
-function rsInterestBySpec(rows,nm){
-  const only=(STATE.rsIF||{}).spec;
-  return el("div",null,...rsSpecList(rows.map(x=>x.a)).filter(s=>!only||s.k===only).map(s=>{
+function rsInterestBySpec(rows,nm,spec){
+  return el("div",null,...rsSpecList(rows.map(x=>x.a)).filter(s=>!spec||s.k===spec.k).map(s=>{
     const inx=rows.map(x=>({x,i:rsPrefs(x.a).findIndex(p=>rsSpecKey(p)===s.k)})).filter(o=>o.i>=0).sort((a,b)=>a.i-b.i);
-    return el("div",{cls:"io-grp"},el("h2",null,s.label,el("small",null,s.n+(s.n===1?" resident":" residents")+" · "+s.first+" first choice")),
+    return el("div",{cls:"io-grp"},el("h2",null,s.any?"No particular subspecialty":s.label,el("small",null,s.n+(s.n===1?" resident":" residents")+" · "+s.first+" first choice")),
       ...inx.map(o=>{const q=o.x.a.answers||{},key=o.x.r.id+"|"+s.k,open=STATE.rsIOpen===key;
         return el("div",null,el("div",{cls:"io-row",title:"Show the full answer",onClick:()=>set({rsIOpen:open?null:key})},el("b",null,nm(o.x.r)),
           el("span",{cls:"rk"+(o.i?" o":"")},["1st choice","2nd choice","3rd choice"][o.i]),
-          el("span",{cls:"ex"},"Projects "+rsCnt(q.prior_projects).toLowerCase()+" · papers "+rsShortAns(q.publications).toLowerCase()+" · statistics "+rsShortAns(q.stats).toLowerCase()+" · would lead: "+rsShortAns(q.lead_group).toLowerCase()),
+          el("span",{cls:"ex"},"Projects "+rsCnt(q.prior_projects).toLowerCase()+" · papers "+rsCnt(q.publications).toLowerCase()+" · statistics "+rsShortAns(q.stats).toLowerCase()+" · would lead: "+rsShortAns(q.lead_group).toLowerCase()),
           el("span",{cls:"r"},rsHrs(q.availability)+(o.x.n?" · on "+o.x.n:""))),
           open?el("div",{st:{background:"#FAF6EC",padding:"14px 16px"}},rsInterestDetail(o.x.a)):null);}));}));
 }
