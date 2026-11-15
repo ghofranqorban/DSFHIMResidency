@@ -20810,26 +20810,40 @@ function rsInjectCss(){
   ".rs-sec h2{margin:0 0 4px;font-family:'Playfair Display',serif;font-weight:400;font-size:1.35rem;color:#1F1A12}"+
   ".rs-sec p{margin:0 0 14px;font-size:.8rem;color:#5C5345;line-height:1.55;max-width:640px}"+
   ".rs-empty{padding:26px 0;font-size:.88rem;color:#5C5345;line-height:1.6;max-width:600px}"+
-  ".rs-int{width:100%;border-collapse:collapse}"+
-  ".rs-int th{background:transparent;text-align:left;font-size:.62rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#5C5345;padding:9px 12px 9px 0;border-bottom:1px solid rgba(31,26,18,.14);vertical-align:bottom}"+
-  ".rs-int td{padding:11px 12px 11px 0;border-bottom:1px solid rgba(31,26,18,.07);font-size:.8rem;color:#1F1A12;vertical-align:top;line-height:1.4}"+
-  ".rs-int tr.row{cursor:pointer}.rs-int tr.row:hover td{background:#FAF6EC}"+
-  ".rs-int td b{font-weight:600}.rs-int td b i{font-style:normal;font-size:.62rem;color:#6E6455;margin-left:6px;font-weight:700}"+
-  ".rs-int td small{display:block;font-size:.7rem;color:#5C5345;margin-top:2px}"+
-  ".rs-int tr.none td{color:#6E6455}.rs-int tr.none td b{font-weight:500;color:#443C2F}"+
-  ".rs-int ol{margin:0;padding-left:16px}.rs-int ol li{padding:0}"+
   ".rs-det{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 26px;padding:6px 0 10px}"+
   ".rs-det div span{display:block;font-size:.6rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#6E6455;margin-bottom:3px}"+
   ".rs-det div{font-size:.8rem;color:#1F1A12;line-height:1.45;word-break:break-word}.rs-det .wide{grid-column:1/-1}"+
   ".rs-ifl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 14px}.rs-ifl select{width:auto;font-size:.78rem;padding:6px 30px 6px 12px;border-radius:999px}"+
   ".rs-ul{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) 240px auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(31,26,18,.07);font-size:.82rem}"+
-  ".rs-ul select{font-size:.8rem;padding:6px 10px}.rs-ul small{display:block;font-size:.7rem;color:#5C5345}"+
+  ".rs-ul select{font-size:.8rem;padding:6px 10px;width:260px;max-width:100%}.rs-ul small{display:block;font-size:.7rem;color:#5C5345}"+
 
+  ".io-seg{display:inline-flex;border:1px solid rgba(31,26,18,.16);border-radius:999px;overflow:hidden}"+
+  ".io-seg span{padding:7px 18px;font-size:.78rem;font-weight:600;color:#5C5345;cursor:pointer;white-space:nowrap}.io-seg span.on{background:#1F1A12;color:#FEFBF3}"+
+  ".io-yes,.io-m td.io-yes{color:#26523A;font-weight:600}.io-no,.io-m td.io-no{color:#6E6455}.io-may,.io-m td.io-may{color:#6a4c10;font-weight:600}"+
+  ".io-wait h3{margin:30px 0 4px;font-family:'Playfair Display',serif;font-weight:400;font-size:1.2rem;color:#1F1A12}"+
+  ".io-wait p{margin:0 0 12px;font-size:.78rem;color:#5C5345}"+
+  ".io-lv{display:grid;grid-template-columns:52px minmax(0,1fr);gap:4px 14px;padding:9px 0;border-top:1px solid rgba(31,26,18,.07);font-size:.8rem;line-height:1.7;color:#443C2F}"+
+  ".io-lv b{font-size:.7rem;font-weight:700;color:#5C5345;padding-top:2px;white-space:nowrap}"+
+  ".io-grp{padding:22px 0 6px;border-top:1px solid rgba(31,26,18,.1)}"+
+  ".io-grp h2{display:flex;align-items:baseline;gap:10px;margin:0 0 8px;font-family:'Playfair Display',serif;font-weight:400;font-size:1.3rem;color:#1F1A12}"+
+  ".io-grp h2 small{font-family:Inter,sans-serif;font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6E6455}"+
+  ".io-row{display:grid;grid-template-columns:210px 86px minmax(0,1fr) 120px;gap:12px;align-items:baseline;padding:8px 0;border-top:1px solid rgba(31,26,18,.06);font-size:.8rem;cursor:pointer}"+
+  ".io-row:hover{background:#FAF6EC}.io-row b{font-weight:600}.io-row b i{font-style:normal;font-size:.62rem;color:#6E6455;margin-left:6px;font-weight:700}"+
+  ".io-row .rk{font-size:.68rem;font-weight:700;color:#a94e2c}.io-row .rk.o{color:#5C5345;font-weight:600}.io-row .ex{color:#443C2F}.io-row .r{text-align:right;color:#5C5345;font-size:.74rem}"+
+  ".io-m{border-collapse:collapse;width:100%}"+
+  ".io-m th{background:transparent;font-size:.58rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#5C5345;padding:6px 4px;border-bottom:1px solid rgba(31,26,18,.16);text-align:center;vertical-align:bottom;line-height:1.2;white-space:nowrap}"+
+  ".io-m th:first-child,.io-m td:first-child{text-align:left;padding-left:0}"+
+  ".io-m td{padding:8px 4px;border-bottom:1px solid rgba(31,26,18,.07);font-size:.78rem;text-align:center;white-space:nowrap;color:#1F1A12}"+
+  ".io-m tr.row{cursor:pointer}.io-m tr.row:hover td{background:#FAF6EC}"+
+  ".io-m td.nm{font-weight:600}.io-m td.nm i{font-style:normal;font-size:.62rem;color:#6E6455;margin-left:6px;font-weight:700}"+
+  ".io-m td.io-sep,.io-m th.io-sep{border-left:1px solid rgba(31,26,18,.12)}"+
+  ".io-rank{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;font-size:.66rem;font-weight:700;box-sizing:border-box}"+
+  ".io-rank.r1{background:#a94e2c;color:#FEFBF3}.io-rank.r2{background:rgba(201,106,74,.3);color:#7a3418}.io-rank.r3{border:1.5px solid rgba(201,106,74,.55);color:#9d4a2a}"+
+  ".io-m tr.tot td{border-bottom:none;border-top:1px solid rgba(31,26,18,.16);font-size:.7rem;color:#5C5345;font-weight:600}"+
   "@media (max-width:760px){.rs-sheet{grid-template-columns:1fr}.rs-figs{grid-template-columns:repeat(2,1fr)}.rs-figs>div{padding-left:0;border-left:none}"+
   ".rs-track{grid-template-columns:1fr!important}.rs-track .c{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;padding:6px 0;border-bottom:1px solid rgba(31,26,18,.05)}"+
   ".rs-track .c .ln:before{display:none}.rs-track .nm{margin-top:0;font-size:.8rem}.rs-track .dt{margin-top:0;font-size:.72rem;padding-right:0;text-align:right}"+
-  ".rs-panel .f{grid-template-columns:1fr}.rs-form .g{grid-template-columns:1fr}.rs-trow{grid-template-columns:1fr 1fr;gap:6px 12px}.rs-trow b{grid-column:1/-1}.rs-det{grid-template-columns:1fr}.rs-ul{grid-template-columns:1fr}"+
-  ".rs-int thead{display:none}.rs-int tr{display:block;padding:8px 0;border-bottom:1px solid rgba(31,26,18,.08)}.rs-int td{display:block;border:none;padding:2px 0}}";
+  ".rs-panel .f{grid-template-columns:1fr}.rs-form .g{grid-template-columns:1fr}.rs-trow{grid-template-columns:1fr 1fr;gap:6px 12px}.rs-trow b{grid-column:1/-1}.rs-det{grid-template-columns:1fr}.rs-ul{grid-template-columns:1fr}.io-row{grid-template-columns:1fr 1fr}.io-lv{grid-template-columns:1fr}}";
   document.head.appendChild(s);
 }
 function rsCheck(){const w=document.createElement("span");w.innerHTML='<svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#FEFBF3" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.2 6.4 4.9 9 9.8 3.4"/></svg>';return w.firstChild;}
@@ -21167,15 +21181,36 @@ function rsPrefers(rid,spec){
 }
 // How many projects still moving a resident is on.
 function rsLoad(rid){return RS_STUDIES.filter(s=>s.status==="active"&&!rsPublished(s)&&rsIsMember(s,rid)).length;}
+// The short form of a long answer for the list: "Maybe — with mentorship" -> "Maybe". The full
+// sentence stays in the detail a click opens.
+function rsShortAns(v){const t=rsTxt(v).trim();if(!t)return"—";const s=t.split(/\s[—–-]\s|[,(.]/)[0].trim();return s.length>22?s.slice(0,20)+"…":s;}
+function rsHrs(v){return rsShortAns(rsTxt(v).replace(/\s*hours?\s*(per|a|\/)\s*week/i," h/wk").replace(/^More than /i,">").replace(/^Less than /i,"<"));}
+function rsCnt(v){return rsShortAns(rsTxt(v).replace(/\s+or more/i,"+"));}
+function rsTone(v){const t=rsTxt(v).trim();return!rsHas(t)?"io-no":/^maybe/i.test(t)?"io-may":"io-yes";}
+// One key per subspecialty however it was typed: case, spacing and the vowels after the first
+// letter are ignored, so "Gastroentrology" and "gastroenterology" are the same column.
+function rsSpecKey(p){const w=String(p||"").toLowerCase().replace(/[^a-z]/g,"");return w.length<=3?w:(w[0]+w.slice(1).replace(/[aeiouy]/g,"")).replace(/(.)\1+/g,"$1");}
+// Every subspecialty asked for, most wanted first, labelled with its commonest spelling.
+function rsSpecList(answers){
+  const m=new Map();
+  answers.forEach(a=>rsPrefs(a).forEach((p,i)=>{const k=rsSpecKey(p);if(!k)return;const e=m.get(k)||{k,names:{},n:0,first:0};e.names[p]=(e.names[p]||0)+1;e.n++;if(i===0)e.first++;m.set(k,e);}));
+  return[...m.values()].map(e=>{const lab=Object.keys(e.names).sort((x,y)=>e.names[y]-e.names[x]||y.length-x.length)[0];
+    return{k:e.k,label:lab.charAt(0).toUpperCase()+lab.slice(1),n:e.n,first:e.first};}).sort((a,b)=>b.n-a.n||a.label.localeCompare(b.label));
+}
+const RS_SPEC_ABBR={gastroenterology:"GI",cardiology:"Cardio",pulmonology:"Pulm",nephrology:"Nephro",endocrinology:"Endo","infectious diseases":"ID",rheumatology:"Rheum",
+  hematology:"Haem",haematology:"Haem",oncology:"Onc",neurology:"Neuro",icu:"ICU","critical care":"ICU","general internal medicine":"GIM",geriatrics:"Geri",dermatology:"Derm",immunology:"Immuno"};
+function rsSpecAbbr(label){
+  const l=label.toLowerCase(),hit=Object.keys(RS_SPEC_ABBR).find(k=>rsSpecKey(k)===rsSpecKey(l));
+  return hit?RS_SPEC_ABBR[hit]:(label.length>7?label.slice(0,6)+".":label);
+}
 function rsInterestPage(tabs){
-  const f=STATE.rsIF||{},lv={R1:1,R2:2,R3:3,R4:4};
+  const f=STATE.rsIF||{},view=STATE.rsIView==="spec"?"spec":"grid",lv={R1:1,R2:2,R3:3,R4:4};
   const all=RESIDENTS.slice().sort((a,b)=>(lv[a.level]||9)-(lv[b.level]||9)||dname(a.name).localeCompare(dname(b.name))).map(r=>({r,a:rsInterestOf(r.id),n:rsLoad(r.id)}));
-  const answered=all.filter(x=>x.a).length,loose=RS_INTEREST.filter(a=>a.resident_id==null);
-  const specs=[...new Map(RS_INTEREST.flatMap(rsPrefs).map(p=>[p.toLowerCase(),p])).values()].sort((a,b)=>a.localeCompare(b));
-  const ans=x=>(x.a&&x.a.answers)||{};
-  const rows=all.filter(x=>{
-    if(f.none)return!x.a;
-    if(f.spec&&!rsPrefs(x.a).some(p=>p.toLowerCase()===f.spec))return false;
+  const got=all.filter(x=>x.a),none=all.filter(x=>!x.a),loose=RS_INTEREST.filter(a=>a.resident_id==null);
+  const specsAll=rsSpecList(got.map(x=>x.a));
+  const ans=x=>x.a.answers||{};
+  const rows=got.filter(x=>{
+    if(f.spec&&!rsPrefs(x.a).some(p=>rsSpecKey(p)===f.spec))return false;
     if(f.exp&&!rsHas(ans(x).prior_projects))return false;
     if(f.pub&&!rsHas(ans(x).publications))return false;
     if(f.stats&&!rsHas(ans(x).stats))return false;
@@ -21183,38 +21218,30 @@ function rsInterestPage(tabs){
     if(f.free&&x.n>0)return false;
     return true;
   });
-  const blank={spec:"",exp:false,pub:false,stats:false,lead:false,free:false,none:false};
-  // "Has not answered" stands alone: every other filter reads an answer.
-  const flip=k=>k==="none"?{...blank,none:!f.none}:{...f,[k]:!f[k],none:false};
-  const tog=(k,l)=>el("span",{cls:"pill"+(f[k]?" on":""),onClick:()=>set({rsIF:flip(k),rsIOpen:null})},l);
-  const any=f.spec||f.exp||f.pub||f.stats||f.lead||f.free||f.none;
-  const tbl=el("table",{cls:"rs-int"},el("thead",null,el("tr",null,el("th",null,"Resident"),el("th",null,"Preferred subspecialties"),el("th",null,"Experience"),el("th",null,"Statistics"),el("th",null,"Would lead a group"),el("th",null,"Availability"),el("th",null,"Projects now"))));
-  const tb=el("tbody");
-  rows.forEach(x=>{
-    const a=x.a,q=ans(x),open=STATE.rsIOpen===x.r.id,prefs=rsPrefs(a);
-    const who=el("td",null,el("b",null,dname(x.r.name),el("i",null,x.r.level)),a?el("small",null,"Answered "+rsDate(a.submitted_at)):null);
-    if(!a){tb.appendChild(el("tr",{cls:"none"},who,el("td",{colspan:"5"},"Has not answered the form yet"),el("td",null,x.n?String(x.n):"—")));return;}
-    tb.appendChild(el("tr",{cls:"row",title:"Show the full answer",onClick:()=>set({rsIOpen:open?null:x.r.id})},who,
-      el("td",null,prefs.length?el("ol",null,...prefs.map(p=>el("li",null,p))):"—",rsTxt(q.outside_ok)?el("small",null,"Outside these: "+rsTxt(q.outside_ok)):null),
-      el("td",null,"Projects: "+(rsTxt(q.prior_projects)||"—"),el("small",null,"Publications: "+(rsTxt(q.publications)||"—"))),
-      el("td",null,rsTxt(q.stats)||"—"),el("td",null,rsTxt(q.lead_group)||"—"),el("td",null,rsTxt(q.availability)||"—"),
-      el("td",null,x.n?String(x.n):"—")));
-    if(open)tb.appendChild(el("tr",null,el("td",{colspan:"7",st:{background:"#FAF6EC",padding:"14px 16px"}},rsInterestDetail(a))));
-  });
-  tbl.appendChild(tb);
+  const tog=(k,l)=>el("span",{cls:"pill"+(f[k]?" on":""),onClick:()=>set({rsIF:{...f,[k]:!f[k]},rsIOpen:null})},l);
+  const any=f.spec||f.exp||f.pub||f.stats||f.lead||f.free;
+  const nm=r=>[dname(r.name),el("i",null,r.level)];
+  const body=!rows.length?el("div",{cls:"rs-empty"},got.length?"No resident matches these filters.":"No resident has answered the form yet."):
+    view==="spec"?rsInterestBySpec(rows,nm):rsInterestGrid(rows,nm);
   return el("div",{cls:"content"},
-    rsHeader("Residents and interests","What each resident told the Research Committee on its form: interests, experience and availability. Use it to decide who goes on which project.",null),
+    rsHeader("Residents and interests","What each resident told the Research Committee on its form. Use it to decide who goes on which project.",null),
     rsTabs(tabs,"interest"),
     el("div",{cls:"rs-figs",st:{gridTemplateColumns:"repeat(3,1fr)"}},
-      el("div",null,el("b",null,String(answered)),el("span",null,"of "+all.length+" residents have answered the form")),
-      el("div",null,el("b",null,String(all.filter(x=>x.n===0).length)),el("span",null,"residents are not on a project now")),
+      el("div",null,el("b",null,String(got.length)),el("span",null,"of "+all.length+" residents have answered the form")),
+      el("div",null,el("b",null,String(specsAll.length)),el("span",null,specsAll.length===1?"subspecialty asked for":"subspecialties asked for")),
       el("div",{cls:loose.length?"gold":""},el("b",null,String(loose.length)),el("span",null,loose.length===1?"answer is not linked to a resident yet":"answers are not linked to a resident yet"))),
-    el("div",{cls:"rs-ifl"},
-      el("select",{onChange:e=>set({rsIF:{...f,spec:e.target.value,none:false},rsIOpen:null})},el("option",{value:""},"Any subspecialty"),...specs.map(p=>el("option",{value:p.toLowerCase(),selected:f.spec===p.toLowerCase()},p))),
-      tog("exp","Has research experience"),tog("pub","Has publications"),tog("stats","Statistics experience"),tog("lead","Would lead a group"),tog("free","Not on a project"),tog("none","Has not answered"),
-      any?el("button",{cls:"rs-lnk",onClick:()=>set({rsIF:{},rsIOpen:null})},"Clear filters"):null),
-    el("div",{st:{fontSize:".72rem",color:"#5C5345",margin:"0 0 6px"}},rows.length+" of "+all.length+" residents shown"),
-    rows.length?tbl:el("div",{cls:"rs-empty"},"No resident matches these filters."),
+    el("div",{st:{display:"flex",gap:"14px",alignItems:"center",flexWrap:"wrap",margin:"0 0 14px"}},
+      el("div",{cls:"io-seg"},el("span",{cls:view==="grid"?"on":"",onClick:()=>set({rsIView:"grid",rsIOpen:null})},"By resident"),el("span",{cls:view==="spec"?"on":"",onClick:()=>set({rsIView:"spec",rsIOpen:null})},"By subspecialty")),
+      el("div",{cls:"rs-ifl",st:{margin:"0"}},
+        el("select",{onChange:e=>set({rsIF:{...f,spec:e.target.value},rsIOpen:null})},el("option",{value:""},"Any subspecialty"),...specsAll.map(s=>el("option",{value:s.k,selected:f.spec===s.k},s.label))),
+        tog("exp","Has research experience"),tog("pub","Has publications"),tog("stats","Statistics experience"),tog("lead","Would lead a group"),tog("free","Not on a project"),
+        any?el("button",{cls:"rs-lnk",onClick:()=>set({rsIF:{},rsIOpen:null})},"Clear filters"):null)),
+    any?el("div",{st:{fontSize:".72rem",color:"#5C5345",margin:"0 0 8px"}},rows.length+" of "+got.length+" answers shown"):null,
+    body,
+    none.length?el("div",{cls:"io-wait"},el("h3",null,"Not answered yet"),
+      el("p",null,none.length+(none.length===1?" resident has":" residents have")+" not filled the form.",
+        el("button",{cls:"rs-lnk",st:{marginLeft:"12px"},onClick:()=>rsCopyNames(none.map(x=>dname(x.r.name)))},"Copy the names")),
+      ...["R1","R2","R3","R4"].map(l=>{const g=none.filter(x=>x.r.level===l);return g.length?el("div",{cls:"io-lv"},el("b",null,l+" · "+g.length),el("div",null,g.map(x=>dname(x.r.name)).join(",  "))):null;})):null,
     loose.length?el("div",{cls:"rs-sec",st:{marginTop:"30px"}},el("h2",null,"Answers not linked to a resident"),
       el("p",null,"The name typed on the form did not match exactly one resident. Choose who each answer belongs to."),
       loose.map(a=>el("div",{cls:"rs-ul"},
@@ -21222,6 +21249,48 @@ function rsInterestPage(tabs){
         el("div",null,rsPrefs(a).join(" · ")||"—"),
         rsLinkSelect(a),
         RS_CAN.manager?el("button",{cls:"rs-lnk",onClick:()=>rsDeleteInterest(a)},"Delete"):el("span",null)))):null);
+}
+// By resident: one line each, the subspecialties across, 1 2 3 marking the choices.
+function rsInterestGrid(rows,nm){
+  const MAX=12,list=rsSpecList(rows.map(x=>x.a)),sp=list.slice(0,MAX),rest=new Set(list.slice(MAX).map(s=>s.k));
+  const cols=sp.length+(rest.size?1:0)+7;
+  const t=el("table",{cls:"io-m"},
+    el("thead",null,el("tr",null,el("th",null,"Resident"),
+      ...sp.map((s,i)=>el("th",{cls:i===0?"io-sep":"",title:s.label},rsSpecAbbr(s.label))),rest.size?el("th",{title:list.slice(MAX).map(s=>s.label).join(", ")},"Other"):null,
+      ...["Projects","Papers","Statistics","Would lead","Time","On now"].map((h,i)=>el("th",{cls:i===0?"io-sep":""},h)))));
+  const tb=el("tbody");
+  rows.forEach(x=>{
+    const q=x.a.answers||{},keys=rsPrefs(x.a).map(rsSpecKey),open=STATE.rsIOpen===x.r.id;
+    const others=keys.map((k,i)=>rest.has(k)?i+1:0).filter(Boolean);
+    tb.appendChild(el("tr",{cls:"row",title:"Show the full answer",onClick:()=>set({rsIOpen:open?null:x.r.id})},el("td",{cls:"nm"},nm(x.r)),
+      ...sp.map((s,i)=>{const k=keys.indexOf(s.k);return el("td",{cls:i===0?"io-sep":""},k>=0?el("span",{cls:"io-rank r"+(k+1),title:["First","Second","Third"][k]+" choice: "+s.label},String(k+1)):null);}),
+      rest.size?el("td",null,others.map(n=>el("span",{cls:"io-rank r"+n,st:{margin:"0 1px"}},String(n)))):null,
+      el("td",{cls:"io-sep "+rsTone(q.prior_projects),title:rsTxt(q.prior_projects)},rsCnt(q.prior_projects)),el("td",{cls:rsTone(q.publications),title:rsTxt(q.publications)},rsShortAns(q.publications)),
+      el("td",{cls:rsTone(q.stats),title:rsTxt(q.stats)},rsShortAns(q.stats)),el("td",{cls:rsTone(q.lead_group),title:rsTxt(q.lead_group)},rsShortAns(q.lead_group)),
+      el("td",{title:rsTxt(q.availability)},rsHrs(q.availability)),el("td",{cls:x.n?"":"io-no"},x.n?String(x.n):"—")));
+    if(open)tb.appendChild(el("tr",null,el("td",{colspan:String(cols),st:{background:"#FAF6EC",padding:"14px 16px",textAlign:"left",whiteSpace:"normal"}},rsInterestDetail(x.a))));
+  });
+  tb.appendChild(el("tr",{cls:"tot"},el("td",null,"Residents asking"),...sp.map((s,i)=>el("td",{cls:i===0?"io-sep":""},String(s.n))),rest.size?el("td",null,String(list.slice(MAX).reduce((n,s)=>n+s.n,0))):null,el("td",{cls:"io-sep",colspan:"6"})));
+  t.appendChild(tb);
+  return el("div",null,el("div",{st:{fontSize:".72rem",color:"#5C5345",margin:"0 0 8px"}},"1, 2, 3 = first, second and third choice. Click a resident for the full answer."),
+    el("div",{st:{overflowX:"auto"}},t));
+}
+// By subspecialty: who asked for each one, most wanted first. A resident appears under each choice.
+function rsInterestBySpec(rows,nm){
+  const only=(STATE.rsIF||{}).spec;
+  return el("div",null,...rsSpecList(rows.map(x=>x.a)).filter(s=>!only||s.k===only).map(s=>{
+    const inx=rows.map(x=>({x,i:rsPrefs(x.a).findIndex(p=>rsSpecKey(p)===s.k)})).filter(o=>o.i>=0).sort((a,b)=>a.i-b.i);
+    return el("div",{cls:"io-grp"},el("h2",null,s.label,el("small",null,s.n+(s.n===1?" resident":" residents")+" · "+s.first+" first choice")),
+      ...inx.map(o=>{const q=o.x.a.answers||{},key=o.x.r.id+"|"+s.k,open=STATE.rsIOpen===key;
+        return el("div",null,el("div",{cls:"io-row",title:"Show the full answer",onClick:()=>set({rsIOpen:open?null:key})},el("b",null,nm(o.x.r)),
+          el("span",{cls:"rk"+(o.i?" o":"")},["1st choice","2nd choice","3rd choice"][o.i]),
+          el("span",{cls:"ex"},"Projects "+rsCnt(q.prior_projects).toLowerCase()+" · papers "+rsShortAns(q.publications).toLowerCase()+" · statistics "+rsShortAns(q.stats).toLowerCase()+" · would lead: "+rsShortAns(q.lead_group).toLowerCase()),
+          el("span",{cls:"r"},rsHrs(q.availability)+(o.x.n?" · on "+o.x.n:""))),
+          open?el("div",{st:{background:"#FAF6EC",padding:"14px 16px"}},rsInterestDetail(o.x.a)):null);}));}));
+}
+async function rsCopyNames(names){
+  try{await navigator.clipboard.writeText(names.join("\n"));showToast(names.length+" names copied.","success");}
+  catch(e){showToast("Could not copy. Select the names and copy them by hand.","error");}
 }
 function rsLinkSelect(a){
   if(!RS_CAN.manager)return el("span",{st:{fontSize:".72rem",color:"#5C5345"}},"A committee lead links this");
@@ -21235,10 +21304,13 @@ function rsInterestDetail(a){
   return el("div",null,el("div",{cls:"rs-det"},
     cell("Name on the form",a.full_name),cell("Resident ID on the form",a.resident_ref),cell("Level on the form",a.level_text),
     cell("Phone (WhatsApp)",a.phone),cell("Gmail",a.gmail),cell("WhatsApp group",a.whatsapp_ok),
+    cell("Subspecialties, as typed",rsPrefs(a).join("  ·  ")),cell("Outside these subspecialties",q.outside_ok),cell("Availability",q.availability),
+    cell("Research projects before",q.prior_projects),cell("Publications",q.publications),cell("Statistics",q.stats),
+    cell("Would lead a group",q.lead_group),
     cell("Research tasks done before",q.tasks,true),
     cell("Leadership experience",q.leadership),cell("Research lectures or workshops given",q.lectures),cell("How they want to take part",q.participate),
     cell("Ideas for improving research opportunities",q.ideas,true),cell("Comments",q.comments,true),other),
-    RS_CAN.manager?el("div",{st:{display:"flex",gap:"12px",alignItems:"center",flexWrap:"wrap",maxWidth:"520px"}},
+    RS_CAN.manager?el("div",{cls:"rs-ul",st:{display:"flex",gap:"12px",alignItems:"center",flexWrap:"wrap",border:"none",padding:"4px 0 0"}},
       el("span",{st:{fontSize:".72rem",color:"#5C5345",whiteSpace:"nowrap"}},"Wrong resident?"),rsLinkSelect(a)):null);
 }
 async function rsLinkInterest(a,rid){
