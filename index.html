@@ -18970,12 +18970,45 @@ function renderOncall(){
 }
 // ─── MAIN RENDER ─────────────────────────────────────────────────────────────
 // \u2500\u2500\u2500 UI UTILITIES \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// A load that never finishes (a dropped connection, or a saved sign-in stuck renewing) used to spin
+// for ever with no way out. After LOAD_PATIENCE_MS the loading screen says so and offers two exits.
+// render() clears the clock as soon as a load completes.
+const LOAD_PATIENCE_MS=15000;
+let _loadSince=0,_loadTimer=null;
+function loadClockReset(){_loadSince=0;if(_loadTimer){clearTimeout(_loadTimer);_loadTimer=null;}}
+// Forget the saved sign-in on this device and start again at the sign-in page. Deliberately not
+// sb.auth.signOut(): when the sign-in itself is what is stuck, that call hangs too.
+function loadStartOver(){
+  try{Object.keys(localStorage).forEach(k=>{if(/^sb-.*-auth-token/.test(k))localStorage.removeItem(k);});}catch(e){}
+  location.reload();
+}
 function renderLoading(){
   const d=document.createElement("div");d.className="loading-screen";
   const sp=document.createElement("div");sp.className="loading-spinner";
   const t=document.createElement("div");t.className="loading-text";t.textContent="DSFH Residency Portal";
   const s=document.createElement("div");s.className="loading-sub";s.textContent="Loading your data...";
-  d.appendChild(sp);d.appendChild(t);d.appendChild(s);return d;
+  d.appendChild(sp);d.appendChild(t);d.appendChild(s);
+  if(!_loadSince)_loadSince=Date.now();
+  const waited=Date.now()-_loadSince;
+  if(waited<LOAD_PATIENCE_MS){
+    if(_loadTimer)clearTimeout(_loadTimer);
+    _loadTimer=setTimeout(()=>{_loadTimer=null;if(STATE.loading)render();},LOAD_PATIENCE_MS-waited+50);
+    return d;
+  }
+  const box=document.createElement("div");
+  box.style.cssText="margin:26px 20px 0;max-width:380px;text-align:center;background:rgba(31,26,18,.5);border-radius:16px;padding:20px 22px 22px;";
+  const h=document.createElement("div");h.textContent="This is taking longer than it should.";
+  h.style.cssText="font-size:.95rem;font-weight:600;color:#FEFBF3;margin-bottom:8px;";
+  const p=document.createElement("div");
+  p.textContent="Your connection may have dropped, or your saved sign-in may be stuck. Try Reload first. If it still spins, sign in again, and close any other open tabs of the portal.";
+  p.style.cssText="font-size:.82rem;line-height:1.55;color:#FEFBF3;margin-bottom:18px;";
+  const row=document.createElement("div");row.style.cssText="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;";
+  const b1=document.createElement("button");b1.textContent="Reload";b1.onclick=()=>location.reload();
+  b1.style.cssText="width:auto;background:#FEFBF3;color:#1F1A12;border:none;border-radius:999px;padding:11px 24px;font:inherit;font-size:.86rem;font-weight:600;cursor:pointer;";
+  const b2=document.createElement("button");b2.textContent="Sign in again";b2.onclick=loadStartOver;
+  b2.style.cssText="width:auto;background:transparent;color:#FEFBF3;border:1.5px solid rgba(254,251,243,.75);border-radius:999px;padding:11px 24px;font:inherit;font-size:.86rem;font-weight:600;cursor:pointer;";
+  row.appendChild(b1);row.appendChild(b2);box.appendChild(h);box.appendChild(p);box.appendChild(row);d.appendChild(box);
+  return d;
 }
 function showToast(msg,type){
   if(/row-level security|JWT expired|jwt expired/i.test(String(msg||""))&&STATE.user)sessionAlive();
@@ -20407,6 +20440,7 @@ function render(){
   const _keepWin=_sameMod?(window.scrollY||window.pageYOffset||0):0;
   app.innerHTML="";
   if(!_sameMod){window.scrollTo(0,0);_lastMod=STATE.mod;}
+  if(!STATE.loading)loadClockReset();
   if(STATE.loading&&!STATE.user){app.appendChild(renderLoading());return;}
   if(!STATE.user){app.appendChild(renderLogin());return;}
   if(STATE.loading){app.appendChild(renderLoading());return;}
