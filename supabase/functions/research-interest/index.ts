@@ -6,10 +6,14 @@
 //
 // WHO IS CALLING is settled by the secret in the x-form-secret header (RESEARCH_FORM_SECRET).
 //
-// WHICH RESIDENT: the typed full name is matched to residents.name, ignoring case, "Dr." and
-// spacing. Exactly one match links the answer to that resident; none or several leaves it unlinked
-// and a committee lead links it by hand in the portal. A hand-made link is never overwritten by a
-// resend.
+// WHICH RESIDENT: the form asks for a FULL name and the portal mostly holds a short one ("Dr. Lamar",
+// "Dr. Omar H"), so the match runs in tiers, stopping at the first tier that points at exactly one
+// resident (see matchResident): the Gmail address against the account's contact e-mail; the whole
+// name; every word of the portal's name found among the typed words (a single letter such as the
+// "H" of "Omar H" matches a typed word starting with it); the same again with spelling loosened
+// (Ghufran / Ghofran, Shifa / Shifaa). When a tier finds several, the level typed on the form
+// decides, and if it cannot the answer is left unlinked for a committee lead to link by hand in the
+// portal. A hand-made link is never overwritten by a resend.
 //
 // The questions are recognised by their wording, not their position, so the committee can reorder
 // the form or add questions without breaking this. A question that is not recognised is kept under
@@ -46,6 +50,52 @@ function norm(s: unknown) {
     .replace(/\bdr\b\.?/g, " ")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
+}
+
+// Spelling loosened: vowels after the first letter dropped, doubled letters collapsed, so that
+// transliterations of one Arabic name land on the same key ("ghufran"/"ghofran" -> "ghfrn").
+function skel(w: string) {
+  if (w.length <= 1) return w;
+  return (w[0] + w.slice(1).replace(/[aeiouy]/g, "")).replace(/(.)\1+/g, "$1");
+}
+
+type Res = { id: number; name: string; level?: string | null };
+
+// Returns the one resident the typed name points at, or null when none or more than one does.
+function matchResident(all: Res[], typedName: unknown, typedLevel: unknown): number | null {
+  const k = norm(typedName);
+  if (!k) return null;
+  const typed = k.split(" ");
+  const lvl = (String(typedLevel ?? "").toUpperCase().match(/R\s*([1-5])/) || [])[1];
+  // Every word of the portal's name must be found among the typed words. A one-letter word is an
+  // initial: it matches any typed word after the first that starts with it.
+  const covers = (r: Res, eq: (a: string, b: string) => boolean) => {
+    const w = norm(r.name).split(" ").filter(Boolean);
+    if (!w.length) return false;
+    return w.every((x, i) => x.length === 1 && i > 0
+      ? typed.slice(1).some((t) => t[0] === x)
+      : typed.some((t) => eq(t, x)));
+  };
+  const tiers: ((r: Res) => boolean)[] = [
+    (r) => norm(r.name) === k,
+    (r) => covers(r, (a, b) => a === b),
+    (r) => covers(r, (a, b) => skel(a) === skel(b)),
+  ];
+  for (const tier of tiers) {
+    let hits = all.filter(tier);
+    if (!hits.length) continue;
+    if (hits.length > 1) {
+      // "Omar H" is a closer match than "Omar" when both cover the typed name.
+      const most = Math.max(...hits.map((r) => norm(r.name).split(" ").length));
+      hits = hits.filter((r) => norm(r.name).split(" ").length === most);
+    }
+    if (hits.length > 1 && lvl) {
+      const same = hits.filter((r) => String(r.level ?? "").toUpperCase() === "R" + lvl);
+      if (same.length) hits = same;
+    }
+    return hits.length === 1 ? hits[0].id : null;   // several left: never guess
+  }
+  return null;
 }
 
 // Question wording -> the key the portal reads. First match wins, so the order matters where two
@@ -118,18 +168,18 @@ Deno.serve(async (req: Request) => {
   let residentId: number | null = null, matchedBy: string | null = null;
   if (prior && prior.matched_by === "manual") { residentId = prior.resident_id; matchedBy = "manual"; }
   else {
-    const { data: res, error: resErr } = await sb.from("residents").select("id,name,active");
+    const { data: res, error: resErr } = await sb.from("residents").select("id,name,level,active");
     if (resErr) return json({ error: "Could not read the residents" }, 500);
-    const k = norm(cols.full_name);
-    const all = (res ?? []).filter((r) => r.active !== false);
-    let hits = k ? all.filter((r) => norm(r.name) === k) : [];
-    // The form asks for a full name and the portal mostly holds short ones: accept a resident whose
-    // every name-word appears in what was typed, but only when that points at exactly one person.
-    if (!hits.length && k) {
-      const words = new Set(k.split(" "));
-      hits = all.filter((r) => { const w = norm(r.name).split(" ").filter(Boolean); return w.length >= 2 && w.every((x) => words.has(x)); });
+    const all = (res ?? []).filter((r) => r.active !== false) as Res[];
+    // The Gmail address, when it is the contact e-mail of exactly one resident's account.
+    const mail = String(cols.gmail ?? "").trim().toLowerCase();
+    if (mail.includes("@")) {
+      const { data: profs } = await sb.from("profiles").select("resident_id,contact_email").not("resident_id", "is", null);
+      const own = (profs ?? []).filter((p) => String(p.contact_email ?? "").trim().toLowerCase() === mail);
+      if (own.length === 1 && all.some((r) => r.id === own[0].resident_id)) residentId = own[0].resident_id as number;
     }
-    if (hits.length === 1) { residentId = hits[0].id as number; matchedBy = "name"; }
+    if (residentId == null) residentId = matchResident(all, cols.full_name, cols.level_text);
+    if (residentId != null) matchedBy = "name";
   }
 
   const at = body.submittedAt ? new Date(String(body.submittedAt)) : new Date();
