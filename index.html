@@ -5137,9 +5137,15 @@ function canmedsVerdicts(id,opts){
   if(rampState==="not_met"&&!projects.length&&!complete){
     rampState="awaiting";rampNote="Nothing on file, and the year has not been confirmed complete.";
   }
+  // On a Research Committee project with nothing confirmed yet: shown as Assigned, and still not met
+  // (PD, 15 Nov 2026). The state is left exactly as the ramp gave it; only the wording changes.
+  if(RS_STATE==="idle"&&STATE.user)loadResearch();
+  var rsOn=rsAssignedFor(id);
+  var rsAsg=rsOn.length>0&&(!ramp||["behind","not_met","not_yet_due"].indexOf(ramp.ramp_state)>=0);
+  var rsAsgNote=rsAsg?("On a committee project, nothing confirmed yet \u2014 counts once IRB approval, submission or publication is confirmed"):null;
   roles.push({key:"scholar",role:"Scholar",
     kpi:"Publication ramp for this level \u2014 published by R4",
-    state:rampState,value:ramp?canmedsRampLabel(ramp.ramp_state):"\u2014",note:rampNote});
+    state:rampState,value:rsAsg?"Assigned":(ramp?canmedsRampLabel(ramp.ramp_state):"\u2014"),note:rsAsg?rsAsgNote:rampNote});
   // Morning Meeting presentations per quarter, for the Performance column and the PDF.
   var presQ=[1,2,3,4].map(function(q){var bl=QUARTER_BLOCKS[q];return MM_SESSIONS.filter(function(s){
     return s.academic_year===kpiAY()&&(s.presenter_resident_id===id||s.moderator_resident_id===id)&&bl.indexOf(s.block_number)>=0;}).length;});
@@ -5605,6 +5611,7 @@ function modIcon(id,sz){
     leave_plan:[["rect",{x:"3",y:"4",width:"18",height:"18",rx:"2"}],["line",{x1:"16",y1:"2",x2:"16",y2:"6"}],["line",{x1:"8",y1:"2",x2:"8",y2:"6"}],["line",{x1:"3",y1:"10",x2:"21",y2:"10"}],["path",{d:"M9 16l2 2 4-4"}]],
     control:[["line",{x1:"4",y1:"21",x2:"4",y2:"14"}],["line",{x1:"4",y1:"10",x2:"4",y2:"3"}],["line",{x1:"12",y1:"21",x2:"12",y2:"12"}],["line",{x1:"12",y1:"8",x2:"12",y2:"3"}],["line",{x1:"20",y1:"21",x2:"20",y2:"16"}],["line",{x1:"20",y1:"12",x2:"20",y2:"3"}],["line",{x1:"1",y1:"14",x2:"7",y2:"14"}],["line",{x1:"9",y1:"8",x2:"15",y2:"8"}],["line",{x1:"17",y1:"16",x2:"23",y2:"16"}]],
     committees:[["path",{d:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"}],["circle",{cx:"9",cy:"7",r:"4"}],["path",{d:"M23 21v-2a4 4 0 00-3-3.87"}],["path",{d:"M16 3.13a4 4 0 010 7.75"}]],
+    research:[["path",{d:"M9 3h6"}],["path",{d:"M10 3v6l-5.2 9.2A2 2 0 006.5 21h11a2 2 0 001.7-2.8L14 9V3"}],["line",{x1:"7.6",y1:"15",x2:"16.4",y2:"15"}]],
     feedback:[["path",{d:"M21 11.5a8.4 8.4 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.4 8.4 0 01-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.4 8.4 0 013.8-.9h.5a8.5 8.5 0 018 8v.5z"}],["line",{x1:"8",y1:"10",x2:"15",y2:"10"}],["line",{x1:"8",y1:"13.5",x2:"12.5",y2:"13.5"}]],
     home:[["path",{d:"M12 2.5l9.5 8v11a1 1 0 01-1 1h-6v-8h-5v8h-6a1 1 0 01-1-1v-11z",fill:"currentColor",stroke:"none"}]],
     trophy:[["path",{d:"M8 21h8M12 17v4M17 3H7v5a5 5 0 0010 0V3z"}],["path",{d:"M7 5H3v2a4 4 0 004 4"}],["path",{d:"M17 5h4v2a4 4 0 01-4 4"}]],
@@ -5636,6 +5643,7 @@ let MODS=[
   {id:"mentorship",label:"Mentorship ILP",icon:"",desc:"Mentorship Individualized Learning Plan — quarterly CanMEDS review of every resident with their mentor, and the resident's Milestone self-assessment before each CCC review",color:"#3a6a6a",roles:["pd","deputy_pd","chief","consultant","resident"]},
   {id:"feedback",label:"Feedback",icon:"",desc:"Programme review rounds and general feedback, read by the Program Director only",color:"#7a4a2a",roles:["pd","chief","resident"]},
   {id:"committees",label:"Committees",icon:"",desc:"Standing committees — leaders, co-leaders, members, meetings & achievements",color:"#8a4a5a",roles:["pd","deputy_pd","chief","consultant","resident"]},
+  {id:"research",label:"Research",icon:"",desc:"Research Committee projects — teams, steps from literature review to publication, and what counts toward the Scholar KPI",color:"#6a4a7a",roles:["pd","deputy_pd","chief","consultant","resident"]},
 ];
 // ─── MODULES AND ACCESS ──────────────────────────────────────────────────────────────────────────
 // The PD decides in Control Centre > Modules and access which roles see each module, what it is
@@ -20437,6 +20445,7 @@ function render(){
         case"committees":content=renderCommittees();break;
         case"mentorship":content=renderMentorship();break;
         case"feedback":content=renderFeedback();break;
+        case"research":content=renderResearch();break;
         case"control":content=renderControl();break;
         default:content=renderModGrid();
       }
@@ -20641,6 +20650,616 @@ function renderCalModal(){
       el("button",{cls:"modal-close",onClick:close},"×")
     )
   );
+}
+// ═══ RESEARCH ══════════════════════════════════════════════════════════════════════════════════════
+// The Research Committee's projects: one row per project (research_studies) with its team and its
+// steps. Being on a project is not KPI credit. When a confirmer (the PD, plus anyone the PD names in
+// Settings) confirms IRB approval, submission or publication, the database writes the Scholar record
+// (research_projects) for every author on the team -- see supabase/add_research_module.sql. Who sees a
+// project is decided by the database; this page shows whatever it returns.
+const RS_STEPS_DEFAULT=[{k:"lit",l:"Literature review"},{k:"irb",l:"IRB approved"},{k:"data",l:"Data collection"},
+  {k:"stats",l:"Statistical analysis"},{k:"draft",l:"Manuscript written"},{k:"sub",l:"Submitted to journal"},{k:"pub",l:"Published"}];
+// The three steps that move the Scholar KPI. Their keys are fixed in the database rules.
+const RS_KPI={irb:"IRB approval",sub:"submission",pub:"publication"};
+const RS_TYPES=["Retrospective cohort","Prospective cohort","Cross-sectional","Case-control","Case report","Case series","Clinical audit","Quality improvement","Systematic review","Randomised trial","Other"];
+const RS_ROLES=["Lead","Data","Analysis","Writing","Review"];
+const RS_STALE_DAYS=60;
+let RS_FOR=null; // the account the rows below were read for
+let RS_STATE="idle",RS_ERR="",RS_STUDIES=[],RS_MEMBERS=[],RS_STEPROWS=[];
+let RS_CAN={manager:false,confirmer:false,seesAll:false},RS_CFG={steps:RS_STEPS_DEFAULT,confirmers:[],form_url:""},RS_PROFILES=null;
+let RS_INTEREST=[];   // answers to the committee's Google Form (research_interest), as far as this account may read them
+let _rsDraft=null;     // the project being added or edited
+let _rsStep=null;      // the open step panel: {study,key,date,url,note}
+let _rsNow=null;       // the Now line being edited: {study,text}
+let _rsCfgDraft=null;  // Settings draft
+function rsCfgFrom(v){
+  const o=(v&&typeof v==="object")?v:{};
+  let steps=Array.isArray(o.steps)?o.steps.filter(s=>s&&typeof s.k==="string"&&typeof s.l==="string"&&s.l.trim()).map(s=>({k:s.k,l:s.l.trim().slice(0,40)})):[];
+  // The three KPI steps must exist; a saved list without them is not usable.
+  if(!steps.length||Object.keys(RS_KPI).some(k=>!steps.some(s=>s.k===k)))steps=RS_STEPS_DEFAULT.map(s=>({k:s.k,l:s.l}));
+  return{steps,confirmers:Array.isArray(o.confirmers)?o.confirmers.filter(x=>typeof x==="string"):[],
+    form_url:(typeof o.form_url==="string"&&/^https?:\/\//i.test(o.form_url.trim()))?o.form_url.trim():""};
+}
+async function loadResearch(quiet){
+  if(RS_STATE==="loading")return;
+  if(!quiet)RS_STATE="loading";
+  const forId=STATE.user&&STATE.user.profileId;
+  const[st,mb,sp,mg,cf,cfg,sa,ri]=await Promise.all([
+    fetchAllRows(()=>sb.from("research_studies").select("*").order("id",{ascending:true})),
+    fetchAllRows(()=>sb.from("research_study_members").select("*").order("id",{ascending:true})),
+    fetchAllRows(()=>sb.from("research_study_steps").select("*").order("id",{ascending:true})),
+    sb.rpc("is_research_manager"),sb.rpc("can_confirm_research"),
+    sb.from("portal_settings").select("*").eq("key","research").maybeSingle(),
+    sb.rpc("research_sees_all"),
+    fetchAllRows(()=>sb.from("research_interest").select("*").order("id",{ascending:true}))]);
+  const err=st.error||mb.error||sp.error;
+  if(err){RS_STATE="error";RS_ERR=err.message||String(err);render();return;}
+  RS_STUDIES=st.data||[];RS_MEMBERS=mb.data||[];RS_STEPROWS=sp.data||[];
+  RS_CAN={manager:mg.data===true,confirmer:cf.data===true,seesAll:sa.data===true};
+  RS_INTEREST=ri.error?[]:(ri.data||[]);
+  RS_CFG=rsCfgFrom(cfg&&cfg.data?cfg.data.value:null);
+  RS_FOR=forId;RS_STATE="ready";RS_ERR="";render();
+}
+function rsSteps(){return RS_CFG.steps;}
+function rsMembers(sid){return RS_MEMBERS.filter(m=>m.study_id===sid).sort((a,b)=>(b.is_lead?1:0)-(a.is_lead?1:0)||a.id-b.id);}
+function rsStepRow(sid,k){return RS_STEPROWS.find(r=>r.study_id===sid&&r.step_key===k)||null;}
+function rsDone(sid,k){const r=rsStepRow(sid,k);return!!(r&&r.state==="done");}
+function rsPublished(s){return rsDone(s.id,"pub");}
+// One letter per step: d done, w reported and waiting, x not needed, n in hand now, - not yet.
+function rsCode(s){
+  const out=rsSteps().map(d=>{const r=rsStepRow(s.id,d.k);return!r?"-":r.state==="done"?"d":r.state==="reported"?"w":"x";});
+  // A step waiting for confirmation is the one in hand; nothing after it is marked as started.
+  if(s.status==="active"&&!rsPublished(s)&&out.indexOf("w")<0){const i=out.indexOf("-");if(i>=0)out[i]="n";}
+  return out;
+}
+function rsWaiting(s){return rsSteps().filter(d=>RS_KPI[d.k]&&(rsStepRow(s.id,d.k)||{}).state==="reported");}
+function rsDays(s){const t=Date.parse(s.updated_at||s.created_at||"");return isFinite(t)?Math.max(0,Math.floor((Date.now()-t)/864e5)):0;}
+function rsStale(s){return s.status==="active"&&!rsPublished(s)&&rsDays(s)>=RS_STALE_DAYS;}
+function rsIsMember(s,rid){return!!rid&&RS_MEMBERS.some(m=>m.study_id===s.id&&m.resident_id==rid);}
+function rsMine(rid){return RS_STUDIES.filter(s=>rsIsMember(s,rid));}
+// The projects a resident is on that have given no KPI record yet: "Assigned" on the Scholar line.
+function rsAssignedFor(rid){
+  if(RS_STATE!=="ready"||!STATE.user||RS_FOR!==STATE.user.profileId)return[];
+  return RS_STUDIES.filter(s=>s.status==="active"&&!Object.keys(RS_KPI).some(k=>rsDone(s.id,k))&&
+    RS_MEMBERS.some(m=>m.study_id===s.id&&m.resident_id==rid&&m.is_author));
+}
+function rsToday(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function rsDate(iso){
+  if(!iso)return"";
+  const p=String(iso).slice(0,10).split("-").map(Number);if(p.length<3||!p[1])return"";
+  const mon=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][p[1]-1];
+  return p[2]+" "+mon+(p[0]!==new Date().getFullYear()?" "+p[0]:"");
+}
+function rsSupervisor(s){
+  const c=s.supervisor_consultant_id?CONSULTANTS.find(x=>x.id==s.supervisor_consultant_id):null;
+  return c?c.name:(s.supervisor_name||"");
+}
+function rsMeta(s){return[s.specialty,s.study_type,rsSupervisor(s)?"supervised by "+rsSupervisor(s):null].filter(Boolean).join(" · ");}
+function rsSeesAll(){
+  const r=STATE.user&&effectiveRole(STATE.user.role);
+  // Consultants land on the list too: it holds only what they supervise or mentor.
+  return RS_CAN.manager||RS_CAN.confirmer||RS_CAN.seesAll||r==="pd"||r==="deputy_pd"||r==="consultant";
+}
+function rsCanTouch(s){return RS_CAN.manager||RS_CAN.confirmer||rsIsMember(s,STATE.user&&STATE.user.rid);}
+function rsInjectCss(){
+  if(document.getElementById("rs-css"))return;
+  const s=document.createElement("style");s.id="rs-css";
+  s.textContent=
+  ".rs-lbl{font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#a94e2c;margin-bottom:8px}"+
+  ".rs-h1{font-family:'Playfair Display',serif;font-size:2rem;font-weight:400;color:#1F1A12;margin:0 0 4px}"+
+  ".rs-sub{font-size:.82rem;color:#5C5345;max-width:660px;line-height:1.55}"+
+  ".rs-top{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:22px;flex-wrap:wrap}"+
+  ".rs-btn{background:#a94e2c;color:#FEFBF3;border:none;border-radius:999px;padding:9px 20px;font:inherit;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap;width:auto}"+
+  ".rs-btn.ghost{background:transparent;color:#1F1A12;border:1px solid rgba(31,26,18,.2)}"+
+  ".rs-btn.sm{padding:5px 13px;font-size:.7rem}.rs-btn.danger{background:transparent;color:#9d2f17;border:1px solid rgba(157,47,23,.35)}"+
+  ".rs-btn:disabled{opacity:.5;cursor:default}"+
+  ".rs-lnk{background:none;border:none;padding:0;font:inherit;font-size:.72rem;font-weight:600;color:#a94e2c;cursor:pointer;width:auto}"+
+  ".rs-figs{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid rgba(31,26,18,.1);border-bottom:1px solid rgba(31,26,18,.1);margin:0 0 20px}"+
+  ".rs-figs>div{padding:16px 20px 14px;border-left:1px solid rgba(31,26,18,.08)}.rs-figs>div:first-child{border-left:none;padding-left:0}"+
+  ".rs-figs b{display:block;font-family:'Playfair Display',serif;font-weight:400;font-size:2rem;line-height:1;color:#1F1A12}"+
+  ".rs-figs span{display:block;font-size:.72rem;color:#5C5345;margin-top:6px;line-height:1.35}"+
+  ".rs-figs .warn b{color:#9d2f17}.rs-figs .gold b{color:#6a4c10}"+
+  ".rs-pills{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 6px}"+
+  ".rs-dot{position:relative;z-index:1;width:16px;height:16px;border-radius:50%;box-sizing:border-box;background:#FEFBF3;border:1.5px solid rgba(31,26,18,.24);display:flex;align-items:center;justify-content:center;flex:none}"+
+  ".rs-dot.d{background:#26523A;border-color:#26523A}"+
+  ".rs-dot.n{border:2px solid #c96a4a}.rs-dot.n:after{content:'';width:6px;height:6px;border-radius:50%;background:#c96a4a}"+
+  ".rs-dot.w{border:2px solid #A47A28;background:#F3E7C9}.rs-dot.w:after{content:'';width:6px;height:6px;border-radius:50%;background:#8a6414}"+
+  ".rs-dot.x{border:none;background:#FEFBF3}.rs-dot.x:after{content:'';width:9px;height:2px;border-radius:1px;background:#8b8171}"+
+  ".rs-dot svg{display:block}"+
+  ".rs-chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:.66rem;font-weight:700;white-space:nowrap}"+
+  ".rs-chip.gold{background:rgba(164,122,40,.16);color:#6a4c10}.rs-chip.red{background:rgba(181,60,30,.1);color:#9d2f17}.rs-chip.sage{background:rgba(127,184,156,.2);color:#26523A}.rs-chip.ink{background:rgba(31,26,18,.07);color:#443C2F}"+
+  ".rs-sheet{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:10px 40px;padding:26px 0 24px;border-top:1px solid rgba(31,26,18,.1)}"+
+  ".rs-sheet .ttl{font-family:'Playfair Display',serif;font-size:1.35rem;line-height:1.2;color:#1F1A12}"+
+  ".rs-sheet .meta{font-size:.74rem;color:#5C5345;margin:5px 0 18px}"+
+  ".rs-track{display:grid}"+
+  ".rs-track .c{position:relative;min-width:0}.rs-track .c.act{cursor:pointer}.rs-track .c.act:hover .nm{text-decoration:underline}"+
+  ".rs-track .c.sel .nm{text-decoration:underline}"+
+  ".rs-track .c .ln{position:relative;height:18px;display:flex;align-items:center}"+
+  ".rs-track .c .ln:before{content:'';position:absolute;left:8px;right:-8px;top:50%;height:2px;margin-top:-1px;background:rgba(31,26,18,.12)}"+
+  ".rs-track .c:last-child .ln:before{display:none}.rs-track .c.lk .ln:before{background:#26523A}"+
+  ".rs-track .nm{font-size:.7rem;font-weight:600;color:#1F1A12;margin-top:8px;line-height:1.25;padding-right:8px}"+
+  ".rs-track .c.todo .nm{color:#6E6455;font-weight:500}.rs-track .c.kpi .nm,.rs-track .c.kpi.todo .nm{color:#a94e2c;font-weight:600}"+
+  ".rs-track .dt{font-size:.66rem;color:#5C5345;margin-top:2px;padding-right:8px}.rs-track .dt.w{color:#6a4c10;font-weight:600}.rs-track .dt.n{color:#a94e2c;font-weight:600}"+
+  ".rs-next{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:18px;font-size:.78rem;color:#443C2F}"+
+  ".rs-next em{font-style:normal;font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6E6455}"+
+  ".rs-next input{width:auto;flex:1;min-width:220px;font-size:.8rem;padding:6px 10px}"+
+  ".rs-team h4{margin:4px 0 8px;font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6E6455}"+
+  ".rs-team .who{display:flex;justify-content:space-between;gap:8px;font-size:.8rem;padding:5px 0;border-bottom:1px solid rgba(31,26,18,.06);color:#1F1A12}"+
+  ".rs-team .who span{font-size:.7rem;color:#5C5345;text-align:right}.rs-team .who b{font-weight:600}.rs-team .who b i{font-style:normal;font-size:.62rem;color:#6E6455;margin-left:5px;font-weight:700}"+
+  ".rs-band{display:flex;gap:22px;align-items:center;flex-wrap:wrap;padding:18px 22px;border-radius:14px;background:#F6EFE2;margin:0 0 10px}"+
+  ".rs-band.ok{background:rgba(127,184,156,.18)}"+
+  ".rs-band .big{font-family:'Playfair Display',serif;font-size:1.4rem;color:#1F1A12;line-height:1.15}.rs-band .sub{font-size:.78rem;color:#443C2F;margin-top:3px}"+
+  ".rs-band .side{font-size:.76rem;color:#443C2F;max-width:330px;line-height:1.5}"+
+  ".rs-panel{margin-top:16px;padding:16px 18px;border-radius:12px;background:#F6EFE2}"+
+  ".rs-panel h5{margin:0 0 2px;font-size:.86rem;font-weight:700;color:#1F1A12}.rs-panel p{margin:0 0 12px;font-size:.76rem;color:#443C2F;line-height:1.5}"+
+  ".rs-panel .f{display:grid;grid-template-columns:150px minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:12px}"+
+  ".rs-panel label,.rs-form label{display:block;font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5C5345;margin-bottom:4px}"+
+  ".rs-panel input,.rs-form input,.rs-form select{font-size:.82rem;padding:7px 10px}"+
+  ".rs-panel .act,.rs-form .act{display:flex;gap:8px;flex-wrap:wrap;align-items:center}"+
+  ".rs-form{padding:22px 24px;border-radius:14px;background:#F6EFE2;margin:0 0 8px}"+
+  ".rs-form h3{margin:0 0 14px;font-family:'Playfair Display',serif;font-weight:400;font-size:1.3rem;color:#1F1A12}"+
+  ".rs-form .g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;margin-bottom:18px}.rs-form .g .full{grid-column:1/-1}"+
+  ".rs-form h4{margin:0 0 8px;font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5C5345}"+
+  ".rs-trow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto auto auto;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(31,26,18,.08);font-size:.84rem}"+
+  ".rs-trow b{font-weight:600}.rs-trow b i{font-style:normal;font-size:.64rem;color:#5C5345;margin-left:6px;font-weight:700}"+
+  ".rs-trow .ck{display:inline-flex;align-items:center;gap:5px;font-size:.72rem;color:#443C2F;white-space:nowrap;cursor:pointer;margin:0;text-transform:none;letter-spacing:0;font-weight:500}"+
+  ".rs-trow .ck input{width:auto;margin:0;padding:0}"+
+  ".rs-srow{display:grid;grid-template-columns:minmax(0,1fr) 100px 24px 40px 58px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(31,26,18,.08)}"+
+  ".rs-srow input{font-size:.84rem;padding:7px 10px}.rs-srow .k{font-size:.66rem;font-weight:700;color:#a94e2c;white-space:nowrap}"+
+  ".rs-sec{padding:26px 0 8px;border-top:1px solid rgba(31,26,18,.1)}"+
+  ".rs-sec h2{margin:0 0 4px;font-family:'Playfair Display',serif;font-weight:400;font-size:1.35rem;color:#1F1A12}"+
+  ".rs-sec p{margin:0 0 14px;font-size:.8rem;color:#5C5345;line-height:1.55;max-width:640px}"+
+  ".rs-empty{padding:26px 0;font-size:.88rem;color:#5C5345;line-height:1.6;max-width:600px}"+
+  ".rs-int{width:100%;border-collapse:collapse}"+
+  ".rs-int th{background:transparent;text-align:left;font-size:.62rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#5C5345;padding:9px 12px 9px 0;border-bottom:1px solid rgba(31,26,18,.14);vertical-align:bottom}"+
+  ".rs-int td{padding:11px 12px 11px 0;border-bottom:1px solid rgba(31,26,18,.07);font-size:.8rem;color:#1F1A12;vertical-align:top;line-height:1.4}"+
+  ".rs-int tr.row{cursor:pointer}.rs-int tr.row:hover td{background:#FAF6EC}"+
+  ".rs-int td b{font-weight:600}.rs-int td b i{font-style:normal;font-size:.62rem;color:#6E6455;margin-left:6px;font-weight:700}"+
+  ".rs-int td small{display:block;font-size:.7rem;color:#5C5345;margin-top:2px}"+
+  ".rs-int tr.none td{color:#6E6455}.rs-int tr.none td b{font-weight:500;color:#443C2F}"+
+  ".rs-int ol{margin:0;padding-left:16px}.rs-int ol li{padding:0}"+
+  ".rs-det{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 26px;padding:6px 0 10px}"+
+  ".rs-det div span{display:block;font-size:.6rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#6E6455;margin-bottom:3px}"+
+  ".rs-det div{font-size:.8rem;color:#1F1A12;line-height:1.45;word-break:break-word}.rs-det .wide{grid-column:1/-1}"+
+  ".rs-ifl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 14px}.rs-ifl select{width:auto;font-size:.78rem;padding:6px 30px 6px 12px;border-radius:999px}"+
+  ".rs-ul{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) 240px auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(31,26,18,.07);font-size:.82rem}"+
+  ".rs-ul select{font-size:.8rem;padding:6px 10px}.rs-ul small{display:block;font-size:.7rem;color:#5C5345}"+
+
+  "@media (max-width:760px){.rs-sheet{grid-template-columns:1fr}.rs-figs{grid-template-columns:repeat(2,1fr)}.rs-figs>div{padding-left:0;border-left:none}"+
+  ".rs-track{grid-template-columns:1fr!important}.rs-track .c{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;padding:6px 0;border-bottom:1px solid rgba(31,26,18,.05)}"+
+  ".rs-track .c .ln:before{display:none}.rs-track .nm{margin-top:0;font-size:.8rem}.rs-track .dt{margin-top:0;font-size:.72rem;padding-right:0;text-align:right}"+
+  ".rs-panel .f{grid-template-columns:1fr}.rs-form .g{grid-template-columns:1fr}.rs-trow{grid-template-columns:1fr 1fr;gap:6px 12px}.rs-trow b{grid-column:1/-1}.rs-det{grid-template-columns:1fr}.rs-ul{grid-template-columns:1fr}"+
+  ".rs-int thead{display:none}.rs-int tr{display:block;padding:8px 0;border-bottom:1px solid rgba(31,26,18,.08)}.rs-int td{display:block;border:none;padding:2px 0}}";
+  document.head.appendChild(s);
+}
+function rsCheck(){const w=document.createElement("span");w.innerHTML='<svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#FEFBF3" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.2 6.4 4.9 9 9.8 3.4"/></svg>';return w.firstChild;}
+function rsDot(c){const d=el("span",{cls:"rs-dot "+(c==="-"?"":c)});if(c==="d")d.appendChild(rsCheck());return d;}
+function rsHeader(title,sub,btn){
+  return el("div",{cls:"rs-top"},
+    el("div",null,el("div",{cls:"rs-lbl"},"Research"),el("h1",{cls:"rs-h1"},title),sub?el("div",{cls:"rs-sub"},sub):null),
+    btn||null);
+}
+function rsTabs(tabs,cur){
+  return el("div",{st:{display:"flex",gap:"2px",borderBottom:"1px solid rgba(31,26,18,.1)",marginBottom:"22px",flexWrap:"wrap"}},
+    ...tabs.map(([k,l])=>el("span",{cls:"tab"+(cur===k?" on":""),onClick:()=>{_rsDraft=null;_rsStep=null;_rsNow=null;set({rsTab:k});}},l)));
+}
+function renderResearch(){
+  rsInjectCss();
+  // Another account signed in on this page: what was read for the last one must not be shown.
+  if(RS_STATE==="ready"&&RS_FOR!==STATE.user.profileId){RS_STATE="idle";RS_STUDIES=[];RS_MEMBERS=[];RS_STEPROWS=[];RS_CAN={manager:false,confirmer:false,seesAll:false};RS_INTEREST=[];_rsDraft=null;_rsStep=null;_rsNow=null;_rsCfgDraft=null;RS_PROFILES=null;}
+  if(RS_STATE==="idle")loadResearch();
+  if(RS_STATE==="idle"||RS_STATE==="loading")return el("div",{cls:"content"},rsHeader("Research",""),el("div",{cls:"sh",st:{padding:"40px 0"}},"Loading…"));
+  if(RS_STATE==="error")return el("div",{cls:"content"},rsHeader("Research",""),
+    el("p",{cls:"alert-yellow"},"The research tables are not there yet. Run supabase/add_research_module.sql in the Supabase SQL Editor, then reload."),
+    el("div",{st:{fontSize:".72rem",color:"#6E6455"}},RS_ERR));
+  const u=STATE.user,all=rsSeesAll(),isPd=u.role==="pd";
+  if(!all)return rsMinePage(false);
+  const tabs=[["projects",u.rid?"All projects":"Projects"]];
+  if(RS_CAN.manager||RS_CAN.confirmer)tabs.push(["interest","Residents and interests"]);
+  if(u.rid)tabs.push(["mine","My projects"]);
+  if(isPd)tabs.push(["settings","Settings"]);
+  let tab=STATE.rsTab||"projects";if(!tabs.some(t=>t[0]===tab))tab="projects";
+  if(tab==="mine")return rsMinePage(tabs);
+  if(tab==="settings")return rsSettingsPage(tabs);
+  if(tab==="interest")return rsInterestPage(tabs);
+  return rsProjectsPage(tabs);
+}
+// ── All projects ───────────────────────────────────────────────────────────────────────────────────
+function rsProjectsPage(tabs){
+  const live=RS_STUDIES.filter(s=>s.status==="active"&&!rsPublished(s)),pub=RS_STUDIES.filter(rsPublished);
+  const wait=RS_STUDIES.filter(s=>rsWaiting(s).length),stale=RS_STUDIES.filter(rsStale);
+  const onIds=new Set();live.forEach(s=>rsMembers(s.id).forEach(m=>onIds.add(m.resident_id)));
+  const roster=RESIDENTS.length;
+  const f=STATE.rsFilter||"all";
+  let list=f==="confirm"?wait:f==="stale"?stale:f==="published"?pub:RS_STUDIES.slice();
+  // Newest first, with published work after everything still moving.
+  list=list.slice().sort((a,b)=>(rsPublished(a)?1:0)-(rsPublished(b)?1:0)||b.id-a.id);
+  const pill=(k,l,n)=>el("span",{cls:"pill"+(f===k?" on":""),onClick:()=>set({rsFilter:k})},l+(n!=null?" ("+n+")":""));
+  const lead=RS_CAN.manager?"Open a project, put residents on it and follow its steps.":(RS_CAN.seesAll?"Every project the Research Committee runs, who is on it and how far it has gone.":"The projects you supervise or mentor, who is on each and how far it has gone.");
+  return el("div",{cls:"content"},
+    rsHeader("Research projects",lead,RS_CAN.manager&&!_rsDraft?el("button",{cls:"rs-btn",onClick:()=>rsOpenEditor(null)},"New project"):null),
+    tabs.length>1?rsTabs(tabs,"projects"):null,
+    !RS_CAN.seesAll?null:el("div",{cls:"rs-figs"},
+      el("div",null,el("b",null,String(live.length)),el("span",null,(live.length===1?"project":"projects")+" under way, "+pub.length+" published")),
+      el("div",null,el("b",null,String(onIds.size)),el("span",null,"of "+roster+" residents are on a project")),
+      el("div",{cls:wait.length?"gold":""},el("b",null,String(wait.length)),el("span",null,wait.length===1?"project with a step waiting for confirmation":"projects with a step waiting for confirmation")),
+      el("div",{cls:stale.length?"warn":""},el("b",null,String(stale.length)),el("span",null,(stale.length===1?"project":"projects")+" with no update for "+RS_STALE_DAYS+" days or more"))),
+    el("div",{cls:"rs-pills"},pill("all","All",RS_STUDIES.length),pill("confirm","To confirm",wait.length),pill("stale","No recent update",stale.length),pill("published","Published",pub.length)),
+    _rsDraft&&_rsDraft.id==null?rsEditor():null,
+    list.length?list.map(s=>rsSheet(s,false)):
+      el("div",{cls:"rs-empty"},RS_STUDIES.length?"Nothing in this list.":(RS_CAN.manager?"No projects yet. Use New project to open the first one and put residents on it.":"No projects to show yet.")));
+}
+// ── One project ────────────────────────────────────────────────────────────────────────────────────
+function rsSheet(s,mine){
+  if(_rsDraft&&_rsDraft.id===s.id)return rsEditor();
+  const steps=rsSteps(),code=rsCode(s),touch=rsCanTouch(s),wait=rsWaiting(s),stale=rsStale(s),pub=rsPublished(s);
+  const track=el("div",{cls:"rs-track",st:{gridTemplateColumns:"repeat("+steps.length+",minmax(0,1fr))"}},...steps.map((d,i)=>{
+    const c=code[i],r=rsStepRow(s.id,d.k),nx=code[i+1];
+    const lk=(c==="d"||c==="x")&&(nx==="d"||nx==="x");
+    const dt=c==="d"?rsDate(r.done_on):c==="w"?"Reported "+rsDate(r.done_on||r.reported_at):c==="n"?"In hand":c==="x"?"Not needed":"";
+    const sel=_rsStep&&_rsStep.study===s.id&&_rsStep.key===d.k;
+    return el("div",{cls:"c"+(lk?" lk":"")+(c==="-"||c==="x"?" todo":"")+(RS_KPI[d.k]?" kpi":"")+(touch?" act":"")+(sel?" sel":""),
+      title:touch?"Open this step":d.l,onClick:touch?()=>rsOpenStep(s,d.k):null},
+      el("div",{cls:"ln"},rsDot(c)),el("div",{cls:"nm"},d.l),el("div",{cls:"dt "+(c==="w"?"w":c==="n"?"n":"")},dt));}));
+  const inHand=steps[code.indexOf("n")];
+  const nowText=s.now_note||(pub?"Published"+(s.journal?", "+s.journal:""):s.status==="closed"?"Closed":inHand?inHand.l+" in hand":"");
+  const editingNow=_rsNow&&_rsNow.study===s.id,panelOpen=!!(_rsStep&&_rsStep.study===s.id);
+  const nowLine=el("div",{cls:"rs-next"},el("em",null,"Now"),
+    editingNow?[el("input",{value:_rsNow.text,maxlength:"200",placeholder:"What the team is doing this week",onInput:e=>{_rsNow.text=e.target.value;}}),
+        el("button",{cls:"rs-btn sm",onClick:()=>rsSaveNow(s)},"Save"),el("button",{cls:"rs-btn ghost sm",onClick:()=>{_rsNow=null;render();}},"Cancel")]:
+      [el("span",null,nowText),
+       touch&&!pub?el("button",{cls:"rs-lnk",onClick:()=>{_rsNow={study:s.id,text:s.now_note||""};_rsStep=null;render();}},"Edit"):null,
+       stale?el("span",{cls:"rs-chip red"},"No update for "+rsDays(s)+" days"):null,
+       s.status==="closed"&&!pub?el("span",{cls:"rs-chip ink"},"Closed"):null,
+       wait.length&&RS_CAN.confirmer&&!panelOpen?el("button",{cls:"rs-btn sm",onClick:()=>rsOpenStep(s,wait[0].k)},"Confirm "+RS_KPI[wait[0].k]):null,
+       wait.length&&!RS_CAN.confirmer?el("span",{cls:"rs-chip gold"},"Waiting for confirmation"):null,
+       !wait.length&&touch&&!RS_CAN.confirmer&&inHand&&!panelOpen?el("button",{cls:"rs-btn ghost sm",onClick:()=>rsOpenStep(s,inHand.k)},"Report a step"):null,
+       RS_CAN.manager&&!mine?el("button",{cls:"rs-lnk",onClick:()=>rsOpenEditor(s)},"Edit project"):null]);
+  const team=rsMembers(s.id);
+  return el("div",{cls:"rs-sheet"},
+    el("div",null,el("div",{cls:"ttl"},s.title),el("div",{cls:"meta"},rsMeta(s)||" "),track,
+      _rsStep&&_rsStep.study===s.id?rsStepPanel(s):null,nowLine),
+    el("div",{cls:"rs-team"},el("h4",null,"Team"),
+      team.length?team.map(m=>{const r=resById(m.resident_id);
+        return el("div",{cls:"who"},el("b",null,r?dname(r.name):"Resident",r&&r.level?el("i",null,r.level):null),el("span",null,(m.is_lead&&m.role!=="Lead"?"Lead · ":"")+m.role+(m.is_author?"":" · not an author")));}):
+        el("div",{st:{fontSize:".76rem",color:"#5C5345"}},"Nobody assigned yet.")));
+}
+function rsOpenStep(s,k){
+  const r=rsStepRow(s.id,k);
+  if(_rsStep&&_rsStep.study===s.id&&_rsStep.key===k){_rsStep=null;render();return;}
+  _rsStep={study:s.id,key:k,date:(r&&r.done_on)||rsToday(),url:(r&&r.evidence_url)||"",note:(r&&r.note)||""};
+  _rsNow=null;render();
+}
+function rsStepPanel(s){
+  const k=_rsStep.key,d=rsSteps().find(x=>x.k===k),r=rsStepRow(s.id,k),kpi=!!RS_KPI[k],conf=RS_CAN.confirmer;
+  if(!d)return null;
+  const locked=kpi&&r&&r.state==="done"&&!conf;  // confirmed: only a confirmer may change it
+  const say=!r?(kpi?"Not reported yet. This step counts toward the Scholar KPI once it is confirmed.":"Not done yet."):
+    r.state==="done"?(kpi?"Confirmed "+rsDate(r.confirmed_at||r.done_on)+". It counts toward the Scholar KPI of every author on the team.":"Done "+rsDate(r.done_on)+"."):
+    r.state==="reported"?"Reported by the team"+(r.reported_at?" on "+rsDate(r.reported_at):"")+". It does not count until it is confirmed.":
+    "Marked as not needed for this study.";
+  const link=r&&r.evidence_url&&/^https?:\/\//i.test(r.evidence_url)?el("a",{href:r.evidence_url,target:"_blank",rel:"noopener",st:{fontSize:".76rem",fontWeight:"600",color:"#a94e2c"}},"Open the evidence link"):null;
+  const act=[];
+  if(!locked){
+    if(kpi&&conf&&!(r&&r.state==="done"))act.push(el("button",{cls:"rs-btn sm",onClick:()=>rsSaveStep(s,k,"done")},"Confirm "+RS_KPI[k]));
+    if(kpi&&!conf&&!(r&&r.state==="reported"))act.push(el("button",{cls:"rs-btn sm",onClick:()=>rsSaveStep(s,k,"reported")},"Report as done"));
+    if(kpi&&r&&r.state==="reported"&&!conf)act.push(el("button",{cls:"rs-btn sm",onClick:()=>rsSaveStep(s,k,"reported")},"Save changes"));
+    if(!kpi&&!(r&&r.state==="done"))act.push(el("button",{cls:"rs-btn sm",onClick:()=>rsSaveStep(s,k,"done")},"Mark done"));
+    if(r&&r.state==="done"&&(!kpi||conf))act.push(el("button",{cls:"rs-btn sm",onClick:()=>rsSaveStep(s,k,"done")},"Save changes"));
+    if(!(r&&r.state==="not_needed"))act.push(el("button",{cls:"rs-btn ghost sm",onClick:()=>rsSaveStep(s,k,"not_needed")},"Not needed for this study"));
+    if(r)act.push(el("button",{cls:"rs-btn ghost sm",onClick:()=>rsClearStep(s,k)},kpi&&r.state==="done"?"Undo confirmation":kpi&&r.state==="reported"?"Withdraw the report":"Clear"));
+  }
+  act.push(el("button",{cls:"rs-lnk",onClick:()=>{_rsStep=null;render();}},"Close"));
+  return el("div",{cls:"rs-panel"},el("h5",null,d.l),el("p",null,say),
+    locked?null:el("div",{cls:"f"},
+      el("div",null,el("label",null,"Date"),el("input",{type:"date",value:_rsStep.date||"",onInput:e=>{_rsStep.date=e.target.value;}})),
+      el("div",null,el("label",null,kpi?"Evidence link (IRB letter, receipt, DOI)":"Link (optional)"),el("input",{type:"text",placeholder:"https://",value:_rsStep.url,onInput:e=>{_rsStep.url=e.target.value;}})),
+      el("div",null,el("label",null,"Note (optional)"),el("input",{type:"text",maxlength:"200",value:_rsStep.note,onInput:e=>{_rsStep.note=e.target.value;}}))),
+    link?el("div",{st:{margin:"-4px 0 12px"}},link):null,
+    el("div",{cls:"act"},act));
+}
+function rsStepsChanged(s,k){
+  const i=RS_STUDIES.findIndex(x=>x.id===s.id);if(i>=0)RS_STUDIES[i].updated_at=new Date().toISOString();
+  // A KPI step changed: the database has rewritten the Scholar records, so read them again.
+  if(RS_KPI[k]&&typeof loadCanmeds==="function")loadCanmeds();
+}
+async function rsSaveStep(s,k,state){
+  const st=_rsStep||{};
+  const url=String(st.url||"").trim();
+  if(url&&!/^https?:\/\//i.test(url)){showToast("The link has to start with http:// or https://","error");return;}
+  if(state!=="not_needed"&&!st.date){showToast("Choose a date.","error");return;}
+  const row={study_id:s.id,step_key:k,state,done_on:state==="not_needed"?null:st.date,evidence_url:url||null,note:String(st.note||"").trim()||null};
+  const{data,error}=await sb.from("research_study_steps").upsert(row,{onConflict:"study_id,step_key"}).select().single();
+  if(error){showToast("Could not save the step: "+error.message,"error");return;}
+  RS_STEPROWS=RS_STEPROWS.filter(r=>!(r.study_id===s.id&&r.step_key===k)).concat([data]);
+  _rsStep=null;rsStepsChanged(s,k);
+  showToast(state==="done"&&RS_KPI[k]?"Confirmed. The Scholar record of every author on the team is updated.":state==="reported"?"Reported. It counts once the Program Director confirms it.":"Saved.","success");
+  render();
+}
+async function rsClearStep(s,k){
+  const r=rsStepRow(s.id,k);if(!r)return;
+  if(RS_KPI[k]&&r.state==="done"&&!window.confirm("Undo this confirmation? The Scholar record it gave the team is removed or stepped back."))return;
+  const{error}=await sb.from("research_study_steps").delete().eq("id",r.id);
+  if(error){showToast("Could not clear the step: "+error.message,"error");return;}
+  RS_STEPROWS=RS_STEPROWS.filter(x=>x.id!==r.id);
+  _rsStep=null;rsStepsChanged(s,k);render();
+}
+async function rsSaveNow(s){
+  const text=String((_rsNow&&_rsNow.text)||"").trim();
+  const{data,error}=await sb.from("research_studies").update({now_note:text||null,updated_at:new Date().toISOString()}).eq("id",s.id).select().single();
+  if(error){showToast("Could not save: "+error.message,"error");return;}
+  Object.assign(s,data);_rsNow=null;render();
+}
+// ── Add / edit a project ───────────────────────────────────────────────────────────────────────────
+function rsOpenEditor(s){
+  _rsStep=null;_rsNow=null;
+  _rsDraft=s?{id:s.id,title:s.title||"",study_type:s.study_type||"",specialty:s.specialty||"",
+      supervisor_consultant_id:s.supervisor_consultant_id||"",supervisor_name:s.supervisor_name||"",started_year:String(s.started_year),
+      irb_number:s.irb_number||"",journal:s.journal||"",citation:s.citation||"",evidence_url:s.evidence_url||"",status:s.status,
+      team:rsMembers(s.id).map(m=>({resident_id:m.resident_id,role:m.role,is_lead:m.is_lead,is_author:m.is_author}))}:
+    {id:null,title:"",study_type:"",specialty:"",supervisor_consultant_id:"",supervisor_name:"",started_year:String(CURRENT_ACADEMIC_YEAR),
+      irb_number:"",journal:"",citation:"",evidence_url:"",status:"active",team:[]};
+  render();
+}
+function rsEditor(){
+  const d=_rsDraft;
+  const inp=(k,l,ph,full)=>el("div",{cls:full?"full":""},el("label",null,l),el("input",{type:"text",value:d[k]||"",placeholder:ph||"",onInput:e=>{d[k]=e.target.value;}}));
+  const sel=(k,l,opts)=>el("div",null,el("label",null,l),
+    el("select",{onChange:e=>{d[k]=e.target.value;}},...opts.map(([v,t])=>el("option",{value:v,selected:String(d[k])===String(v)},t))));
+  const specs=[...new Set(RS_STUDIES.map(s=>s.specialty).filter(Boolean))].sort();
+  // Residents who named this subspecialty on the interest form come first, and say so.
+  const want=r=>rsPrefers(r.id,d.specialty);
+  const free=RESIDENTS.filter(r=>!d.team.some(t=>t.resident_id==r.id)).slice().sort((a,b)=>(want(b)?1:0)-(want(a)?1:0)||dname(a.name).localeCompare(dname(b.name)));
+  return el("div",{cls:"rs-form",st:d.id!=null?{margin:"22px 0 8px"}:null},
+    el("h3",null,d.id==null?"New project":"Edit project"),
+    el("div",{cls:"g"},
+      inp("title","Title","e.g. Sepsis bundle compliance in the medical ward",true),
+      sel("study_type","Type of study",[["","Not set"]].concat(RS_TYPES.map(t=>[t,t]))),
+      el("div",null,el("label",null,"Subspecialty"),el("input",{type:"text",list:"rs-specs",value:d.specialty,placeholder:"e.g. Nephrology",onInput:e=>{d.specialty=e.target.value;}}),
+        el("datalist",{id:"rs-specs"},...specs.map(x=>el("option",{value:x})))),
+      sel("supervisor_consultant_id","Supervising consultant",[["","Not on the portal, or not set"]].concat(CONSULTANTS.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>[c.id,c.name]))),
+      inp("supervisor_name","Supervisor's name, if not in the list","Dr. …"),
+      inp("started_year","Academic year it started","2026 means AY 2026-27"),
+      inp("irb_number","IRB number","Filled once the IRB approves"),
+      inp("journal","Journal","Filled at submission"),
+      inp("evidence_url","Link to the paper or DOI","https://"),
+      inp("citation","Citation","Filled at publication",true),
+      d.id!=null?sel("status","Project status",[["active","Active"],["closed","Closed, not continuing"]]):null),
+    el("h4",null,"Team"),
+    d.team.length?d.team.map((t,i)=>{const r=resById(t.resident_id);
+      return el("div",{cls:"rs-trow"},
+        el("b",null,r?dname(r.name):"Resident",r&&r.level?el("i",null,r.level):null),
+        el("div",null,el("input",{type:"text",list:"rs-roles",value:t.role,placeholder:"Role",onInput:e=>{t.role=e.target.value;}})),
+        el("label",{cls:"ck"},el("input",{type:"radio",name:"rs-lead",checked:!!t.is_lead,onChange:()=>{d.team.forEach(x=>{x.is_lead=false;});t.is_lead=true;if(!t.role||t.role==="Member")t.role="Lead";render();}}),"Lead"),
+        el("label",{cls:"ck",title:"Authors are credited in the Scholar KPI when a step is confirmed"},el("input",{type:"checkbox",checked:!!t.is_author,onChange:e=>{t.is_author=e.target.checked;}}),"Author"),
+        el("button",{cls:"rs-lnk",onClick:()=>{d.team.splice(i,1);render();}},"Remove"));}):
+      el("div",{st:{fontSize:".8rem",color:"#5C5345",padding:"4px 0 8px"}},"Nobody on the team yet."),
+    el("datalist",{id:"rs-roles"},...RS_ROLES.map(x=>el("option",{value:x}))),
+    el("div",{st:{maxWidth:"340px",margin:"12px 0 20px"}},
+      el("select",{onChange:e=>{const id=Number(e.target.value);if(!id)return;d.team.push({resident_id:id,role:d.team.length?"Member":"Lead",is_lead:!d.team.length,is_author:true});render();}},
+        el("option",{value:""},"Add a resident…"),...free.map(r=>el("option",{value:r.id},dname(r.name)+" · "+r.level+(want(r)?" · interested in this subspecialty":"")+(rsLoad(r.id)?" · on "+rsLoad(r.id)+(rsLoad(r.id)===1?" project":" projects"):""))))),
+    el("div",{cls:"act"},
+      el("button",{cls:"rs-btn",disabled:!!STATE.rsSaving,onClick:rsSaveStudy},STATE.rsSaving?"Saving…":"Save project"),
+      el("button",{cls:"rs-btn ghost",onClick:()=>{_rsDraft=null;render();}},"Cancel"),
+      d.id!=null?el("span",{st:{flex:"1"}}):null,
+      d.id!=null?el("button",{cls:"rs-btn danger",onClick:rsDeleteStudy},"Delete project"):null));
+}
+async function rsSaveStudy(){
+  const d=_rsDraft;if(!d||STATE.rsSaving)return;
+  const title=String(d.title||"").trim(),y=parseInt(d.started_year,10),url=String(d.evidence_url||"").trim();
+  if(!title){showToast("A title is required.","error");return;}
+  if(!(y>=2000&&y<=2100)){showToast("The academic year is a four-digit start year, such as 2026.","error");return;}
+  if(url&&!/^https?:\/\//i.test(url)){showToast("The link has to start with http:// or https://","error");return;}
+  const row={title,study_type:d.study_type||null,specialty:String(d.specialty||"").trim()||null,
+    supervisor_consultant_id:d.supervisor_consultant_id?Number(d.supervisor_consultant_id):null,supervisor_name:String(d.supervisor_name||"").trim()||null,
+    started_year:y,irb_number:String(d.irb_number||"").trim()||null,journal:String(d.journal||"").trim()||null,
+    citation:String(d.citation||"").trim()||null,evidence_url:url||null,status:d.status||"active",updated_at:new Date().toISOString()};
+  STATE.rsSaving=true;render();
+  let sid=d.id,err=null;
+  if(sid==null){
+    const{data,error}=await sb.from("research_studies").insert({...row,created_by:STATE.user.profileId}).select().single();
+    if(error)err=error;else sid=data.id;
+  }else{
+    const{error}=await sb.from("research_studies").update(row).eq("id",sid);
+    if(error)err=error;
+  }
+  if(!err){
+    const had=RS_MEMBERS.filter(m=>m.study_id===sid),gone=had.filter(m=>!d.team.some(t=>t.resident_id==m.resident_id)).map(m=>m.id);
+    if(gone.length){const{error}=await sb.from("research_study_members").delete().in("id",gone);if(error)err=error;}
+    if(!err&&d.team.length){
+      const rows=d.team.map(t=>({study_id:sid,resident_id:t.resident_id,role:String(t.role||"").trim()||(t.is_lead?"Lead":"Member"),is_lead:!!t.is_lead,is_author:!!t.is_author}));
+      const{error}=await sb.from("research_study_members").upsert(rows,{onConflict:"study_id,resident_id"});
+      if(error)err=error;
+    }
+  }
+  STATE.rsSaving=false;
+  if(err){showToast("Could not save the project: "+err.message,"error");render();return;}
+  _rsDraft=null;showToast("Project saved.","success");
+  await loadResearch(true);
+  if(typeof loadCanmeds==="function")loadCanmeds();
+}
+async function rsDeleteStudy(){
+  const d=_rsDraft;if(!d||d.id==null)return;
+  if(!window.confirm("Delete this project, its team and its steps? Scholar records already confirmed stay on each resident's file."))return;
+  const{error}=await sb.from("research_studies").delete().eq("id",d.id);
+  if(error){showToast("Could not delete: "+error.message,"error");return;}
+  _rsDraft=null;await loadResearch(true);
+}
+// ── A resident's own projects ──────────────────────────────────────────────────────────────────────
+function rsMinePage(tabs){
+  const rid=STATE.user.rid,mine=rsMine(rid).slice().sort((a,b)=>(rsPublished(a)?1:0)-(rsPublished(b)?1:0)||b.id-a.id);
+  const ramp=RESEARCH_RAMP[rid],asg=rsAssignedFor(rid);
+  let big=null,sub=null,ok=false;
+  if(ramp&&ramp.ramp_state==="met"){big="Scholar KPI: met";sub=ramp.published_count+" published.";ok=true;}
+  else if(ramp&&ramp.ramp_state==="on_track"){big="Scholar KPI: on track";sub="IRB approval is on file. A publication by R4 completes it.";ok=true;}
+  else if(asg.length){big="Scholar KPI: assigned, not met yet";sub="You are on "+(asg.length===1?"a project":asg.length+" projects")+". It counts once IRB approval, submission or publication is confirmed.";}
+  else if(ramp){big="Scholar KPI: "+canmedsRampLabel(ramp.ramp_state).toLowerCase();sub=mine.length?"":"You are not on a project yet.";}
+  return el("div",{cls:"content"},
+    rsHeader("My research","The projects you are on and where each one stands. Only your team, your mentor, the Research Committee leads and the Program Director see them.",null),
+    tabs&&tabs.length>1?rsTabs(tabs,"mine"):null,
+    el("div",{cls:"rs-band"+(ok?" ok":"")},
+      big?el("div",{st:{flex:"1",minWidth:"260px"}},el("div",{cls:"big"},big),sub?el("div",{cls:"sub"},sub):null):null,
+      el("div",{cls:"side",st:big?null:{maxWidth:"none"}},"A project counts toward your KPI only when the Program Director confirms IRB approval, submission or publication. The other steps show your progress and do not change the KPI.")),
+    rsFormLine(rid),
+    mine.length?mine.map(s=>rsSheet(s,true)):
+      el("div",{cls:"rs-empty"},"You are not on a research project yet. The Research Committee opens projects and puts residents on them; yours will appear here with its steps."));
+}
+// ── Settings (Program Director) ────────────────────────────────────────────────────────────────────
+function rsSettingsPage(tabs){
+  if(!_rsCfgDraft)_rsCfgDraft={steps:RS_CFG.steps.map(s=>({k:s.k,l:s.l})),confirmers:RS_CFG.confirmers.slice(),form_url:RS_CFG.form_url||""};
+  if(RS_PROFILES===null){RS_PROFILES=[];sb.from("profiles").select("id,display_name,role").then(r=>{RS_PROFILES=(r.data||[]).slice().sort((a,b)=>String(a.display_name||"").localeCompare(String(b.display_name||"")));render();});}
+  const d=_rsCfgDraft,name=id=>{const p=RS_PROFILES.find(x=>x.id===id);return p?(p.display_name||"Account")+" · "+(ROLE_LABELS[p.role]||p.role):"Account no longer on the portal";};
+  const others=RS_PROFILES.filter(p=>p.role!=="pd"&&!d.confirmers.includes(p.id));
+  const move=(i,by)=>{const j=i+by;if(j<0||j>=d.steps.length)return;const t=d.steps[i];d.steps[i]=d.steps[j];d.steps[j]=t;render();};
+  return el("div",{cls:"content"},
+    rsHeader("Research settings","Who confirms the steps that move the Scholar KPI, and the steps every project is tracked against.",null),
+    rsTabs(tabs,"settings"),
+    el("div",{cls:"rs-sec",st:{borderTop:"none",paddingTop:"0"}},el("h2",null,"Who confirms"),
+      el("p",null,"IRB approval, submission and publication count toward the KPI only after a confirmation. The Program Director always can. Add anyone else you want to share this with."),
+      el("div",{cls:"rs-trow",st:{gridTemplateColumns:"minmax(0,1fr) auto"}},el("b",null,"Program Director"),el("span",{st:{fontSize:".72rem",color:"#5C5345"}},"Always")),
+      d.confirmers.map((id,i)=>el("div",{cls:"rs-trow",st:{gridTemplateColumns:"minmax(0,1fr) auto"}},el("b",null,name(id)),el("button",{cls:"rs-lnk",onClick:()=>{d.confirmers.splice(i,1);render();}},"Remove"))),
+      el("div",{st:{maxWidth:"340px",margin:"12px 0 0"}},
+        el("select",{onChange:e=>{if(e.target.value){d.confirmers.push(e.target.value);render();}}},
+          el("option",{value:""},"Add a confirmer…"),...others.map(p=>el("option",{value:p.id},(p.display_name||"Account")+" · "+(ROLE_LABELS[p.role]||p.role)))))),
+    el("div",{cls:"rs-sec",st:{marginTop:"26px"}},el("h2",null,"Steps"),
+      el("p",null,"Rename, reorder, add or remove steps. The three marked steps move the KPI and cannot be removed. Removing a step hides it on every project; what was recorded for it is kept."),
+      d.steps.map((s,i)=>el("div",{cls:"rs-srow"},
+        el("input",{type:"text",maxlength:"40",value:s.l,onInput:e=>{s.l=e.target.value;}}),
+        el("span",{cls:"k"},RS_KPI[s.k]?"Moves the KPI":""),
+        el("button",{cls:"rs-lnk",disabled:i===0,onClick:()=>move(i,-1)},"Up"),
+        el("button",{cls:"rs-lnk",disabled:i===d.steps.length-1,onClick:()=>move(i,1)},"Down"),
+        RS_KPI[s.k]?el("span",null):el("button",{cls:"rs-lnk",onClick:()=>{d.steps.splice(i,1);render();}},"Remove"))),
+      el("div",{st:{margin:"12px 0 0"}},el("button",{cls:"rs-btn ghost sm",onClick:()=>{d.steps.push({k:"c"+Date.now().toString(36),l:"New step"});render();}},"Add a step"))),
+    el("div",{cls:"rs-sec",st:{marginTop:"26px"}},el("h2",null,"Interest form"),
+      el("p",null,"The link residents open to fill the Research Committee's Google Form. A resident who has not answered yet sees a button to it on My projects."),
+      el("div",{st:{maxWidth:"560px"}},el("input",{type:"text",placeholder:"https://forms.gle/…",value:d.form_url,onInput:e=>{d.form_url=e.target.value;}}))),
+    el("div",{cls:"rs-sec",st:{marginTop:"26px"}},el("h2",null,"Who runs the projects"),
+      el("p",null,"The Research Committee's leader, co-leader and faculty lead for this year open projects and assign residents, together with you and the Deputy. Change those seats in Committees. The Chief Resident and the Co-Chief see every project without running them.")),
+    el("div",{st:{display:"flex",gap:"8px",padding:"18px 0 30px"}},
+      el("button",{cls:"rs-btn",onClick:rsSaveSettings},"Save settings"),
+      el("button",{cls:"rs-btn ghost",onClick:()=>{_rsCfgDraft=null;render();}},"Discard changes")));
+}
+async function rsSaveSettings(){
+  const d=_rsCfgDraft;if(!d)return;
+  const steps=d.steps.map(s=>({k:s.k,l:String(s.l||"").trim().slice(0,40)}));
+  if(steps.some(s=>!s.l)){showToast("Every step needs a name.","error");return;}
+  const furl=String(d.form_url||"").trim();
+  if(furl&&!/^https?:\/\//i.test(furl)){showToast("The form link has to start with http:// or https://","error");return;}
+  const value={steps,confirmers:d.confirmers.slice(),form_url:furl};
+  const{error}=await sb.from("portal_settings").upsert({key:"research",value,updated_at:new Date().toISOString(),updated_by:STATE.user.profileId},{onConflict:"key"});
+  if(error){showToast("Could not save the settings: "+error.message,"error");return;}
+  RS_CFG=rsCfgFrom(value);_rsCfgDraft=null;showToast("Settings saved.","success");render();
+}
+// ── Residents and interests (the committee's Google Form) ──────────────────────────────────────────
+// The answers arrive through the research-interest edge function. Read by the committee leads and
+// the confirmers; a resident reads only their own. Nothing here is KPI.
+function rsTxt(v){return Array.isArray(v)?v.join(", "):String(v==null?"":v);}
+// "Has it": any answer that is not a plain no / none / zero. The form's own wording is shown beside it.
+function rsHas(v){const t=rsTxt(v).trim();return!!t&&!/^(no\b|none\b|never\b|nil\b|n\/a\b|0\b|zero\b|not\b)/i.test(t);}
+function rsInterestOf(rid){
+  let best=null;RS_INTEREST.forEach(a=>{if(a.resident_id==rid&&(!best||String(a.submitted_at)>String(best.submitted_at)))best=a;});
+  return best;
+}
+function rsPrefs(a){const x=(a&&a.answers)||{};return[x.pref1,x.pref2,x.pref3].map(rsTxt).map(t=>t.trim()).filter(Boolean);}
+function rsPrefers(rid,spec){
+  const k=String(spec||"").trim().toLowerCase();if(!k)return false;
+  return rsPrefs(rsInterestOf(rid)).some(p=>{const q=p.toLowerCase();return q===k||q.indexOf(k)>=0||k.indexOf(q)>=0;});
+}
+// How many projects still moving a resident is on.
+function rsLoad(rid){return RS_STUDIES.filter(s=>s.status==="active"&&!rsPublished(s)&&rsIsMember(s,rid)).length;}
+function rsInterestPage(tabs){
+  const f=STATE.rsIF||{},lv={R1:1,R2:2,R3:3,R4:4};
+  const all=RESIDENTS.slice().sort((a,b)=>(lv[a.level]||9)-(lv[b.level]||9)||dname(a.name).localeCompare(dname(b.name))).map(r=>({r,a:rsInterestOf(r.id),n:rsLoad(r.id)}));
+  const answered=all.filter(x=>x.a).length,loose=RS_INTEREST.filter(a=>a.resident_id==null);
+  const specs=[...new Map(RS_INTEREST.flatMap(rsPrefs).map(p=>[p.toLowerCase(),p])).values()].sort((a,b)=>a.localeCompare(b));
+  const ans=x=>(x.a&&x.a.answers)||{};
+  const rows=all.filter(x=>{
+    if(f.none)return!x.a;
+    if(f.spec&&!rsPrefs(x.a).some(p=>p.toLowerCase()===f.spec))return false;
+    if(f.exp&&!rsHas(ans(x).prior_projects))return false;
+    if(f.pub&&!rsHas(ans(x).publications))return false;
+    if(f.stats&&!rsHas(ans(x).stats))return false;
+    if(f.lead&&!rsHas(ans(x).lead_group))return false;
+    if(f.free&&x.n>0)return false;
+    return true;
+  });
+  const blank={spec:"",exp:false,pub:false,stats:false,lead:false,free:false,none:false};
+  // "Has not answered" stands alone: every other filter reads an answer.
+  const flip=k=>k==="none"?{...blank,none:!f.none}:{...f,[k]:!f[k],none:false};
+  const tog=(k,l)=>el("span",{cls:"pill"+(f[k]?" on":""),onClick:()=>set({rsIF:flip(k),rsIOpen:null})},l);
+  const any=f.spec||f.exp||f.pub||f.stats||f.lead||f.free||f.none;
+  const tbl=el("table",{cls:"rs-int"},el("thead",null,el("tr",null,el("th",null,"Resident"),el("th",null,"Preferred subspecialties"),el("th",null,"Experience"),el("th",null,"Statistics"),el("th",null,"Would lead a group"),el("th",null,"Availability"),el("th",null,"Projects now"))));
+  const tb=el("tbody");
+  rows.forEach(x=>{
+    const a=x.a,q=ans(x),open=STATE.rsIOpen===x.r.id,prefs=rsPrefs(a);
+    const who=el("td",null,el("b",null,dname(x.r.name),el("i",null,x.r.level)),a?el("small",null,"Answered "+rsDate(a.submitted_at)):null);
+    if(!a){tb.appendChild(el("tr",{cls:"none"},who,el("td",{colspan:"5"},"Has not answered the form yet"),el("td",null,x.n?String(x.n):"—")));return;}
+    tb.appendChild(el("tr",{cls:"row",title:"Show the full answer",onClick:()=>set({rsIOpen:open?null:x.r.id})},who,
+      el("td",null,prefs.length?el("ol",null,...prefs.map(p=>el("li",null,p))):"—",rsTxt(q.outside_ok)?el("small",null,"Outside these: "+rsTxt(q.outside_ok)):null),
+      el("td",null,"Projects: "+(rsTxt(q.prior_projects)||"—"),el("small",null,"Publications: "+(rsTxt(q.publications)||"—"))),
+      el("td",null,rsTxt(q.stats)||"—"),el("td",null,rsTxt(q.lead_group)||"—"),el("td",null,rsTxt(q.availability)||"—"),
+      el("td",null,x.n?String(x.n):"—")));
+    if(open)tb.appendChild(el("tr",null,el("td",{colspan:"7",st:{background:"#FAF6EC",padding:"14px 16px"}},rsInterestDetail(a))));
+  });
+  tbl.appendChild(tb);
+  return el("div",{cls:"content"},
+    rsHeader("Residents and interests","What each resident told the Research Committee on its form: interests, experience and availability. Use it to decide who goes on which project.",null),
+    rsTabs(tabs,"interest"),
+    el("div",{cls:"rs-figs",st:{gridTemplateColumns:"repeat(3,1fr)"}},
+      el("div",null,el("b",null,String(answered)),el("span",null,"of "+all.length+" residents have answered the form")),
+      el("div",null,el("b",null,String(all.filter(x=>x.n===0).length)),el("span",null,"residents are not on a project now")),
+      el("div",{cls:loose.length?"gold":""},el("b",null,String(loose.length)),el("span",null,loose.length===1?"answer is not linked to a resident yet":"answers are not linked to a resident yet"))),
+    el("div",{cls:"rs-ifl"},
+      el("select",{onChange:e=>set({rsIF:{...f,spec:e.target.value,none:false},rsIOpen:null})},el("option",{value:""},"Any subspecialty"),...specs.map(p=>el("option",{value:p.toLowerCase(),selected:f.spec===p.toLowerCase()},p))),
+      tog("exp","Has research experience"),tog("pub","Has publications"),tog("stats","Statistics experience"),tog("lead","Would lead a group"),tog("free","Not on a project"),tog("none","Has not answered"),
+      any?el("button",{cls:"rs-lnk",onClick:()=>set({rsIF:{},rsIOpen:null})},"Clear filters"):null),
+    el("div",{st:{fontSize:".72rem",color:"#5C5345",margin:"0 0 6px"}},rows.length+" of "+all.length+" residents shown"),
+    rows.length?tbl:el("div",{cls:"rs-empty"},"No resident matches these filters."),
+    loose.length?el("div",{cls:"rs-sec",st:{marginTop:"30px"}},el("h2",null,"Answers not linked to a resident"),
+      el("p",null,"The name typed on the form did not match exactly one resident. Choose who each answer belongs to."),
+      loose.map(a=>el("div",{cls:"rs-ul"},
+        el("div",null,el("b",null,a.full_name||"(no name)"),el("small",null,[a.level_text,a.resident_ref?"ID "+a.resident_ref:null,"answered "+rsDate(a.submitted_at)].filter(Boolean).join(" · "))),
+        el("div",null,rsPrefs(a).join(" · ")||"—"),
+        rsLinkSelect(a),
+        RS_CAN.manager?el("button",{cls:"rs-lnk",onClick:()=>rsDeleteInterest(a)},"Delete"):el("span",null)))):null);
+}
+function rsLinkSelect(a){
+  if(!RS_CAN.manager)return el("span",{st:{fontSize:".72rem",color:"#5C5345"}},"A committee lead links this");
+  return el("select",{onClick:e=>e.stopPropagation(),onChange:e=>{const id=Number(e.target.value);if(id)rsLinkInterest(a,id);}},
+    el("option",{value:""},a.resident_id?"Move to another resident…":"Link to a resident…"),
+    ...RESIDENTS.slice().sort((x,y)=>dname(x.name).localeCompare(dname(y.name))).filter(r=>r.id!=a.resident_id).map(r=>el("option",{value:r.id},dname(r.name)+" · "+r.level)));
+}
+function rsInterestDetail(a){
+  const q=a.answers||{},cell=(l,v,wide)=>{const t=rsTxt(v).trim();return t?el("div",{cls:wide?"wide":""},el("span",null,l),t):null;};
+  const other=q.other&&typeof q.other==="object"?Object.keys(q.other).map(k=>cell(k,q.other[k],true)):[];
+  return el("div",null,el("div",{cls:"rs-det"},
+    cell("Name on the form",a.full_name),cell("Resident ID on the form",a.resident_ref),cell("Level on the form",a.level_text),
+    cell("Phone (WhatsApp)",a.phone),cell("Gmail",a.gmail),cell("WhatsApp group",a.whatsapp_ok),
+    cell("Research tasks done before",q.tasks,true),
+    cell("Leadership experience",q.leadership),cell("Research lectures or workshops given",q.lectures),cell("How they want to take part",q.participate),
+    cell("Ideas for improving research opportunities",q.ideas,true),cell("Comments",q.comments,true),other),
+    RS_CAN.manager?el("div",{st:{display:"flex",gap:"12px",alignItems:"center",flexWrap:"wrap",maxWidth:"520px"}},
+      el("span",{st:{fontSize:".72rem",color:"#5C5345",whiteSpace:"nowrap"}},"Wrong resident?"),rsLinkSelect(a)):null);
+}
+async function rsLinkInterest(a,rid){
+  const{data,error}=await sb.from("research_interest").update({resident_id:rid,matched_by:"manual",updated_at:new Date().toISOString()}).eq("id",a.id).select().single();
+  if(error){showToast("Could not link the answer: "+error.message,"error");return;}
+  Object.assign(a,data);STATE.rsIOpen=null;showToast("Linked.","success");render();
+}
+async function rsDeleteInterest(a){
+  if(!window.confirm("Delete this answer from the portal? The response stays in the Google Form."))return;
+  const{error}=await sb.from("research_interest").delete().eq("id",a.id);
+  if(error){showToast("Could not delete: "+error.message,"error");return;}
+  RS_INTEREST=RS_INTEREST.filter(x=>x.id!==a.id);render();
+}
+// A resident's own line about the form, on My projects.
+function rsFormLine(rid){
+  const a=rsInterestOf(rid);
+  if(a)return el("div",{st:{fontSize:".76rem",color:"#5C5345",padding:"10px 0 2px"}},"Research interest form answered "+rsDate(a.submitted_at)+(rsPrefs(a).length?". Your preferred subspecialties: "+rsPrefs(a).join(", ")+".":"."));
+  if(!RS_CFG.form_url)return null;
+  return el("div",{st:{display:"flex",gap:"14px",alignItems:"center",flexWrap:"wrap",padding:"12px 0 4px"}},
+    el("div",{st:{flex:"1",minWidth:"240px",fontSize:".8rem",color:"#443C2F",lineHeight:"1.5"}},"You have not answered the Research Committee's interest form yet. It tells the committee which subspecialties you want to work in and how much time you have."),
+    el("a",{cls:"rs-btn ghost",href:RS_CFG.form_url,target:"_blank",rel:"noopener",st:{textDecoration:"none"}},"Open the form"));
 }
 // Initialize
 (async function init(){

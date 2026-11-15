@@ -41,3 +41,10 @@ verify_jwt = true
 # (one secret per group), and the group written to the database comes from WHICH secret matched.
 [functions.external-vote]
 verify_jwt = false
+
+
+# Answers to the Research Committee's Google Form, posted by an Apps Script bound to the form.
+# Apps Script sends no Supabase JWT, so the platform check must be off. The function authenticates
+# the caller itself: it refuses anything without the right x-form-secret header.
+[functions.research-interest]
+verify_jwt = false
